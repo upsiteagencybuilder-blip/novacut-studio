@@ -1,0 +1,859 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * ============================================================
+ * NovaCut Studio — CHROMA ENGINE design system
+ * ============================================================
+ * Architecture:
+ *   1. @theme inline maps every shadcn token AND every Tailwind
+ *      palette hue used across the app (fuchsia / violet / emerald /
+ *      orange / rose / amber / yellow) onto NovaCut semantic vars,
+ *      so the ENTIRE UI re-tints when the theme changes.
+ *   2. Eight hand-crafted palettes are declared as
+ *      [data-nc-theme="…"] blocks. Each palette only declares its
+ *      base hues + surfaces; shade ramps are DERIVED at paint time
+ *      with color-mix() — one hex per hue drives a full ramp.
+ *   3. Backdrop, glass and radius are independent axes controlled
+ *      by data attributes on <html> (data-nc-backdrop / -glass / -radius).
+ *   4. A custom accent can override --nc-accent at runtime.
+ * Deliberately NO blue / indigo anywhere.
+ * ============================================================
+ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* ---- semantic hue remaps (the Chroma Engine core) ----
+     Every existing fuchsia / violet / emerald / orange / rose /
+     amber / yellow utility in the codebase now follows the theme. */
+  --color-fuchsia-200: var(--nc-accent-200);
+  --color-fuchsia-300: var(--nc-accent-300);
+  --color-fuchsia-400: var(--nc-accent-400);
+  --color-fuchsia-500: var(--nc-accent-500);
+  --color-fuchsia-600: var(--nc-accent-600);
+  --color-fuchsia-700: var(--nc-accent-700);
+  --color-fuchsia-950: var(--nc-accent-950);
+
+  --color-violet-200: var(--nc-brand-200);
+  --color-violet-300: var(--nc-brand-300);
+  --color-violet-400: var(--nc-brand-400);
+  --color-violet-500: var(--nc-brand-500);
+  --color-violet-600: var(--nc-brand-600);
+  --color-violet-700: var(--nc-brand-700);
+  --color-violet-950: var(--nc-brand-950);
+
+  --color-emerald-200: var(--nc-audio-200);
+  --color-emerald-300: var(--nc-audio-300);
+  --color-emerald-400: var(--nc-audio-400);
+  --color-emerald-500: var(--nc-audio-500);
+  --color-emerald-600: var(--nc-audio-600);
+  --color-emerald-700: var(--nc-audio-700);
+  --color-emerald-950: var(--nc-audio-950);
+
+  --color-orange-200: var(--nc-texttrack-200);
+  --color-orange-300: var(--nc-texttrack-300);
+  --color-orange-400: var(--nc-texttrack-400);
+  --color-orange-500: var(--nc-texttrack-500);
+  --color-orange-600: var(--nc-texttrack-600);
+  --color-orange-700: var(--nc-texttrack-700);
+  --color-orange-950: var(--nc-texttrack-950);
+
+  --color-rose-200: var(--nc-danger-200);
+  --color-rose-300: var(--nc-danger-300);
+  --color-rose-400: var(--nc-danger-400);
+  --color-rose-500: var(--nc-danger-500);
+  --color-rose-600: var(--nc-danger-600);
+  --color-rose-700: var(--nc-danger-700);
+  --color-rose-950: var(--nc-danger-950);
+
+  --color-amber-200: var(--nc-warn-200);
+  --color-amber-300: var(--nc-warn-300);
+  --color-amber-400: var(--nc-warn-400);
+  --color-amber-500: var(--nc-warn-500);
+  --color-amber-600: var(--nc-warn-600);
+  --color-amber-950: var(--nc-warn-950);
+
+  --color-yellow-200: var(--nc-warn-200);
+  --color-yellow-300: var(--nc-warn-300);
+  --color-yellow-400: var(--nc-warn-400);
+  --color-yellow-500: var(--nc-warn-500);
+  --color-yellow-600: var(--nc-warn-600);
+  --color-yellow-950: var(--nc-warn-950);
+}
+
+/* ---------------- default (Nova Violet) + derived ramps ---------------- */
+
+:root {
+  --radius: 0.75rem;
+
+  /* surfaces (dark default; palettes override) */
+  --background: #07070d;
+  --foreground: #f4f2fa;
+  --card: rgb(var(--nc-glass-base) / 0.035);
+  --card-foreground: #f4f2fa;
+  --popover: #131320;
+  --popover-foreground: #f4f2fa;
+  --primary: #a855f7;
+  --primary-foreground: #ffffff;
+  --secondary: rgb(var(--nc-glass-base) / 0.06);
+  --secondary-foreground: #e8e4f4;
+  --muted: rgb(var(--nc-glass-base) / 0.05);
+  --muted-foreground: #8f8aa6;
+  --accent: #d946ef;
+  --accent-foreground: #ffffff;
+  --destructive: #f43f5e;
+  --border: rgb(var(--nc-glass-base) / 0.08);
+  --input: rgb(var(--nc-glass-base) / 0.1);
+  --ring: #d946ef;
+  --chart-1: #a855f7;
+  --chart-2: #d946ef;
+  --chart-3: #fb923c;
+  --chart-4: #f43f5e;
+  --chart-5: #10b981;
+  --sidebar: rgb(var(--nc-glass-base) / 0.025);
+  --sidebar-foreground: #f4f2fa;
+  --sidebar-primary: #a855f7;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgb(var(--nc-glass-base) / 0.06);
+  --sidebar-accent-foreground: #f4f2fa;
+  --sidebar-border: rgb(var(--nc-glass-base) / 0.08);
+  --sidebar-ring: #d946ef;
+
+  /* NovaCut semantic hues */
+  --nc-brand: #a855f7;
+  --nc-accent: #d946ef;
+  --nc-audio: #34d399;
+  --nc-warn: #fbbf24;
+  --nc-danger: #f43f5e;
+  --nc-texttrack: #fb923c;
+  --nc-gradient-from: #a855f7;
+  --nc-gradient-via: #d946ef;
+  --nc-gradient-to: #fb923c;
+
+  /* overlays — driven by --nc-glass-base so light palettes flip to black */
+  --nc-glass-base: 255 255 255;
+  --nc-panel: rgb(var(--nc-glass-base) / 0.032);
+  --nc-panel-soft: rgb(var(--nc-glass-base) / 0.02);
+  --nc-panel-strong: rgb(var(--nc-glass-base) / 0.06);
+  --nc-line: rgb(var(--nc-glass-base) / 0.085);
+  --nc-line-strong: rgb(var(--nc-glass-base) / 0.14);
+  --nc-scrim: rgb(0 0 0 / 0.45);
+  --nc-scrim-strong: rgb(0 0 0 / 0.72);
+  --nc-blur: 14px;
+
+  /* chrome surfaces */
+  --nc-chrome: #0b0b14;
+  --nc-sheet: #0c0c16;
+  --nc-grid-line: rgb(255 255 255 / 0.028);
+  --nc-checker: rgb(255 255 255 / 0.04);
+
+  /* clip-surface ink (labels/handles sit on saturated or tinted clip bodies) */
+  --nc-clip-ink: #ffffff;
+  --nc-clip-ink-soft: rgb(255 255 255 / 0.55);
+  --nc-clip-handle: rgb(255 255 255 / 0.6);
+
+  /* backdrop */
+  --nc-aurora-1: #a855f7;
+  --nc-aurora-2: #f97316;
+
+  /* ---- derived shade ramps (pure functions of the hues above) ---- */
+  --nc-brand-200: color-mix(in oklab, var(--nc-brand) 62%, white);
+  --nc-brand-300: color-mix(in oklab, var(--nc-brand) 76%, white);
+  --nc-brand-400: color-mix(in oklab, var(--nc-brand) 92%, white);
+  --nc-brand-500: var(--nc-brand);
+  --nc-brand-600: color-mix(in oklab, var(--nc-brand) 88%, black);
+  --nc-brand-700: color-mix(in oklab, var(--nc-brand) 74%, black);
+  --nc-brand-950: color-mix(in oklab, var(--nc-brand) 18%, var(--background));
+
+  --nc-accent-200: color-mix(in oklab, var(--nc-accent) 62%, white);
+  --nc-accent-300: color-mix(in oklab, var(--nc-accent) 76%, white);
+  --nc-accent-400: color-mix(in oklab, var(--nc-accent) 92%, white);
+  --nc-accent-500: var(--nc-accent);
+  --nc-accent-600: color-mix(in oklab, var(--nc-accent) 88%, black);
+  --nc-accent-700: color-mix(in oklab, var(--nc-accent) 74%, black);
+  --nc-accent-950: color-mix(in oklab, var(--nc-accent) 18%, var(--background));
+
+  --nc-audio-200: color-mix(in oklab, var(--nc-audio) 62%, white);
+  --nc-audio-300: color-mix(in oklab, var(--nc-audio) 76%, white);
+  --nc-audio-400: var(--nc-audio);
+  --nc-audio-500: color-mix(in oklab, var(--nc-audio) 88%, black);
+  --nc-audio-600: color-mix(in oklab, var(--nc-audio) 76%, black);
+  --nc-audio-700: color-mix(in oklab, var(--nc-audio) 62%, black);
+  --nc-audio-950: color-mix(in oklab, var(--nc-audio) 20%, var(--background));
+
+  --nc-warn-200: color-mix(in oklab, var(--nc-warn) 66%, white);
+  --nc-warn-300: color-mix(in oklab, var(--nc-warn) 80%, white);
+  --nc-warn-400: var(--nc-warn);
+  --nc-warn-500: color-mix(in oklab, var(--nc-warn) 90%, black);
+  --nc-warn-600: color-mix(in oklab, var(--nc-warn) 78%, black);
+  --nc-warn-950: color-mix(in oklab, var(--nc-warn) 18%, var(--background));
+
+  --nc-danger-200: color-mix(in oklab, var(--nc-danger) 66%, white);
+  --nc-danger-300: color-mix(in oklab, var(--nc-danger) 80%, white);
+  --nc-danger-400: var(--nc-danger);
+  --nc-danger-500: color-mix(in oklab, var(--nc-danger) 90%, black);
+  --nc-danger-600: color-mix(in oklab, var(--nc-danger) 78%, black);
+  --nc-danger-950: color-mix(in oklab, var(--nc-danger) 18%, var(--background));
+
+  --nc-texttrack-200: color-mix(in oklab, var(--nc-texttrack) 62%, white);
+  --nc-texttrack-300: color-mix(in oklab, var(--nc-texttrack) 76%, white);
+  --nc-texttrack-400: var(--nc-texttrack);
+  --nc-texttrack-500: color-mix(in oklab, var(--nc-texttrack) 88%, black);
+  --nc-texttrack-600: color-mix(in oklab, var(--nc-texttrack) 74%, black);
+  --nc-texttrack-950: color-mix(in oklab, var(--nc-texttrack) 20%, var(--background));
+
+  /* glows */
+  --nc-accent-glow: color-mix(in srgb, var(--nc-accent) 40%, transparent);
+  --nc-accent-glow-soft: color-mix(in srgb, var(--nc-accent) 35%, transparent);
+  --nc-brand-glow: color-mix(in srgb, var(--nc-brand) 35%, transparent);
+  --nc-playhead-glow: color-mix(in srgb, var(--nc-accent) 85%, transparent);
+  --nc-warn-glow: color-mix(in srgb, var(--nc-warn) 65%, transparent);
+}
+
+/* ============================ PALETTES ============================ */
+
+/* 1 — Nova Violet · "Midnight Aurora" (signature, dark) */
+[data-nc-theme="nova"] {
+  --background: #07070d;
+  --foreground: #f4f2fa;
+  --popover: #131320;
+  --muted-foreground: #8f8aa6;
+  --primary: #a855f7;
+  --secondary-foreground: #e8e4f4;
+  --accent: #d946ef;
+  --ring: #d946ef;
+  --chart-1: #a855f7;
+  --chart-2: #d946ef;
+  --chart-3: #fb923c;
+  --chart-4: #f43f5e;
+  --chart-5: #10b981;
+  --sidebar-primary: #a855f7;
+  --sidebar-ring: #d946ef;
+  --nc-glass-base: 255 255 255;
+  --nc-brand: #a855f7;
+  --nc-accent: #d946ef;
+  --nc-audio: #34d399;
+  --nc-warn: #fbbf24;
+  --nc-danger: #f43f5e;
+  --nc-texttrack: #fb923c;
+  --nc-gradient-from: #a855f7;
+  --nc-gradient-via: #d946ef;
+  --nc-gradient-to: #fb923c;
+  --nc-chrome: #0b0b14;
+  --nc-sheet: #0c0c16;
+  --nc-grid-line: rgb(255 255 255 / 0.028);
+  --nc-checker: rgb(255 255 255 / 0.04);
+  --nc-aurora-1: #a855f7;
+  --nc-aurora-2: #f97316;
+  --nc-scrim: rgb(0 0 0 / 0.45);
+}
+
+/* 2 — Ember Sunset · warm cinematic (dark) */
+[data-nc-theme="ember"] {
+  --background: #0e0907;
+  --foreground: #faf3ec;
+  --popover: #1d130d;
+  --muted-foreground: #a6907f;
+  --primary: #f97316;
+  --secondary-foreground: #f4e4d7;
+  --accent: #fb7185;
+  --ring: #fb7185;
+  --chart-1: #f97316;
+  --chart-2: #fb7185;
+  --chart-3: #fbbf24;
+  --chart-4: #ef4444;
+  --chart-5: #34d399;
+  --sidebar-primary: #f97316;
+  --sidebar-ring: #fb7185;
+  --nc-glass-base: 255 255 255;
+  --nc-brand: #f97316;
+  --nc-accent: #fb7185;
+  --nc-audio: #34d399;
+  --nc-warn: #fbbf24;
+  --nc-danger: #ef4444;
+  --nc-texttrack: #fde68a;
+  --nc-gradient-from: #f97316;
+  --nc-gradient-via: #fb7185;
+  --nc-gradient-to: #fbbf24;
+  --nc-chrome: #150d09;
+  --nc-sheet: #17100b;
+  --nc-grid-line: rgb(255 214 178 / 0.035);
+  --nc-checker: rgb(255 214 178 / 0.05);
+  --nc-aurora-1: #f97316;
+  --nc-aurora-2: #fb7185;
+  --nc-scrim: rgb(0 0 0 / 0.5);
+}
+
+/* 3 — Emerald Aurora · studio green (dark) */
+[data-nc-theme="emerald"] {
+  --background: #05100b;
+  --foreground: #eefaf3;
+  --popover: #0c2016;
+  --muted-foreground: #7fa391;
+  --primary: #10b981;
+  --secondary-foreground: #d9f2e5;
+  --accent: #a3e635;
+  --ring: #a3e635;
+  --chart-1: #10b981;
+  --chart-2: #a3e635;
+  --chart-3: #fbbf24;
+  --chart-4: #fb7185;
+  --chart-5: #14b8a6;
+  --sidebar-primary: #10b981;
+  --sidebar-ring: #a3e635;
+  --nc-glass-base: 255 255 255;
+  --nc-brand: #10b981;
+  --nc-accent: #a3e635;
+  --nc-audio: #2dd4bf;
+  --nc-warn: #fbbf24;
+  --nc-danger: #f43f5e;
+  --nc-texttrack: #fbbf24;
+  --nc-gradient-from: #10b981;
+  --nc-gradient-via: #a3e635;
+  --nc-gradient-to: #fbbf24;
+  --nc-chrome: #081711;
+  --nc-sheet: #0a1b13;
+  --nc-grid-line: rgb(190 255 224 / 0.032);
+  --nc-checker: rgb(190 255 224 / 0.045);
+  --nc-aurora-1: #10b981;
+  --nc-aurora-2: #a3e635;
+  --nc-scrim: rgb(0 0 0 / 0.45);
+}
+
+/* 4 — Rose Noir · plum & magenta (dark) */
+[data-nc-theme="rosenoir"] {
+  --background: #0d060b;
+  --foreground: #fbf1f7;
+  --popover: #211019;
+  --muted-foreground: #a48699;
+  --primary: #f43f5e;
+  --secondary-foreground: #f6dfe8;
+  --accent: #ec4899;
+  --ring: #ec4899;
+  --chart-1: #f43f5e;
+  --chart-2: #ec4899;
+  --chart-3: #fb923c;
+  --chart-4: #fbbf24;
+  --chart-5: #34d399;
+  --sidebar-primary: #f43f5e;
+  --sidebar-ring: #ec4899;
+  --nc-glass-base: 255 255 255;
+  --nc-brand: #f43f5e;
+  --nc-accent: #ec4899;
+  --nc-audio: #34d399;
+  --nc-warn: #fbbf24;
+  --nc-danger: #ef4444;
+  --nc-texttrack: #fda4af;
+  --nc-gradient-from: #f43f5e;
+  --nc-gradient-via: #ec4899;
+  --nc-gradient-to: #fb923c;
+  --nc-chrome: #150a11;
+  --nc-sheet: #170c12;
+  --nc-grid-line: rgb(255 208 235 / 0.032);
+  --nc-checker: rgb(255 208 235 / 0.045);
+  --nc-aurora-1: #f43f5e;
+  --nc-aurora-2: #ec4899;
+  --nc-scrim: rgb(0 0 0 / 0.5);
+}
+
+/* 5 — Golden Noir · luxury monochrome (dark) */
+[data-nc-theme="golden"] {
+  --background: #090907;
+  --foreground: #f8f5ec;
+  --popover: #1b180f;
+  --muted-foreground: #a39c85;
+  --primary: #f59e0b;
+  --secondary-foreground: #f2ecd9;
+  --accent: #fbbf24;
+  --ring: #fbbf24;
+  --chart-1: #f59e0b;
+  --chart-2: #fbbf24;
+  --chart-3: #fef3c7;
+  --chart-4: #fb7185;
+  --chart-5: #34d399;
+  --sidebar-primary: #f59e0b;
+  --sidebar-ring: #fbbf24;
+  --nc-glass-base: 255 255 255;
+  --nc-brand: #f59e0b;
+  --nc-accent: #fbbf24;
+  --nc-audio: #34d399;
+  --nc-warn: #f97316;
+  --nc-danger: #f43f5e;
+  --nc-texttrack: #fcd34d;
+  --nc-gradient-from: #f59e0b;
+  --nc-gradient-via: #fbbf24;
+  --nc-gradient-to: #fef3c7;
+  --nc-chrome: #100f0a;
+  --nc-sheet: #12110b;
+  --nc-grid-line: rgb(255 240 200 / 0.032);
+  --nc-checker: rgb(255 240 200 / 0.045);
+  --nc-aurora-1: #f59e0b;
+  --nc-aurora-2: #fde68a;
+  --nc-scrim: rgb(0 0 0 / 0.5);
+}
+
+/* 6 — Crimson Cinema · bold red stage (dark) */
+[data-nc-theme="crimson"] {
+  --background: #0c0708;
+  --foreground: #faf1f1;
+  --popover: #200f11;
+  --muted-foreground: #a58488;
+  --primary: #ef4444;
+  --secondary-foreground: #f6dfdf;
+  --accent: #f97316;
+  --ring: #f97316;
+  --chart-1: #ef4444;
+  --chart-2: #f97316;
+  --chart-3: #fbbf24;
+  --chart-4: #ec4899;
+  --chart-5: #34d399;
+  --sidebar-primary: #ef4444;
+  --sidebar-ring: #f97316;
+  --nc-glass-base: 255 255 255;
+  --nc-brand: #ef4444;
+  --nc-accent: #f97316;
+  --nc-audio: #34d399;
+  --nc-warn: #fbbf24;
+  --nc-danger: #e11d48;
+  --nc-texttrack: #fdba74;
+  --nc-gradient-from: #ef4444;
+  --nc-gradient-via: #f97316;
+  --nc-gradient-to: #fbbf24;
+  --nc-chrome: #140b0c;
+  --nc-sheet: #160d0e;
+  --nc-grid-line: rgb(255 210 205 / 0.032);
+  --nc-checker: rgb(255 210 205 / 0.045);
+  --nc-aurora-1: #ef4444;
+  --nc-aurora-2: #f97316;
+  --nc-scrim: rgb(0 0 0 / 0.5);
+}
+
+/* 7 — Arctic Mint · crisp light studio */
+[data-nc-theme="arctic"] {
+  --background: #f2f6f4;
+  --foreground: #10201a;
+  --popover: #ffffff;
+  --muted-foreground: #5c7268;
+  --primary: #0d9488;
+  --secondary-foreground: #14332a;
+  --accent: #059669;
+  --ring: #0d9488;
+  --chart-1: #0d9488;
+  --chart-2: #059669;
+  --chart-3: #65a30d;
+  --chart-4: #e11d48;
+  --chart-5: #d97706;
+  --sidebar-primary: #0d9488;
+  --sidebar-ring: #0d9488;
+  --nc-glass-base: 16 32 26;
+  --nc-brand: #0d9488;
+  --nc-accent: #059669;
+  --nc-audio: #059669;
+  --nc-warn: #d97706;
+  --nc-danger: #e11d48;
+  --nc-texttrack: #b45309;
+  --nc-gradient-from: #0d9488;
+  --nc-gradient-via: #10b981;
+  --nc-gradient-to: #84cc16;
+  --nc-chrome: #e8efeb;
+  --nc-sheet: #ffffff;
+  --nc-grid-line: rgb(16 32 26 / 0.05);
+  --nc-checker: rgb(16 32 26 / 0.06);
+  --nc-clip-ink: #12251d;
+  --nc-clip-ink-soft: rgb(18 37 29 / 0.55);
+  --nc-clip-handle: rgb(18 37 29 / 0.3);
+  --nc-aurora-1: #10b981;
+  --nc-aurora-2: #84cc16;
+  --nc-scrim: rgb(16 32 26 / 0.35);
+  --nc-scrim-strong: rgb(16 32 26 / 0.6);
+}
+
+/* 8 — Paper Studio · warm editorial light */
+[data-nc-theme="paper"] {
+  --background: #f8f5f0;
+  --foreground: #241b12;
+  --popover: #ffffff;
+  --muted-foreground: #6f6355;
+  --primary: #9333ea;
+  --secondary-foreground: #3d2a4d;
+  --accent: #c026d3;
+  --ring: #9333ea;
+  --chart-1: #9333ea;
+  --chart-2: #c026d3;
+  --chart-3: #ea580c;
+  --chart-4: #e11d48;
+  --chart-5: #059669;
+  --sidebar-primary: #9333ea;
+  --sidebar-ring: #c026d3;
+  --nc-glass-base: 36 27 18;
+  --nc-brand: #9333ea;
+  --nc-accent: #c026d3;
+  --nc-audio: #059669;
+  --nc-warn: #d97706;
+  --nc-danger: #e11d48;
+  --nc-texttrack: #ea580c;
+  --nc-gradient-from: #9333ea;
+  --nc-gradient-via: #c026d3;
+  --nc-gradient-to: #f97316;
+  --nc-chrome: #f1ebe2;
+  --nc-sheet: #ffffff;
+  --nc-grid-line: rgb(36 27 18 / 0.05);
+  --nc-checker: rgb(36 27 18 / 0.06);
+  --nc-clip-ink: #2a1f14;
+  --nc-clip-ink-soft: rgb(42 31 20 / 0.55);
+  --nc-clip-handle: rgb(42 31 20 / 0.3);
+  --nc-aurora-1: #c026d3;
+  --nc-aurora-2: #f97316;
+  --nc-scrim: rgb(36 27 18 / 0.35);
+  --nc-scrim-strong: rgb(36 27 18 / 0.6);
+}
+
+/* ========================= ADJUSTMENT AXES ========================= */
+
+/* glass intensity (relative to each palette's glass base) */
+[data-nc-glass="soft"] {
+  --nc-panel: rgb(var(--nc-glass-base) / 0.02);
+  --nc-panel-soft: rgb(var(--nc-glass-base) / 0.012);
+  --nc-panel-strong: rgb(var(--nc-glass-base) / 0.042);
+  --nc-blur: 9px;
+}
+[data-nc-glass="strong"] {
+  --nc-panel: rgb(var(--nc-glass-base) / 0.055);
+  --nc-panel-soft: rgb(var(--nc-glass-base) / 0.035);
+  --nc-panel-strong: rgb(var(--nc-glass-base) / 0.1);
+  --nc-blur: 22px;
+}
+
+/* corner radius */
+[data-nc-radius="sharp"] { --radius: 0.35rem; }
+[data-nc-radius="soft"] { --radius: 0.75rem; }
+[data-nc-radius="round"] { --radius: 1.1rem; }
+[data-nc-radius="pill"] { --radius: 1.6rem; }
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+    overflow: hidden;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--nc-accent) 35%, transparent);
+    color: var(--foreground);
+  }
+}
+
+/* ---------------- signature gradients & glow ---------------- */
+
+.nc-gradient {
+  background: linear-gradient(
+    100deg,
+    var(--nc-gradient-from) 0%,
+    var(--nc-gradient-via) 45%,
+    var(--nc-gradient-to) 100%
+  );
+}
+.nc-gradient-text {
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--nc-gradient-from) 82%, white) 0%,
+    color-mix(in oklab, var(--nc-gradient-via) 82%, white) 40%,
+    color-mix(in oklab, var(--nc-gradient-to) 85%, white) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.nc-glow {
+  box-shadow:
+    0 0 20px var(--nc-brand-glow),
+    0 0 60px var(--nc-accent-glow-soft);
+}
+.nc-glow-hover {
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+.nc-glow-hover:hover {
+  box-shadow:
+    0 0 24px var(--nc-brand-glow),
+    0 0 70px var(--nc-accent-glow-soft);
+  transform: translateY(-1px);
+}
+.nc-glass {
+  background: var(--nc-panel);
+  border: 1px solid var(--nc-line);
+  backdrop-filter: blur(var(--nc-blur));
+}
+.nc-glass-strong {
+  background: var(--nc-panel-strong);
+  border: 1px solid var(--nc-line);
+  backdrop-filter: blur(calc(var(--nc-blur) + 4px));
+}
+
+/* animated aurora backdrop — 4 styles driven by data-nc-backdrop */
+.nc-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.nc-aurora::before,
+.nc-aurora::after {
+  content: "";
+  position: absolute;
+  width: 55vmax;
+  height: 55vmax;
+  border-radius: 9999px;
+  filter: blur(110px);
+  opacity: 0.14;
+  will-change: transform;
+}
+.nc-aurora::before {
+  background: radial-gradient(circle at 30% 30%, var(--nc-aurora-1), transparent 60%);
+  top: -20vmax;
+  left: -12vmax;
+  animation: nc-drift-1 26s ease-in-out infinite alternate;
+}
+.nc-aurora::after {
+  background: radial-gradient(circle at 70% 70%, var(--nc-aurora-2), transparent 62%);
+  bottom: -24vmax;
+  right: -14vmax;
+  animation: nc-drift-2 32s ease-in-out infinite alternate;
+}
+@keyframes nc-drift-1 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(9vmax, 6vmax) scale(1.12); }
+  100% { transform: translate(-4vmax, 9vmax) scale(0.95); }
+}
+@keyframes nc-drift-2 {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-8vmax, -6vmax) scale(1.08); }
+  100% { transform: translate(6vmax, -9vmax) scale(1.15); }
+}
+
+/* backdrop: plain */
+html[data-nc-backdrop="plain"] .nc-aurora::before,
+html[data-nc-backdrop="plain"] .nc-aurora::after {
+  display: none;
+}
+/* backdrop: static grid */
+html[data-nc-backdrop="grid"] .nc-aurora::before,
+html[data-nc-backdrop="grid"] .nc-aurora::after {
+  animation: none;
+  opacity: 0.05;
+}
+html[data-nc-backdrop="grid"] .nc-aurora {
+  background-image:
+    linear-gradient(var(--nc-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--nc-grid-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+/* backdrop: centered spotlight */
+html[data-nc-backdrop="spotlight"] .nc-aurora::before {
+  width: 80vmax;
+  height: 80vmax;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: none;
+  opacity: 0.1;
+}
+html[data-nc-backdrop="spotlight"] .nc-aurora::after {
+  display: none;
+}
+
+/* shimmering progress / skeleton */
+.nc-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.nc-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgb(var(--nc-glass-base) / 0.14) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: nc-shimmer 1.6s infinite;
+}
+@keyframes nc-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* pulsing recording dot */
+@keyframes nc-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+.nc-pulse {
+  animation: nc-pulse 1.4s ease-in-out infinite;
+}
+
+/* fade-up entrance */
+@keyframes nc-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.nc-fade-up {
+  animation: nc-fade-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---------------- scrollbars (theme-aware) ---------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nc-accent-glow) transparent;
+}
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--nc-brand-glow), var(--nc-accent-glow));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--nc-brand) 70%, transparent),
+    color-mix(in srgb, var(--nc-accent) 70%, transparent)
+  );
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------------- color inputs ---------------- */
+
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type="color"]::-webkit-color-swatch {
+  border: 1px solid var(--nc-line-strong);
+  border-radius: 8px;
+}
+
+/* range inputs (native sliders used outside shadcn) */
+input[type="range"].nc-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 9999px;
+  background: rgb(var(--nc-glass-base) / 0.12);
+  outline: none;
+}
+input[type="range"].nc-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: linear-gradient(120deg, var(--nc-gradient-from), var(--nc-gradient-via));
+  box-shadow: 0 0 10px var(--nc-accent-glow);
+  cursor: pointer;
+}
+
+/* ---------------- timeline surface ---------------- */
+
+.nc-timeline-bg {
+  background-image:
+    linear-gradient(var(--nc-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--nc-grid-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+.nc-checker {
+  background-image:
+    linear-gradient(45deg, var(--nc-checker) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--nc-checker) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--nc-checker) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--nc-checker) 75%);
+  background-size: 22px 22px;
+  background-position: 0 0, 0 11px, 11px -11px, -11px 0px;
+}
+
+/* clip handles */
+.nc-clip-handle {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.nc-clip:hover .nc-clip-handle,
+.nc-clip.nc-clip-selected .nc-clip-handle {
+  opacity: 1;
+}
+
+/* canvas stage glow (theme-aware) */
+.nc-stage {
+  box-shadow:
+    0 0 0 1px var(--nc-line),
+    0 10px 50px var(--nc-scrim),
+    0 0 90px var(--nc-brand-glow);
+}
+
+/* theme transition — smooth cross-fade when switching palettes */
+.nc-theme-anim,
+.nc-theme-anim * {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.2s ease,
+    box-shadow 0.35s ease !important;
+}

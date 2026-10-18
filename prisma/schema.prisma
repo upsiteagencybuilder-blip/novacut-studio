@@ -1,0 +1,73 @@
+// NovaCut Studio — Prisma schema
+//
+// Local development:  DATABASE_URL="file:./db/novacut.db"   (plain SQLite)
+// Production (Vercel + Turso): TURSO_DATABASE_URL + TURSO_AUTH_TOKEN set →
+//   src/lib/cloud/db.ts transparently binds the client to Turso through
+//   @prisma/adapter-libsql (driver adapters — same SQLite dialect).
+//
+// Sync the schema to Turso with:  bun run db:init:turso
+// (see scripts/init-turso.mjs)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Cloud sync — device-scoped project backup (v1: no accounts, deviceId only)
+// ---------------------------------------------------------------------------
+
+model CloudProject {
+  id        String   @id @default(cuid())
+  deviceId  String
+  /// id of the project inside the browser's IndexedDB
+  localId   String
+  name      String
+  duration  Float    @default(0)
+  clipCount Int      @default(0)
+  /// small data-URL preview (optional)
+  thumbnail String?
+  /// full project JSON payload
+  data      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([deviceId, localId])
+  @@index([deviceId, updatedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Share links — read-only project snapshots reachable by token
+// ---------------------------------------------------------------------------
+
+model ShareLink {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  deviceId  String
+  projectId String
+  title     String
+  /// snapshot JSON rendered by the viewer
+  payload   String
+  views     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([deviceId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Feedback — one-tap ratings + messages from the editor
+// ---------------------------------------------------------------------------
+
+model Feedback {
+  id        String   @id @default(cuid())
+  deviceId  String
+  rating    Int?
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
