@@ -5,8 +5,10 @@
  * stereo) to 16-bit PCM WAV blobs, plus click-to-preview playback helpers.
  *
  * - Deterministic: every random source (white noise, glitch burst placement,
- *   shimmer sparkles) comes from a mulberry32 PRNG seeded by a hash of the
- *   effect id — no Math.random anywhere.
+ *   shimmer sparkles, ambience/crowd/thunder events) comes from a mulberry32
+ *   PRNG seeded by a hash of the effect id — no Math.random anywhere.
+ * - v4 synth types: heartbeat / ambience / thunder / crowd / chirp (nature,
+ *   human & life, foley and event families).
  * - Master chain: input gain → soft-limiter compressor → destination, then a
  *   peak pass normalizes the rendered buffer to ~0.9 while encoding the WAV.
  * - Fully client-side; throws a friendly error outside browser environments.
@@ -164,7 +166,9 @@ function toneOscs(
 /**
  * Schedules one SFX voice (synth recipe) at time `t0`. Rhythmic kinds reuse
  * this per repeat with `step` = repeat index (drives rising bubble/chime
- * pitches); glitch ignores repeats and schedules its own seeded bursts.
+ * pitches, heartbeat/chirp phrases). Glitch, ambience, thunder and crowd are
+ * self-scheduled: they ignore repeats and lay out their own seeded internal
+ * events across params.duration.
  */
 function scheduleSfxVoice(
   ctx: OfflineAudioContext,
@@ -536,6 +540,261 @@ function scheduleSfxVoice(
       harm.stop(end + 0.05)
       break
     }
+
+    case 'heartbeat': {
+      // Paired low thumps (lub-dub): sine freqStart→freqEnd with a fast decay;
+      // the second thump lands ~0.24–0.30s after the first at ~0.62× gain.
+      // repeats × interval schedule multiple beats (handled by renderSfx).
+      // Documented creative reuse (see soundfx.ts): `noise` progressively
+      // suppresses the second thump and adds a knock/click transient, which
+      // turns the beat into knocks / footsteps / ticks / shutter clacks.
+      const f0 = Math.max(20, p.freqStart)
+      const f1 = Math.max(15, p.freqEnd)
+      const decayAmt = clamp(p.decay ?? 0.5, 0, 1)
+      const clickLevel = clamp(p.noise ?? 0, 0, 1)
+      const dub = Math.max(0, 1 - clickLevel * 1.15)
+      const thump = (at: number, freq: number, level: number, decayEnd: number): void => {
+        const osc = ctx.createOscillator()
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(freq, at)
+        osc.frequency.exponentialRampToValueAtTime(f1, at + 0.08)
+        osc.connect(decayingGain(at, 0.004, level, decayEnd)).connect(dest)
+        osc.start(at)
+        osc.stop(decayEnd + 0.05)
+        if (clickLevel > 0.05) {
+          const click = noiseSource(ctx, noiseBuf, at, 0.014, prng)
+          const hp = ctx.createBiquadFilter()
+          hp.type = 'highpass'
+          hp.frequency.value = 1300
+          click
+            .connect(hp)
+            .connect(decayingGain(at, 0.001, level * clickLevel * 0.55, at + 0.03))
+            .connect(dest)
+        }
+      }
+      thump(t0, f0, peak, t0 + 0.12 + decayAmt * 0.2)
+      if (dub > 0.02) {
+        const at2 = t0 + 0.24 + prng() * 0.06
+        thump(at2, f0 * 0.94, peak * 0.62 * dub, at2 + 0.1 + decayAmt * 0.16)
+      }
+      break
+    }
+
+    case 'ambience': {
+      // Continuous filtered-noise bed with slow deterministic LFO swells.
+      // Param contract used by the v4 ambience definitions:
+      //   filterStart → bed cutoff (lowpass, or bandpass center when q ≥ 3)
+      //   filterEnd   → cutoff glide end (defaults to filterStart)
+      //   freqStart   → swell LFO rate Hz (≤ 0.02 = steady bed)
+      //   freqEnd     → texture-burst band center Hz (omit = no bursts;
+      //                 < 500 → long rumble swells instead of patter)
+      //   decay       → burst density 0..1, noise → bed level 0..1
+      const cutoff0 = clamp(p.filterStart ?? 800, 40, 12000)
+      const cutoff1 = clamp(p.filterEnd ?? cutoff0, 40, 12000)
+      const bandBed = (p.q ?? 0) >= 3
+      const bus = ctx.createGain()
+      const fade = ctx.createGain() // gentle edge fades so loops never click
+      fade.gain.setValueAtTime(0.0001, t0)
+      fade.gain.linearRampToValueAtTime(1, t0 + Math.min(0.12, dur * 0.2))
+      fade.gain.setValueAtTime(1, Math.max(t0 + 0.12, end - 0.15))
+      fade.gain.linearRampToValueAtTime(0.0001, end)
+      bus.connect(fade).connect(dest)
+
+      const bed = noiseSource(ctx, noiseBuf, t0, dur, prng)
+      const filt = ctx.createBiquadFilter()
+      filt.type = bandBed ? 'bandpass' : 'lowpass'
+      filt.Q.value = bandBed ? clamp(p.q ?? 3, 0.5, 14) : clamp(p.q ?? 0.7, 0.3, 6)
+      filt.frequency.setValueAtTime(cutoff0, t0)
+      if (Math.abs(cutoff1 - cutoff0) > 1) {
+        filt.frequency.exponentialRampToValueAtTime(cutoff1, Math.max(t0 + 0.2, end))
+      }
+      const level = clamp(p.noise ?? 1, 0, 1) * peak
+      const bedGain = ctx.createGain()
+      bedGain.gain.value = level * 0.8
+      const swellRate = p.freqStart ?? 0.1
+      if (swellRate > 0.02) {
+        const lfo = ctx.createOscillator()
+        lfo.type = 'sine'
+        lfo.frequency.value = clamp(swellRate, 0.03, 2)
+        const depth = ctx.createGain()
+        depth.gain.value = level * 0.35
+        lfo.connect(depth).connect(bedGain.gain)
+        lfo.start(t0)
+        lfo.stop(end + 0.05)
+      }
+      bed.connect(filt).connect(bedGain).connect(bus)
+
+      if (p.freqEnd !== undefined && p.freqEnd > 0) {
+        const bandCenter = clamp(p.freqEnd, 40, 10000)
+        const lowBand = bandCenter < 500
+        const density = clamp(p.decay ?? 0.3, 0, 1)
+        const perSecond = lowBand ? 0.3 + density * 1.7 : 1.5 + density * 18.5
+        const count = Math.max(1, Math.round(perSecond * dur))
+        for (let i = 0; i < count; i++) {
+          const at = t0 + prng() * dur * 0.92
+          const burstDur = lowBand
+            ? 0.5 + prng() * 0.9
+            : clamp(0.05 - (p.q ?? 1) * 0.004, 0.012, 0.06)
+          const src = noiseSource(ctx, noiseBuf, at, Math.min(burstDur, dur), prng)
+          const bp = ctx.createBiquadFilter()
+          bp.type = 'bandpass'
+          bp.frequency.value = clamp(bandCenter * (0.8 + prng() * 0.5), 30, 11000)
+          bp.Q.value = lowBand ? 1.2 : clamp(p.q ?? 1, 0.7, 9)
+          const lvl = peak * (lowBand ? 0.45 + prng() * 0.5 : 0.3 + prng() * 0.5)
+          const env = ctx.createGain()
+          env.gain.setValueAtTime(0.0001, at)
+          env.gain.linearRampToValueAtTime(lvl, at + (lowBand ? 0.08 + prng() * 0.1 : 0.001))
+          env.gain.exponentialRampToValueAtTime(0.0001, at + burstDur * (lowBand ? 1 : 2.4))
+          const pan = ctx.createStereoPanner()
+          pan.pan.value = clamp(prng() * 1.6 - 0.8, -1, 1)
+          src.connect(bp).connect(env).connect(pan).connect(bus)
+        }
+      }
+      break
+    }
+
+    case 'thunder': {
+      // Initial crack (short bright noise burst) → low rumble (lowpassed
+      // brown-ish noise) with a long exponential tail, plus seeded sub-rumble
+      // swells. Param contract: filterStart → rumble lowpass cutoff,
+      // filterEnd → crack brightness cutoff, freqStart → sub-rumble band
+      // center, noise → crack loudness, decay → tail length 0..1,
+      // q → number of crack accents (1-5, e.g. fireworks bursts).
+      const total = dur
+      const crackCut = clamp(p.filterEnd ?? 2400, 500, 8000)
+      const rumbleCut = clamp(p.filterStart ?? 180, 60, 500)
+      const subBand = clamp(p.freqStart ?? 70, 25, 200)
+      const crackLevel = clamp(p.noise ?? 0.6, 0, 1)
+      const cracks = clamp(Math.round(p.q ?? 1), 1, 5)
+      for (let c = 0; c < cracks; c++) {
+        const at = t0 + (c === 0 ? 0 : prng() * total * 0.35)
+        const cd = 0.04 + prng() * 0.05
+        const src = noiseSource(ctx, noiseBuf, at, cd * 2, prng)
+        const hp = ctx.createBiquadFilter()
+        hp.type = 'highpass'
+        hp.frequency.value = crackCut * (0.85 + prng() * 0.3)
+        const lvl = peak * crackLevel * (c === 0 ? 1 : 0.4 + prng() * 0.5)
+        src.connect(hp).connect(decayingGain(at, 0.001, lvl, at + cd * 3)).connect(dest)
+      }
+      const rumble = noiseSource(ctx, noiseBuf, t0, total, prng)
+      const lp = ctx.createBiquadFilter()
+      lp.type = 'lowpass'
+      lp.frequency.value = rumbleCut
+      lp.Q.value = 0.8
+      const tail = total * (0.55 + clamp(p.decay ?? 0.6, 0, 1) * 0.42)
+      rumble.connect(lp).connect(decayingGain(t0, 0.02, peak * 0.85, t0 + tail)).connect(dest)
+      const subs = 2 + Math.round(prng() * 2)
+      for (let s = 0; s < subs; s++) {
+        const at = t0 + total * (0.08 + prng() * 0.7)
+        const sd = Math.min(0.4 + prng() * 0.9, Math.max(0.1, end - at - 0.02))
+        const src = noiseSource(ctx, noiseBuf, at, sd, prng)
+        const bp = ctx.createBiquadFilter()
+        bp.type = 'bandpass'
+        bp.frequency.value = clamp(subBand * (0.9 + prng() * 0.3), 20, 250)
+        bp.Q.value = 1.4
+        const lvl = peak * (0.3 + prng() * 0.4)
+        const env = ctx.createGain()
+        env.gain.setValueAtTime(0.0001, at)
+        env.gain.linearRampToValueAtTime(lvl, at + 0.06)
+        env.gain.exponentialRampToValueAtTime(0.0001, at + sd)
+        src.connect(bp).connect(env).connect(dest)
+      }
+      break
+    }
+
+    case 'crowd': {
+      // Murmur bed (lowpassed noise with slow seeded undulation) + bandpass
+      // clap bursts at seeded times/pans. Param contract: freqStart → clap
+      // band center, freqEnd → murmur cutoff, noise → murmur level,
+      // decay → clap density (≈1.5-20 bursts/s), q → clap resonance (also
+      // sharpens burst length — small q = typing/keys, large = soft claps).
+      const bus = ctx.createGain()
+      const fade = ctx.createGain()
+      fade.gain.setValueAtTime(0.0001, t0)
+      fade.gain.linearRampToValueAtTime(1, t0 + Math.min(0.1, dur * 0.2))
+      fade.gain.setValueAtTime(1, Math.max(t0 + 0.1, end - 0.12))
+      fade.gain.linearRampToValueAtTime(0.0001, end)
+      bus.connect(fade).connect(dest)
+
+      const murmurLevel = clamp(p.noise ?? 0.5, 0, 1)
+      const bed = noiseSource(ctx, noiseBuf, t0, dur, prng)
+      const lp = ctx.createBiquadFilter()
+      lp.type = 'lowpass'
+      lp.frequency.value = clamp(p.freqEnd ?? 700, 150, 3000)
+      lp.Q.value = 0.6
+      const bedGain = ctx.createGain()
+      bedGain.gain.value = murmurLevel * peak * 0.5
+      const lfo = ctx.createOscillator()
+      lfo.type = 'sine'
+      lfo.frequency.value = 0.2 + prng() * 0.3
+      const depth = ctx.createGain()
+      depth.gain.value = murmurLevel * peak * 0.18
+      lfo.connect(depth).connect(bedGain.gain)
+      lfo.start(t0)
+      lfo.stop(end + 0.05)
+      bed.connect(lp).connect(bedGain).connect(bus)
+
+      const clapBand = clamp(p.freqStart ?? 1600, 400, 4000)
+      const clapQ = clamp(p.q ?? 1.2, 0.5, 8)
+      const clapDur = clamp(0.05 - clapQ * 0.006, 0.016, 0.05)
+      const perSecond = 1.5 + clamp(p.decay ?? 0.5, 0, 1) * 18.5
+      const claps = Math.max(1, Math.round(perSecond * dur))
+      for (let i = 0; i < claps; i++) {
+        const at = t0 + prng() * dur * 0.95
+        const src = noiseSource(ctx, noiseBuf, at, clapDur * 2, prng)
+        const bp = ctx.createBiquadFilter()
+        bp.type = 'bandpass'
+        bp.frequency.value = clapBand * (0.85 + prng() * 0.35)
+        bp.Q.value = clapQ
+        const lvl = peak * (0.3 + prng() * 0.65)
+        const pan = ctx.createStereoPanner()
+        pan.pan.value = clamp(prng() * 1.6 - 0.8, -1, 1)
+        src
+          .connect(bp)
+          .connect(decayingGain(at, 0.001, lvl, at + clapDur * 2.4))
+          .connect(pan)
+          .connect(bus)
+      }
+      break
+    }
+
+    case 'chirp': {
+      // Birdsong: a phrase of 2-4 tonal note arcs — each sweeps freqStart →
+      // freqEnd → back toward freqStart (≈35-450ms, birdsong 60-140ms).
+      // Param contract: q → notes per phrase (2-4), decay → note tail,
+      // detune > 0 → adds a second voice ±detune cents, wave → timbre,
+      // repeats × interval → phrase spacing (handled by renderSfx).
+      const notes = clamp(Math.round(p.q ?? 3), 2, 4)
+      const noteLen = clamp((dur * 0.8) / notes, 0.035, 0.45)
+      const cents = p.detune !== undefined && p.detune > 0 ? [-p.detune, p.detune] : [0]
+      for (let n = 0; n < notes; n++) {
+        const at = t0 + (n * dur * 0.8) / notes + prng() * 0.018
+        const fBase = Math.max(300, p.freqStart) * (0.94 + prng() * 0.12)
+        const fPeak = Math.max(fBase * 1.08, Math.max(300, p.freqEnd)) * (0.9 + prng() * 0.22)
+        const lvl = (peak * (0.7 + prng() * 0.3)) / cents.length
+        const decayEnd = at + noteLen * (1.05 + clamp(p.decay ?? 0.5, 0, 1) * 0.5)
+        for (const c of cents) {
+          const osc = ctx.createOscillator()
+          osc.type = safeWave(p.wave, 'sine')
+          osc.detune.value = c
+          osc.frequency.setValueAtTime(fBase, at)
+          osc.frequency.exponentialRampToValueAtTime(fPeak, at + noteLen * 0.45)
+          osc.frequency.exponentialRampToValueAtTime(fBase * 1.05, at + noteLen)
+          osc.connect(decayingGain(at, 0.006, lvl, decayEnd)).connect(dest)
+          osc.start(at)
+          osc.stop(decayEnd + 0.05)
+        }
+      }
+      break
+    }
+
+    default: {
+      // Exhaustiveness guard: adding a SoundSynthSpec type without a case
+      // above fails compilation here (synth.type is `never` in this branch).
+      const exhaustive: never = synth.type
+      void exhaustive
+      break
+    }
   }
 }
 
@@ -548,8 +807,14 @@ function renderSfx(
   noisePrng: () => number,
 ): void {
   const p = synth.params
-  const isGlitch = synth.type === 'glitch'
-  const repeats = isGlitch ? 1 : Math.max(1, Math.round(p.repeats ?? 1))
+  // glitch / ambience / thunder / crowd lay out their own seeded internal
+  // events across params.duration — always render them as a single voice.
+  const selfScheduled =
+    synth.type === 'glitch' ||
+    synth.type === 'ambience' ||
+    synth.type === 'thunder' ||
+    synth.type === 'crowd'
+  const repeats = selfScheduled ? 1 : Math.max(1, Math.round(p.repeats ?? 1))
   const interval = Math.max(0.01, p.interval ?? 0.12)
   const bufferSeconds = p.duration + (repeats - 1) * interval + 0.35
   const noiseBuf = makeNoiseBuffer(ctx, bufferSeconds, noisePrng)
@@ -736,8 +1001,11 @@ async function renderToBuffer(effect: SoundFxEffect | MusicEffect, sampleRate: 4
   return ctx.startRendering()
 }
 
-/** 16-bit PCM stereo WAV encoder with peak normalization applied during encode. */
-function encodeWav16BitStereo(buffer: AudioBuffer, gain: number): Blob {
+/**
+ * 16-bit PCM stereo WAV encoder with peak normalization applied during encode.
+ * Exported for reuse (e.g. voice/other offline renderers) — signature is stable.
+ */
+export function encodeWav16BitStereo(buffer: AudioBuffer, gain: number): Blob {
   const frames = buffer.length
   const channels = Math.min(2, buffer.numberOfChannels)
   const dataBytes = frames * channels * 2

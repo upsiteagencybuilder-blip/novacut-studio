@@ -13,6 +13,10 @@ import { TEXT_EFFECTS } from './textfx'
 import { OVERLAY_EFFECTS } from './overlays'
 import { SOUND_FX_EFFECTS } from './soundfx'
 import { MUSIC_EFFECTS } from './music'
+import { VISION_EFFECTS } from './vision'
+import { VOICE_FX_EFFECTS } from './voice'
+import { MOTION_EFFECTS } from './motion'
+import { SPEED_EFFECTS } from './speed'
 
 export const ALL_EFFECTS: Effect[] = [
   ...COLOR_EFFECTS,
@@ -21,6 +25,10 @@ export const ALL_EFFECTS: Effect[] = [
   ...SOUND_FX_EFFECTS,
   ...MUSIC_EFFECTS,
   ...OVERLAY_EFFECTS,
+  ...VISION_EFFECTS,
+  ...VOICE_FX_EFFECTS,
+  ...MOTION_EFFECTS,
+  ...SPEED_EFFECTS,
 ]
 
 export const EFFECT_COUNTS: Record<EffectCategory, number> = {
@@ -30,6 +38,10 @@ export const EFFECT_COUNTS: Record<EffectCategory, number> = {
   sound: 0,
   music: 0,
   overlay: 0,
+  vision: 0,
+  voice: 0,
+  motion: 0,
+  speed: 0,
 }
 
 for (const effect of ALL_EFFECTS) {

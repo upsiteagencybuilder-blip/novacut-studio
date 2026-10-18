@@ -1,7 +1,7 @@
 /**
  * NovaCut Studio — Mega Effects Library: procedural sound effects (category 'sound')
  *
- * 16 families × 10 variants = 160 SoundFxEffect definitions.
+ * 20 families × 10 variants = 200 SoundFxEffect definitions.
  * Each effect is a plain serializable SoundSynthSpec recipe interpreted by the
  * offline renderer in `audio-render.ts` — no audio data is stored here.
  *
@@ -330,9 +330,116 @@ const CHIME_VARIANTS: SfxVariant[] = [
   { suffix: 'Tiny', params: { ...CHIME_BASE, freqStart: 1568, freqEnd: 3136, duration: 0.22, repeats: 3, interval: 0.08, gain: 0.4 } },
 ]
 
+/* --------------------- v4: named-family helper ---------------------- */
+/* The four v4 families group several sound kinds each (e.g. rain + wind +
+ * birds inside "Nature"), so their effect names are free-form
+ * ("Rain · Gentle", "Crowd · Big Cheer") instead of "<Family> · <suffix>". */
+
+interface NamedSfxVariant {
+  name: string
+  type: SfxType
+  params: SfxParams
+}
+
+function namedFamily(
+  family: string,
+  slug: string,
+  emoji: string,
+  tags: string[],
+  variants: NamedSfxVariant[],
+): SoundFxEffect[] {
+  return variants.map((v, i): SoundFxEffect => ({
+    id: `${slug}-${String(i + 1).padStart(2, '0')}`,
+    name: v.name,
+    family,
+    category: 'sound',
+    tags,
+    emoji,
+    duration: totalSeconds(v.params),
+    synth: { type: v.type, params: v.params },
+  }))
+}
+
+/* ------------------------------- Nature ------------------------------ */
+/* Rain/wind/waves/fire ambiences + birdsong chirps.                    */
+/* Ambience mapping: filterStart=bed cutoff (bandpass when q≥3),        */
+/* filterEnd=cutoff glide, freqStart=swell LFO Hz, freqEnd=texture      */
+/* burst band (<500 → rumble swells), decay=burst density, noise=level. */
+/* Chirp mapping: freqStart/freqEnd=base/peak Hz, q=notes per phrase,   */
+/* detune=second voice cents, repeats×interval=phrase spacing.          */
+
+const NATURE_VARIANTS: NamedSfxVariant[] = [
+  { name: 'Rain · Gentle', type: 'ambience', params: { freqStart: 0.05, freqEnd: 5200, duration: 4, decay: 0.35, noise: 1, filterStart: 6000, q: 0.7, gain: 0.5 } },
+  { name: 'Rain · Downpour', type: 'ambience', params: { freqStart: 0.07, freqEnd: 6000, duration: 4, decay: 0.7, noise: 1, filterStart: 8000, q: 0.6, gain: 0.75 } },
+  { name: 'Wind · Soft Breeze', type: 'ambience', params: { freqStart: 0.12, freqEnd: 0, duration: 5, noise: 1, filterStart: 350, filterEnd: 700, q: 0.8, gain: 0.45 } },
+  { name: 'Wind · Howling Storm', type: 'ambience', params: { freqStart: 0.18, freqEnd: 0, duration: 5, noise: 1, filterStart: 200, filterEnd: 800, q: 1.6, gain: 0.7 } },
+  { name: 'Ocean Waves', type: 'ambience', params: { freqStart: 0.15, freqEnd: 2400, duration: 5, decay: 0.45, noise: 1, filterStart: 750, filterEnd: 1100, q: 3.5, gain: 0.7 } },
+  { name: 'Campfire Crackles', type: 'ambience', params: { freqStart: 0.08, freqEnd: 2600, duration: 4, decay: 0.55, noise: 1, filterStart: 500, filterEnd: 380, q: 0.7, gain: 0.6 } },
+  { name: 'Forest Dawn', type: 'chirp', params: { freqStart: 2400, freqEnd: 3600, duration: 0.55, decay: 0.6, wave: 'sine', q: 3, gain: 0.4, repeats: 4, interval: 0.35, detune: 18, pan: -0.15 } },
+  { name: 'Morning Birds', type: 'chirp', params: { freqStart: 2800, freqEnd: 4100, duration: 0.5, decay: 0.7, wave: 'triangle', q: 4, gain: 0.45, repeats: 5, interval: 0.28, detune: 12 } },
+  { name: 'Songbird Melody', type: 'chirp', params: { freqStart: 2100, freqEnd: 4600, duration: 0.7, decay: 0.75, wave: 'sine', q: 4, gain: 0.5, repeats: 3, interval: 0.5, detune: 22, pan: 0.1 } },
+  { name: 'Cricket Chorus', type: 'chirp', params: { freqStart: 4300, freqEnd: 4600, duration: 0.14, decay: 0.5, wave: 'sine', q: 3, gain: 0.3, repeats: 12, interval: 0.18 } },
+]
+
+/* ---------------------------- Human & Life --------------------------- */
+/* Heartbeats (lub-dub sine thumps), crowds (clap bursts over a murmur   */
+/* bed) and whistles/birds via chirp. Crowd mapping: freqStart=clap      */
+/* band, freqEnd=murmur cutoff, decay=clap density, noise=murmur level.  */
+
+const LIFE_VARIANTS: NamedSfxVariant[] = [
+  { name: 'Heartbeat · Calm', type: 'heartbeat', params: { freqStart: 62, freqEnd: 34, duration: 0.32, decay: 0.4, gain: 0.85, repeats: 4, interval: 0.95 } },
+  { name: 'Heartbeat · Racing', type: 'heartbeat', params: { freqStart: 78, freqEnd: 40, duration: 0.26, decay: 0.55, gain: 0.9, repeats: 8, interval: 0.42 } },
+  { name: 'Heartbeat · Bass Drop Feel', type: 'heartbeat', params: { freqStart: 52, freqEnd: 30, duration: 0.5, decay: 0.8, gain: 1, repeats: 3, interval: 1.3 } },
+  { name: 'Playful Birds', type: 'chirp', params: { freqStart: 3200, freqEnd: 4900, duration: 0.45, decay: 0.4, wave: 'triangle', q: 2, gain: 0.4, repeats: 6, interval: 0.22, detune: 26 } },
+  { name: 'Crowd · Light Applause', type: 'crowd', params: { freqStart: 1500, freqEnd: 700, duration: 3, decay: 0.25, q: 1.2, noise: 0.4, gain: 0.6 } },
+  { name: 'Crowd · Big Cheer', type: 'crowd', params: { freqStart: 1900, freqEnd: 850, duration: 3.5, decay: 0.65, q: 1.5, noise: 0.55, gain: 0.85 } },
+  { name: 'Crowd · Stadium Roar', type: 'crowd', params: { freqStart: 2100, freqEnd: 950, duration: 4.5, decay: 0.95, q: 1.8, noise: 0.7, gain: 0.95 } },
+  { name: 'Crowd · Murmur Café', type: 'crowd', params: { freqStart: 1200, freqEnd: 550, duration: 4.5, decay: 0.05, q: 0.9, noise: 0.6, gain: 0.45 } },
+  { name: 'Celebration Whistles', type: 'chirp', params: { freqStart: 1800, freqEnd: 2600, duration: 0.8, decay: 0.3, wave: 'sine', q: 2, gain: 0.5, repeats: 3, interval: 0.6, detune: 30 } },
+  { name: 'Crowd · Wedding Hall', type: 'crowd', params: { freqStart: 1600, freqEnd: 650, duration: 4, decay: 0.35, q: 1.1, noise: 0.65, gain: 0.6 } },
+]
+
+/* --------------------------- Foley & Objects ------------------------- */
+/* Creative reuse of the rhythmic synths, documented here:                */
+/* - heartbeat `noise` ≥ 0.8 suppresses the second thump and adds a knock */
+/*   transient → single knocks, footsteps, ticks, shutter clacks;         */
+/* - crowd with small q = tiny sharp bursts → keyboard keys;              */
+/* - ambience bandpass beds (q ≥ 3) with slow glides → metal/rope creaks. */
+
+const FOLEY_VARIANTS: NamedSfxVariant[] = [
+  { name: 'Door Knock Triple', type: 'heartbeat', params: { freqStart: 130, freqEnd: 70, duration: 0.14, decay: 0.35, noise: 0.9, gain: 0.85, repeats: 3, interval: 0.34 } },
+  { name: 'Footsteps Hard Floor', type: 'heartbeat', params: { freqStart: 95, freqEnd: 55, duration: 0.12, decay: 0.5, noise: 0.85, gain: 0.55, repeats: 6, interval: 0.42, pan: 0.12 } },
+  { name: 'Clock Tick Loop', type: 'heartbeat', params: { freqStart: 1600, freqEnd: 900, duration: 0.04, decay: 0.2, noise: 0.95, gain: 0.4, repeats: 4, interval: 1 } },
+  { name: 'Machine Hum', type: 'ambience', params: { freqStart: 0.012, freqEnd: 0, duration: 4, noise: 1, filterStart: 280, q: 1.5, gain: 0.5 } },
+  { name: 'Metal Creaks', type: 'ambience', params: { freqStart: 0.06, freqEnd: 0, duration: 3.5, noise: 1, filterStart: 950, filterEnd: 1250, q: 7, gain: 0.45 } },
+  { name: 'Rope Creak', type: 'ambience', params: { freqStart: 0.09, freqEnd: 0, duration: 2.5, noise: 1, filterStart: 700, filterEnd: 520, q: 5, gain: 0.4 } },
+  { name: 'Paper Rustle', type: 'ambience', params: { freqStart: 0.12, freqEnd: 5000, duration: 0.9, decay: 0.85, noise: 1, filterStart: 4500, q: 0.8, gain: 0.55 } },
+  { name: 'Keyboard Typing', type: 'crowd', params: { freqStart: 2600, freqEnd: 900, duration: 2.5, decay: 0.6, q: 2.5, noise: 0.15, gain: 0.5 } },
+  { name: 'Camera Shutter', type: 'heartbeat', params: { freqStart: 2400, freqEnd: 1100, duration: 0.06, decay: 0.15, noise: 1, gain: 0.7, repeats: 2, interval: 0.09 } },
+  { name: 'Pendulum Swing', type: 'heartbeat', params: { freqStart: 750, freqEnd: 420, duration: 0.06, decay: 0.3, noise: 0.9, gain: 0.35, repeats: 5, interval: 0.85 } },
+]
+
+/* --------------------------- Events & Weather ------------------------ */
+/* Thunder (crack → rumble tail + seeded sub-rumbles, q=crack accents),   */
+/* storm/earthquake/cave ambiences (low-band texture bursts = rumble      */
+/* swells when freqEnd < 500) and crowd/thunder event hybrids.            */
+
+const EVENTS_VARIANTS: NamedSfxVariant[] = [
+  { name: 'Thunder · Distant Rumble', type: 'thunder', params: { freqStart: 55, freqEnd: 0, duration: 3.2, decay: 0.7, noise: 0.35, filterStart: 140, filterEnd: 900, q: 1, gain: 0.8 } },
+  { name: 'Thunder · Crack & Roll', type: 'thunder', params: { freqStart: 80, freqEnd: 0, duration: 2.6, decay: 0.5, noise: 0.8, filterStart: 220, filterEnd: 2600, q: 2, gain: 0.95 } },
+  { name: 'Thunder · Massive Bolt', type: 'thunder', params: { freqStart: 70, freqEnd: 0, duration: 3.5, decay: 0.85, noise: 1, filterStart: 250, filterEnd: 3800, q: 2, gain: 1 } },
+  { name: 'Storm · Rain & Thunder', type: 'ambience', params: { freqStart: 0.09, freqEnd: 220, duration: 5, decay: 0.45, noise: 1, filterStart: 6000, q: 0.7, gain: 0.75 } },
+  { name: 'Avalanche Rumble', type: 'ambience', params: { freqStart: 0.11, freqEnd: 180, duration: 5, decay: 0.6, noise: 1, filterStart: 380, filterEnd: 300, q: 0.8, gain: 0.85 } },
+  { name: 'Earthquake Rumble', type: 'ambience', params: { freqStart: 0.07, freqEnd: 90, duration: 5, decay: 0.35, noise: 1, filterStart: 110, filterEnd: 95, q: 1, gain: 0.9 } },
+  { name: 'Rock Concert Crowd', type: 'crowd', params: { freqStart: 1800, freqEnd: 900, duration: 4, decay: 0.8, q: 1.5, noise: 0.6, gain: 0.9 } },
+  { name: 'Applause · Studio Warm', type: 'crowd', params: { freqStart: 1400, freqEnd: 600, duration: 3, decay: 0.5, q: 1, noise: 0.35, gain: 0.65 } },
+  { name: 'Fireworks Show', type: 'thunder', params: { freqStart: 160, freqEnd: 0, duration: 3.5, decay: 0.6, noise: 0.9, filterStart: 180, filterEnd: 3500, q: 4, gain: 0.9 } },
+  { name: 'Cave Rumble', type: 'ambience', params: { freqStart: 0.05, freqEnd: 120, duration: 4.5, decay: 0.25, noise: 1, filterStart: 160, filterEnd: 130, q: 1.2, gain: 0.7 } },
+]
+
 /* ----------------------------- Assembly ----------------------------- */
 
-/** All 160 procedural sound effects — consumed by the effects registry. */
+/** All 200 procedural sound effects — consumed by the effects registry. */
 export const SOUND_FX_EFFECTS: SoundFxEffect[] = [
   ...family('whoosh', 'Whoosh', 'sound-whoosh', '🌪️', ['transition', 'whoosh'], WHOOSH_VARIANTS),
   ...family('riser', 'Riser', 'sound-riser', '🚀', ['transition', 'riser', 'build'], RISER_VARIANTS),
@@ -350,4 +457,9 @@ export const SOUND_FX_EFFECTS: SoundFxEffect[] = [
   ...family('shimmer', 'Shimmer', 'sound-shimmer', '✨', ['cinematic', 'shimmer', 'sparkle'], SHIMMER_VARIANTS),
   ...family('drop', 'Drop', 'sound-drop', '🕳️', ['cinematic', 'drop', 'sub'], DROP_VARIANTS),
   ...family('chime', 'Chime', 'sound-chime', '💫', ['ui', 'chime', 'notification'], CHIME_VARIANTS),
+  // v4 nature/human/foley/event families
+  ...namedFamily('Nature', 'sound-nature', '🌿', ['nature', 'ambience', 'weather'], NATURE_VARIANTS),
+  ...namedFamily('Human & Life', 'sound-life', '🫀', ['human', 'heartbeat', 'crowd'], LIFE_VARIANTS),
+  ...namedFamily('Foley & Objects', 'sound-foley', '🛠️', ['foley', 'objects', 'real'], FOLEY_VARIANTS),
+  ...namedFamily('Events & Weather', 'sound-events', '⛈️', ['weather', 'event', 'cinematic'], EVENTS_VARIANTS),
 ]

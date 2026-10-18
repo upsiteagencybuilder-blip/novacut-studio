@@ -233,6 +233,8 @@ export interface Clip {
   autoDuck?: boolean
   /** mega-effects overlay (particles/grain/vignette/leaks...) drawn over this clip */
   overlay?: { effectId: string; intensity: number } | null
+  /** mega-effects vision post-FX (pixelate/mirror/glow/chroma...) applied to this clip's pixels */
+  vision?: { effectId: string; intensity: number } | null
   /** label color chip on the timeline */
   color: string
 }

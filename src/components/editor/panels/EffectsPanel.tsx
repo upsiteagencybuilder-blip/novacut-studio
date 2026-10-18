@@ -1,11 +1,13 @@
 'use client'
 
 /**
- * Effects panel — mega effects browser (794 effects).
+ * Effects panel — mega effects browser across 10 categories.
  *
  * Browse & apply: color filter/grade presets, transitions (outgoing+incoming
- * clip patches), text animations, canvas overlays, plus procedural sound FX
- * and music that render offline to WAV and import into the media library.
+ * clip patches), text animations, canvas overlays, stylized vision post-FX,
+ * voice transforms (offline DSP → WAV), motion camera presets, speed presets,
+ * plus procedural sound FX and music that render offline to WAV and import
+ * into the media library.
  * Clip-dependent tools (Ken Burns motion, fades, speed) stay below the
  * browser for the currently selected clip.
  */
@@ -20,6 +22,7 @@ import {
   Search,
   SearchX,
   Sparkles,
+  Wand2,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -28,37 +31,49 @@ import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { previewEffect, renderEffectToWav, stopPreview } from '@/lib/effects/audio-render'
 import { EFFECT_COUNTS, TOTAL_EFFECTS, getEffect, searchEffects } from '@/lib/effects/registry'
+import { previewVoiceEffect, renderVoiceToWav, stopVoicePreview } from '@/lib/effects/voice'
 import type {
   ColorEffect,
   Effect,
   EffectCategory,
+  MotionEffect,
   MusicEffect,
   OverlayEffect,
   SoundFxEffect,
+  SpeedEffect,
   TextEffect,
   TransitionEffect,
   TransitionPatch,
+  VisionEffect,
+  VoiceFxEffect,
 } from '@/lib/effects/types'
 import { DEFAULT_COLOR_GRADE, DEFAULT_FILTERS, MOTION_PRESETS } from '@/lib/editor/constants'
 import { importFiles } from '@/lib/editor/importer'
 import { useEditor, type ClipPatch } from '@/lib/editor/store'
 import { round2, uid } from '@/lib/editor/utils'
-import type { Clip, ColorGrade, Filters, TextStyle } from '@/lib/editor/types'
+import type { Clip, ColorGrade, Filters, MotionType, TextStyle } from '@/lib/editor/types'
 
 type CategoryFilter = EffectCategory | 'all'
 
 /** Cards rendered per page — keeps 220+ result sets smooth on low-end phones */
 const PAGE_SIZE = 60
 
-const CATEGORY_CHIPS: Array<{ id: CategoryFilter; label: string; count: number }> = [
-  { id: 'all', label: 'All', count: TOTAL_EFFECTS },
-  { id: 'color', label: 'Color', count: EFFECT_COUNTS.color },
-  { id: 'transition', label: 'Transitions', count: EFFECT_COUNTS.transition },
-  { id: 'text', label: 'Text', count: EFFECT_COUNTS.text },
-  { id: 'sound', label: 'Sound', count: EFFECT_COUNTS.sound },
-  { id: 'music', label: 'Music', count: EFFECT_COUNTS.music },
-  { id: 'overlay', label: 'Overlays', count: EFFECT_COUNTS.overlay },
+const CATEGORY_CHIPS: Array<{ id: CategoryFilter; label: string; emoji: string; count: number }> = [
+  { id: 'all', label: 'All', emoji: '✨', count: TOTAL_EFFECTS },
+  { id: 'color', label: 'Color', emoji: '🎨', count: EFFECT_COUNTS.color },
+  { id: 'transition', label: 'Transitions', emoji: '🎬', count: EFFECT_COUNTS.transition },
+  { id: 'text', label: 'Text', emoji: '🔤', count: EFFECT_COUNTS.text },
+  { id: 'sound', label: 'Sound', emoji: '🔊', count: EFFECT_COUNTS.sound },
+  { id: 'music', label: 'Music', emoji: '🎵', count: EFFECT_COUNTS.music },
+  { id: 'overlay', label: 'Overlays', emoji: '✦', count: EFFECT_COUNTS.overlay },
+  { id: 'vision', label: 'Vision', emoji: '👁', count: EFFECT_COUNTS.vision },
+  { id: 'voice', label: 'Voice', emoji: '🎙', count: EFFECT_COUNTS.voice },
+  { id: 'motion', label: 'Motion', emoji: '🎥', count: EFFECT_COUNTS.motion },
+  { id: 'speed', label: 'Speed', emoji: '⚡', count: EFFECT_COUNTS.speed },
 ]
+
+/** Voice previews render a short snippet (~2.4s) — keep the playing state a beat longer */
+const VOICE_PREVIEW_MS = 2600
 
 /* ---------------- helpers ---------------- */
 
@@ -81,6 +96,41 @@ function colorEffectActive(clip: Clip, effect: ColorEffect): boolean {
   return gradeKeys.every(
     (k) => (clip.colorGrade?.[k] ?? DEFAULT_COLOR_GRADE[k]) === effect.grade?.[k]
   )
+}
+
+/**
+ * A motion preset is active when the base motion + intensity match. MotionType
+ * alone can repeat between presets of a family, so when BOTH the effect and
+ * the clip carry keyframes we also compare their count — a simple, documented
+ * best-effort check (exact keyframe-by-keyframe matching is overkill here).
+ */
+function motionEffectActive(clip: Clip, effect: MotionEffect): boolean {
+  if (clip.motion !== effect.motion || clip.motionIntensity !== effect.motionIntensity) return false
+  if (effect.keys?.length && clip.keyframes?.length) {
+    return clip.keyframes.length === effect.keys.length
+  }
+  return true
+}
+
+/** Tiny move description for the motion card footer */
+const MOTION_HINTS: Record<MotionType, string> = {
+  none: 'Keyframe move',
+  zoomIn: 'Zoom in',
+  zoomOut: 'Zoom out',
+  panLeft: 'Pan left',
+  panRight: 'Pan right',
+  panUp: 'Pan up',
+  panDown: 'Pan down',
+}
+
+function motionDescription(effect: MotionEffect): string {
+  const base = MOTION_HINTS[effect.motion]
+  return effect.keys?.length ? `${base} + keys` : base
+}
+
+/** "0.5×" / "2×" / "10×" */
+function formatSpeed(speed: number): string {
+  return `${round2(speed)}×`
 }
 
 /** A text effect is active when animation, duration and style patch all match */
@@ -264,6 +314,124 @@ function AudioCard({
   )
 }
 
+/* ---------------- vision / voice / motion / speed cards ---------------- */
+
+function VisionCard({ effect, active, onApply }: { effect: VisionEffect; active: boolean; onApply: () => void }) {
+  return (
+    <button type="button" title={effect.name} aria-pressed={active} onClick={onApply} className={cardClass(active)}>
+      <span className="relative block h-12 w-full" style={{ background: effect.swatch }} aria-hidden>
+        <span className="absolute inset-0 flex items-center justify-center text-lg">{effect.emoji}</span>
+        {active && (
+          <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-(--nc-accent)">
+            <Check className="size-2.5 text-white" />
+          </span>
+        )}
+      </span>
+      <span className="block truncate px-1 pb-1 pt-1 text-center text-[9px] leading-tight text-muted-foreground">
+        {effect.name}
+      </span>
+    </button>
+  )
+}
+
+function VoiceCard({
+  effect,
+  playing,
+  loading,
+  applying,
+  onPreview,
+  onApply,
+}: {
+  effect: VoiceFxEffect
+  playing: boolean
+  loading: boolean
+  applying: boolean
+  onPreview: () => void
+  onApply: () => void
+}) {
+  return (
+    <div className={cardClass(false)}>
+      <button
+        type="button"
+        title={playing ? 'Stop preview' : 'Preview voice effect'}
+        onClick={onPreview}
+        className="block w-full cursor-pointer text-left"
+      >
+        <span className="flex h-12 w-full items-center justify-center bg-(--nc-scrim) text-2xl" aria-hidden>
+          {loading ? (
+            <Loader2 className="size-5 animate-spin text-fuchsia-300" />
+          ) : playing ? (
+            <AudioLines className="size-6 animate-pulse text-emerald-300" />
+          ) : (
+            effect.emoji
+          )}
+        </span>
+        <span className="block truncate px-1 pt-1 text-[9px] leading-tight text-muted-foreground" title={effect.name}>
+          {effect.name}
+        </span>
+        <span className="flex items-center justify-center gap-1 px-1 pb-1 pt-0.5 text-center text-[8px] leading-tight text-muted-foreground/70">
+          <span className="min-w-0 truncate" title={effect.family}>
+            {effect.family}
+          </span>
+          <span className="shrink-0 rounded-full bg-(--nc-panel-strong) px-1 py-px tabular-nums">
+            Mix {Math.round(effect.mix * 100)}%
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        title={`Apply ${effect.name} to the selected audio clip`}
+        aria-label={`Apply ${effect.name}`}
+        onClick={onApply}
+        disabled={applying}
+        className="nc-gradient absolute right-1 top-1 flex size-6 items-center justify-center rounded-full text-white shadow-md transition hover:scale-110 disabled:opacity-60"
+      >
+        {applying ? <Loader2 className="size-3 animate-spin" /> : <Wand2 className="size-3" />}
+      </button>
+    </div>
+  )
+}
+
+function MotionCard({ effect, active, onApply }: { effect: MotionEffect; active: boolean; onApply: () => void }) {
+  return (
+    <button type="button" title={effect.name} aria-pressed={active} onClick={onApply} className={cardClass(active)}>
+      <span className="flex h-12 w-full items-center justify-center bg-(--nc-scrim) text-2xl" aria-hidden>
+        {effect.emoji}
+      </span>
+      <span className="block truncate px-1 pt-1 text-center text-[9px] leading-tight text-muted-foreground">
+        {effect.name}
+      </span>
+      <span className="block truncate px-1 pb-1 text-center text-[8px] leading-tight text-muted-foreground/70">
+        {motionDescription(effect)}
+      </span>
+    </button>
+  )
+}
+
+function SpeedCard({ effect, active, onApply }: { effect: SpeedEffect; active: boolean; onApply: () => void }) {
+  return (
+    <button type="button" title={effect.name} aria-pressed={active} onClick={onApply} className={cardClass(active)}>
+      <span className="flex h-12 w-full items-center justify-center bg-(--nc-scrim)" aria-hidden>
+        <span
+          className={
+            active
+              ? 'nc-gradient bg-clip-text text-base font-bold text-transparent'
+              : 'text-base font-bold text-foreground/85'
+          }
+        >
+          {formatSpeed(effect.speed)}
+        </span>
+      </span>
+      <span className="block truncate px-1 pt-1 text-center text-[9px] leading-tight text-muted-foreground">
+        {effect.name}
+      </span>
+      <span className="block truncate px-1 pb-1 text-center text-[8px] leading-tight text-muted-foreground/70">
+        {effect.hint ?? ''}
+      </span>
+    </button>
+  )
+}
+
 /* ---------------- panel ---------------- */
 
 export function EffectsPanel() {
@@ -277,13 +445,19 @@ export function EffectsPanel() {
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [addingId, setAddingId] = useState<string | null>(null)
+  const [voicePreviewId, setVoicePreviewId] = useState<string | null>(null)
+  const [voiceLoadingId, setVoiceLoadingId] = useState<string | null>(null)
+  const [voiceApplyingId, setVoiceApplyingId] = useState<string | null>(null)
   const previewEndTimer = useRef<number | null>(null)
+  const voiceEndTimer = useRef<number | null>(null)
 
   // leaving the panel must stop any playing preview
   useEffect(() => {
     return () => {
       stopPreview()
+      stopVoicePreview()
       if (previewEndTimer.current !== null) window.clearTimeout(previewEndTimer.current)
+      if (voiceEndTimer.current !== null) window.clearTimeout(voiceEndTimer.current)
     }
   }, [])
 
@@ -301,6 +475,10 @@ export function EffectsPanel() {
   const overlayState = clip?.overlay ?? null
   const overlayMatch = overlayState ? getEffect(overlayState.effectId) : undefined
   const activeOverlay = overlayMatch && overlayMatch.category === 'overlay' ? overlayMatch : null
+
+  const visionState = clip?.vision ?? null
+  const visionMatch = visionState ? getEffect(visionState.effectId) : undefined
+  const activeVision = visionMatch && visionMatch.category === 'vision' ? visionMatch : null
 
   const clearSearchFilters = useCallback(() => {
     setSearch('')
@@ -405,6 +583,86 @@ export function EffectsPanel() {
     toast('Overlay removed')
   }, [clip, updateClip])
 
+  /* ---------- apply: vision (tap active card again to remove) ---------- */
+  const applyVision = useCallback(
+    (effect: VisionEffect) => {
+      // Vision post-FX operate on media pixels — the engine intentionally skips
+      // text/sticker clips (they draw straight to the main canvas).
+      if (!clip || !(clip.kind === 'video' || clip.kind === 'image')) {
+        toast('Vision FX work on video & image clips')
+        return
+      }
+      if (clip.vision?.effectId === effect.id) {
+        updateClip(clip.id, { vision: null }, true)
+        toast('Vision effect removed')
+        return
+      }
+      updateClip(clip.id, { vision: { effectId: effect.id, intensity: effect.intensity } }, true)
+      toast(`Vision · ${effect.name}`)
+    },
+    [clip, updateClip]
+  )
+
+  const removeVision = useCallback(() => {
+    if (!clip) return
+    updateClip(clip.id, { vision: null }, true)
+    toast('Vision effect removed')
+  }, [clip, updateClip])
+
+  /* ---------- apply: motion (camera preset, may replace keyframes) ---------- */
+  const applyMotion = useCallback(
+    (effect: MotionEffect) => {
+      if (!clip) {
+        toast('Select a clip first')
+        return
+      }
+      if (clip.kind === 'audio') {
+        toast('Motion presets need a visual clip')
+        return
+      }
+      // Replaces any existing transform keyframes — same coalesce-key pattern as
+      // transitions so a preset tap is one undoable step.
+      updateClip(
+        clip.id,
+        {
+          motion: effect.motion,
+          motionIntensity: effect.motionIntensity,
+          keyframes: (effect.keys ?? []).map((k) => ({
+            id: uid('kf'),
+            property: k.property,
+            time: k.at * clip.duration,
+            value: k.value,
+            easing: k.easing,
+          })),
+        },
+        `motion-${clip.id}-${effect.id}`
+      )
+      toast('Motion preset applied')
+    },
+    [clip, updateClip]
+  )
+
+  /* ---------- apply: speed (media clips only, duration compensated) ---------- */
+  const applySpeed = useCallback(
+    (effect: SpeedEffect) => {
+      if (!clip) {
+        toast('Select a clip first')
+        return
+      }
+      if (clip.kind === 'text' || clip.kind === 'sticker' || !Number.isFinite(clip.sourceDuration)) {
+        toast('Speed applies to media clips')
+        return
+      }
+      // Same compensation as the speed slider below: timeline duration scales
+      // with the speed ratio (== (sourceDuration − trimStart) / newSpeed),
+      // keeping trimStart untouched.
+      const newDuration = round2(Math.max(0.1, (clip.duration * clip.speed) / effect.speed))
+      updateClip(clip.id, { speed: effect.speed, duration: newDuration }, `speed-${clip.id}`)
+      toast(`Speed set to ${formatSpeed(effect.speed)}`)
+    },
+    [clip, updateClip]
+  )
+
   /* ---------- audio: preview toggle ---------- */
   const togglePreview = useCallback(
     async (effect: SoundFxEffect | MusicEffect) => {
@@ -414,6 +672,13 @@ export function EffectsPanel() {
           window.clearTimeout(previewEndTimer.current)
           previewEndTimer.current = null
         }
+      }
+      // only one preview at a time across sound/music AND voice
+      stopVoicePreview()
+      setVoicePreviewId(null)
+      if (voiceEndTimer.current !== null) {
+        window.clearTimeout(voiceEndTimer.current)
+        voiceEndTimer.current = null
       }
       if (previewId === effect.id) {
         stopPreview()
@@ -463,6 +728,101 @@ export function EffectsPanel() {
     [addingId, addMediaAsset]
   )
 
+  /* ---------- voice: preview toggle (short ~2.4s snippet) ---------- */
+  const toggleVoicePreview = useCallback(
+    async (effect: VoiceFxEffect) => {
+      if (voiceLoadingId !== null && voiceLoadingId !== effect.id) return
+      const clearEndTimer = () => {
+        if (voiceEndTimer.current !== null) {
+          window.clearTimeout(voiceEndTimer.current)
+          voiceEndTimer.current = null
+        }
+      }
+      // only one preview at a time across sound/music AND voice
+      stopPreview()
+      setPreviewId(null)
+      if (previewEndTimer.current !== null) {
+        window.clearTimeout(previewEndTimer.current)
+        previewEndTimer.current = null
+      }
+      if (voicePreviewId === effect.id) {
+        stopVoicePreview()
+        clearEndTimer()
+        setVoicePreviewId(null)
+        return
+      }
+      stopVoicePreview()
+      clearEndTimer()
+      setVoiceLoadingId(effect.id)
+      try {
+        await previewVoiceEffect(effect)
+        setVoicePreviewId(effect.id)
+        voiceEndTimer.current = window.setTimeout(() => {
+          setVoicePreviewId((cur) => (cur === effect.id ? null : cur))
+        }, VOICE_PREVIEW_MS)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Voice preview failed')
+      } finally {
+        setVoiceLoadingId(null)
+      }
+    },
+    [voiceLoadingId, voicePreviewId]
+  )
+
+  /* ---------- voice: apply — offline DSP the source audio → new clip audio ---------- */
+  const applyVoiceFx = useCallback(
+    async (effect: VoiceFxEffect) => {
+      if (voiceApplyingId !== null) return
+      if (!clip || clip.kind !== 'audio') {
+        toast('Voice FX need an audio clip — select one first')
+        return
+      }
+      const sourceAsset = useEditor.getState().media.find((m) => m.id === clip.mediaId)
+      if (!sourceAsset) {
+        toast.error('Source audio for this clip was not found')
+        return
+      }
+      setVoiceApplyingId(effect.id)
+      try {
+        // Render exactly the clip's trimmed source window (trim in-point +
+        // timeline duration · speed = source seconds), so the processed swap
+        // keeps the timeline edit intact instead of restoring the full take.
+        const rendered = await renderVoiceToWav(sourceAsset.rawBlob, effect, {
+          offset: clip.trimStart,
+          duration: clip.duration * clip.speed,
+        })
+        const file = new File([rendered.blob], `voice-${effect.id}.wav`, { type: 'audio/wav' })
+        const assets = await importFiles([file])
+        if (assets.length === 0) {
+          toast.error('Could not import the processed audio — try again')
+          return
+        }
+        const newAsset = assets[0]
+        assets.forEach(addMediaAsset)
+        // swap the clip's audio to the processed render — one undoable step.
+        // speed resets to 1: the render already covers the source window.
+        updateClip(
+          clip.id,
+          {
+            mediaId: newAsset.id,
+            duration: newAsset.duration,
+            sourceDuration: newAsset.duration,
+            trimStart: 0,
+            speed: 1,
+            name: `${effect.name} (voice FX)`,
+          },
+          true
+        )
+        toast.success('Voice effect applied — undo restores the original')
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Voice effect failed')
+      } finally {
+        setVoiceApplyingId(null)
+      }
+    },
+    [voiceApplyingId, clip, addMediaAsset, updateClip]
+  )
+
   /* ---------- card switch ---------- */
   const renderCard = (effect: Effect) => {
     switch (effect.category) {
@@ -506,6 +866,45 @@ export function EffectsPanel() {
             effect={effect}
             active={clip?.overlay?.effectId === effect.id}
             onApply={() => applyOverlay(effect)}
+          />
+        )
+      case 'vision':
+        return (
+          <VisionCard
+            key={effect.id}
+            effect={effect}
+            active={clip?.vision?.effectId === effect.id}
+            onApply={() => applyVision(effect)}
+          />
+        )
+      case 'voice':
+        return (
+          <VoiceCard
+            key={effect.id}
+            effect={effect}
+            playing={voicePreviewId === effect.id}
+            loading={voiceLoadingId === effect.id}
+            applying={voiceApplyingId === effect.id}
+            onPreview={() => void toggleVoicePreview(effect)}
+            onApply={() => void applyVoiceFx(effect)}
+          />
+        )
+      case 'motion':
+        return (
+          <MotionCard
+            key={effect.id}
+            effect={effect}
+            active={clip ? motionEffectActive(clip, effect) : false}
+            onApply={() => applyMotion(effect)}
+          />
+        )
+      case 'speed':
+        return (
+          <SpeedCard
+            key={effect.id}
+            effect={effect}
+            active={clip?.speed === effect.speed}
+            onApply={() => applySpeed(effect)}
           />
         )
       default:
@@ -636,9 +1035,18 @@ export function EffectsPanel() {
     <div className="space-y-3">
       {/* ---------- header: counter + search ---------- */}
       <div className="flex items-center gap-2">
-        <span className="nc-gradient shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold text-white">
-          {TOTAL_EFFECTS} effects
-        </span>
+        {TOTAL_EFFECTS >= 1000 ? (
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-(--nc-line) bg-(--nc-panel) px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
+            <span aria-hidden className="nc-gradient bg-clip-text text-transparent">
+              PRO
+            </span>
+            <span className="tabular-nums">· {TOTAL_EFFECTS} effects</span>
+          </span>
+        ) : (
+          <span className="nc-gradient shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold text-white">
+            {TOTAL_EFFECTS} effects
+          </span>
+        )}
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -677,6 +1085,9 @@ export function EffectsPanel() {
                   : 'flex h-7 shrink-0 items-center gap-1 rounded-full border border-(--nc-line) bg-(--nc-panel) px-2.5 text-[11px] text-muted-foreground transition hover:border-fuchsia-400/50 hover:text-foreground'
               }
             >
+              <span aria-hidden className="text-[10px] opacity-70">
+                {chip.emoji}
+              </span>
               {chip.label}
               <span className={active ? 'text-white/80' : 'text-muted-foreground/60'}>{chip.count}</span>
             </button>
@@ -750,6 +1161,43 @@ export function EffectsPanel() {
                 clip.id,
                 { overlay: { effectId: overlayState.effectId, intensity: v[0] ?? overlayState.intensity } },
                 `overlay-intensity-${clip.id}`
+              )
+            }
+          />
+        </section>
+      )}
+
+      {/* ---------- active vision controls (same UX as overlays) ---------- */}
+      {clip && visionState && activeVision && (
+        <section className="nc-glass space-y-2.5 rounded-lg p-3">
+          <div className="flex items-center justify-between">
+            <SectionTitle>Active vision effect</SectionTitle>
+            <button
+              type="button"
+              onClick={removeVision}
+              className="text-[10px] font-medium text-rose-300 transition hover:text-rose-200"
+            >
+              Remove
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-base" aria-hidden>
+              {activeVision.emoji}
+            </span>
+            <span className="truncate text-[11px] text-foreground/90" title={activeVision.name}>
+              {activeVision.name}
+            </span>
+          </div>
+          <Slider
+            min={0}
+            max={1}
+            step={0.01}
+            value={[visionState.intensity]}
+            onValueChange={(v) =>
+              updateClip(
+                clip.id,
+                { vision: { effectId: visionState.effectId, intensity: v[0] ?? visionState.intensity } },
+                `vision-intensity-${activeVision.id}`
               )
             }
           />

@@ -6,9 +6,10 @@
  * Pure module: no direct store import — state arrives via a snapshot fn (see bridge hook).
  */
 import type { Clip, LutData, MediaAssetRuntime, Project } from './types'
-import type { OverlayDraw } from '@/lib/effects/types'
-import { getOverlayDraw } from '@/lib/effects/registry'
+import type { OverlayDraw, VisionDraw } from '@/lib/effects/types'
+import { getEffect, getOverlayDraw } from '@/lib/effects/registry'
 import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
+import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
 import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, evaluateKeyframeProperty, projectDuration } from './utils'
 import { CANVAS_FONT_LOAD_LIST, MIN_CLIP_DURATION } from './constants'
 
@@ -38,6 +39,17 @@ export interface ClipBounds {
   w: number
   h: number
   rotation: number
+}
+
+/** Resolved clip.vision state for the current frame (mega-effects vision post-FX) */
+interface ActiveVision {
+  draw: VisionDraw
+  /** clamped 0..1 */
+  intensity: number
+  /** deterministic seed derived from the effect id */
+  seed: number
+  /** the clip's own filters, baked into the vision source (never re-applied) */
+  filter: string
 }
 
 const driftTolerancePlay = 0.16
@@ -130,6 +142,9 @@ class PreviewEngine {
   /** offscreen canvas used for chroma-key / grade / LUT pixel passes */
   private fxCanvas: HTMLCanvasElement | null = null
   private fxCtx: CanvasRenderingContext2D | null = null
+  /** offscreen canvas used to build the vision post-FX source (clip pixels + filters) */
+  private visionCanvas: HTMLCanvasElement | null = null
+  private visionCtx: CanvasRenderingContext2D | null = null
   private lutCache = new Map<string, LutData | null>()
 
   /* adaptive render quality */
@@ -645,6 +660,70 @@ class PreviewEngine {
     return c
   }
 
+  /* -------------------------------------------------- vision post-FX */
+
+  /**
+   * Vision post-FX (mega-effects): draw the clip content — already chroma/
+   * grade/LUT processed when applicable — into the shared vision scratch with
+   * the clip's own filters baked in, run the deterministic vision renderer
+   * over it, then composite the processed scratch exactly where the plain
+   * drawImage would have landed. The surrounding transform pipeline
+   * (translate/rotate/scale/alpha/blend) is untouched — only the SOURCE of
+   * the draw changes; the scratch composes the chroma result → vision input
+   * without holding a second content canvas. Returns false when vision could
+   * not run (the caller falls back to the plain draw).
+   */
+  private drawVisionProcessed(
+    ctx: CanvasRenderingContext2D,
+    source: CanvasImageSource,
+    dw: number,
+    dh: number,
+    vis: ActiveVision,
+    tLocal: number
+  ): boolean {
+    try {
+      if (!(dw > 1) || !(dh > 1)) return false
+      // scratch resolution: content footprint × adaptive scale, capped like the
+      // fx path; export records at scale 1 ⇒ full project resolution
+      const q = clamp(Math.min(this.activeScale(), 1920 / Math.max(dw, dh)), 0.5, 2)
+      const sw = Math.max(2, Math.round(dw * q))
+      const sh = Math.max(2, Math.round(dh * q))
+      if (!this.visionCanvas) {
+        this.visionCanvas = document.createElement('canvas')
+        this.visionCtx = this.visionCanvas.getContext('2d')
+      }
+      const vc = this.visionCanvas!
+      if (vc.width !== sw || vc.height !== sh) {
+        vc.width = sw
+        vc.height = sh
+      }
+      const vx = this.visionCtx
+      if (!vx) return false
+      vx.setTransform(q, 0, 0, q, 0, 0)
+      vx.globalAlpha = 1
+      vx.globalCompositeOperation = 'source-over'
+      vx.filter = vis.filter // clip filters baked INTO the vision source (no double apply)
+      vx.clearRect(0, 0, dw, dh)
+      vx.drawImage(source, 0, 0, dw, dh)
+      vx.filter = 'none'
+      drawVisionFrame(vx, vc, dw, dh, vis.draw, vis.intensity, tLocal, vis.seed)
+      let saved = false
+      try {
+        ctx.save()
+        saved = true
+        ctx.filter = 'none' // filters are already baked into the vision source
+        ctx.drawImage(vc, -dw / 2, -dh / 2, dw, dh)
+        ctx.restore()
+        return true
+      } catch {
+        if (saved) ctx.restore()
+        return false
+      }
+    } catch {
+      return false
+    }
+  }
+
   /* -------------------------------------------------- render */
 
   renderFrame() {
@@ -759,6 +838,24 @@ class PreviewEngine {
       }
     }
 
+    // ---- mega-effects vision pre-pass (per-clip pixel post-FX) ----
+    // Vision applies to MEDIA clips' pixels only; text/sticker draw straight to
+    // the main canvas and intentionally skip vision (documented limitation).
+    let vis: ActiveVision | null = null
+    if (clip.vision && (clip.kind === 'video' || clip.kind === 'image')) {
+      const vi = clamp(clip.vision.intensity, 0, 1)
+      if (vi > 0.001) {
+        try {
+          const eff = getEffect(clip.vision.effectId)
+          if (eff && eff.category === 'vision') {
+            vis = { draw: eff.draw, intensity: vi, seed: getVisionSeed(clip.vision.effectId), filter: buildFilterString(clip.filters) }
+          }
+        } catch {
+          vis = null
+        }
+      }
+    }
+
     // audio sync for video clips happens here; visual draw below
     const snap = this.snapshotFn!
     if (clip.kind === 'video' && clip.mediaId) {
@@ -835,7 +932,10 @@ class PreviewEngine {
         const dw = img.naturalWidth * base
         const dh = img.naturalHeight * base
         const fxc = this.drawThroughFx(img, img.naturalWidth, img.naturalHeight, dw, dh, clip, mediaMap)
-        if (fxc) ctx.drawImage(fxc, 0, 0, fxc.width, fxc.height, -dw / 2, -dh / 2, dw, dh)
+        if (vis && this.drawVisionProcessed(ctx, fxc ?? img, dw, dh, vis, tLocal)) {
+          // vision post-FX replaced the plain draw (clip filters are baked into
+          // the vision source; ctx.filter was reset for the composite)
+        } else if (fxc) ctx.drawImage(fxc, 0, 0, fxc.width, fxc.height, -dw / 2, -dh / 2, dw, dh)
         else ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh)
         this.bounds.set(clip.id, this.boundsFromTransform(clip, W, H, dw * s, dh * s, tx, ty, trot))
       } else {
@@ -850,7 +950,10 @@ class PreviewEngine {
         const dw = el.videoWidth * base
         const dh = el.videoHeight * base
         const fxc = this.drawThroughFx(el, el.videoWidth, el.videoHeight, dw, dh, clip, mediaMap)
-        if (fxc) ctx.drawImage(fxc, 0, 0, fxc.width, fxc.height, -dw / 2, -dh / 2, dw, dh)
+        if (vis && this.drawVisionProcessed(ctx, fxc ?? el, dw, dh, vis, tLocal)) {
+          // vision post-FX replaced the plain draw (clip filters are baked into
+          // the vision source; ctx.filter was reset for the composite)
+        } else if (fxc) ctx.drawImage(fxc, 0, 0, fxc.width, fxc.height, -dw / 2, -dh / 2, dw, dh)
         else ctx.drawImage(el, -dw / 2, -dh / 2, dw, dh)
         this.bounds.set(clip.id, this.boundsFromTransform(clip, W, H, dw * s, dh * s, tx, ty, trot))
       } else {

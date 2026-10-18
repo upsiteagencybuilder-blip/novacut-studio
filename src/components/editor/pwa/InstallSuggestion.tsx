@@ -17,9 +17,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowDownToLine, Share, SquarePlus, X } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { TOTAL_EFFECTS } from '@/lib/effects/registry'
 import { usePWAInstall } from '@/hooks/usePWA'
 
 const HINT_KEY = 'novacut.installHint'
@@ -99,7 +99,7 @@ export function InstallSuggestion() {
       if (outcome === 'accepted') {
         writeHint()
         setShow(false)
-        toast.success('NovaCut installed 🎉 — find it on your home screen')
+        // success toast comes from the global 'appinstalled' listener in register-sw
       } else {
         // declined the native prompt — same cooldown as a manual dismiss
         dismiss()
@@ -149,7 +149,9 @@ export function InstallSuggestion() {
                 <div className="min-w-0 flex-1 pr-5">
                   <p className="text-sm font-semibold">Install NovaCut</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                    Works offline · Opens instantly · Full screen
+                    {TOTAL_EFFECTS >= 1000
+                      ? `${TOTAL_EFFECTS} pro effects, offline`
+                      : 'Works offline · Opens instantly · Full screen'}
                   </p>
                 </div>
               </div>

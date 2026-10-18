@@ -1,12 +1,13 @@
 /**
- * NovaCut Studio — Transition effects (110 definitions)
+ * NovaCut Studio — Transition effects (160 definitions)
  *
- * 11 families × 10 variants. Each transition is a paired patch:
+ * 16 families × 10 variants. Each transition is a paired patch:
  *   - `out` is applied to the OUTGOING clip (fadeOut, motion keys anchored 'start'/'end')
  *   - `in`  is applied to the INCOMING clip (fadeIn, motion keys); null when intro/outro-only
  *
  * Keyframe values: x/y are fractions of the canvas (-1.2 = fully off-screen),
- * scale 1 = fit, rotation in degrees. Easing applies per keyframe segment.
+ * scale 1 = fit, rotation in degrees, opacity 0..1. Easing applies per
+ * keyframe segment.
  *
  * NOTE (UI copy): applying a transition replaces the clips' transform keyframes —
  * every transition carries the 'replaces-keys' tag so the UI can show a hint.
@@ -14,6 +15,10 @@
  * NOTE (Blur family): implemented as pure crossfades — the CSS `blur` filter is
  * NOT keyframable by the keyframe engine, so blur itself cannot animate (tagged
  * 'blur-not-keyframable').
+ *
+ * v2 families (Task 10-a): Whip Pan, Cube Spin, Swap, Warp Zoom, Stutter Cut.
+ * Stutter Cut uses opacity keyframes (opacity IS keyframable) for
+ * dip-to-black/white shutters; Whip Pan/Swap keep fades minimal (0–0.15s).
  */
 
 import type { EasingType, KeyframeProperty } from '@/lib/editor/types'
@@ -350,7 +355,251 @@ function buildReveal(): TransitionEffect[] {
   ]
 }
 
-/* ---------------- assembly (11 × 10 = 110) ---------------- */
+/* ---------------- Whip Pan family (fast directional smear, v2) ----------------
+ * Hard directional throw ±1.4 with easeIn on the way out / easeOut on the
+ * way in, plus near-zero fades (0.02–0.05) for a motion-blur feel.
+ */
+
+function buildWhipPan(): TransitionEffect[] {
+  const whip = (
+    label: string,
+    d: number,
+    fade: number,
+    dirs: Array<{ prop: KeyframeProperty; sign: -1 | 1 }>,
+    extraTags: string[],
+    extraOutKeys: KeyPair[] = [],
+    extraInKeys: KeyPair[] = [],
+    sameSideIn = false,
+  ): TransitionEffect =>
+    mk(
+      'whip-pan',
+      'Whip Pan',
+      `Whip Pan · ${label}`,
+      d,
+      { fadeOut: fade, keys: [...dirs.flatMap((a) => pair(a.prop, 0, a.sign * 1.4, 'easeIn')), ...extraOutKeys] },
+      // camera-pan feel: in arrives from the OPPOSITE side so both clips travel
+      // the same direction (Pass-Through flips this: in chases out off the same edge)
+      { fadeIn: fade, keys: [...dirs.flatMap((a) => pair(a.prop, (sameSideIn ? a.sign : -a.sign) * 1.4, 0, 'easeOut')), ...extraInKeys] },
+      ['whip', 'fast', 'motion-blur-feel', ...extraTags],
+    )
+  return [
+    whip('Left', 0.25, 0.03, [{ prop: 'x', sign: -1 }], ['left']),
+    whip('Right', 0.25, 0.03, [{ prop: 'x', sign: 1 }], ['right']),
+    whip('Up', 0.3, 0.03, [{ prop: 'y', sign: -1 }], ['up']),
+    whip('Down', 0.3, 0.03, [{ prop: 'y', sign: 1 }], ['down']),
+    whip('Diagonal', 0.35, 0.04, [{ prop: 'x', sign: -1 }, { prop: 'y', sign: -1 }], ['diagonal']),
+    whip('Diagonal Rise', 0.35, 0.04, [{ prop: 'x', sign: 1 }, { prop: 'y', sign: -1 }], ['diagonal', 'rise']),
+    whip('Snap', 0.2, 0.02, [{ prop: 'x', sign: -1 }], ['left', 'snap']),
+    whip('Soft', 0.45, 0.05, [{ prop: 'x', sign: 1 }], ['right', 'soft']),
+    whip('Echo', 0.3, 0.03, [{ prop: 'x', sign: -1 }], ['left', 'echo'], pair('scale', 1, 1.06, 'easeIn'), pair('scale', 1.06, 1, 'easeOut')),
+    whip('Pass-Through', 0.3, 0.03, [{ prop: 'x', sign: 1 }], ['right', 'pass-through', 'same-side'], [], [], true),
+  ]
+}
+
+/* ---------------- Cube Spin family (3D-flavored rotation flip, v2) ----------------
+ * ±90°/180° rotations paired with scale crushes (0.6..1.6) and moderate
+ * fades — reads like a face of a cube flipping over.
+ */
+
+function buildCubeSpin(): TransitionEffect[] {
+  return [
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Left', 0.4,
+      { fadeOut: 0.35, keys: [...pair('rotation', 0, 90, 'easeIn'), ...pair('scale', 1, 0.6, 'easeIn')] },
+      { fadeIn: 0.35, keys: [...pair('rotation', -90, 0, 'easeOut'), ...pair('scale', 0.6, 1, 'easeOut')] },
+      ['cw', 'left', '3d'],
+    ),
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Right', 0.4,
+      { fadeOut: 0.35, keys: [...pair('rotation', 0, -90, 'easeIn'), ...pair('scale', 1, 0.6, 'easeIn')] },
+      { fadeIn: 0.35, keys: [...pair('rotation', 90, 0, 'easeOut'), ...pair('scale', 0.6, 1, 'easeOut')] },
+      ['ccw', 'right', '3d'],
+    ),
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Half Turn', 0.6,
+      { fadeOut: 0.55, keys: [...pair('rotation', 0, 180, 'easeInOut'), ...pair('scale', 1, 0.7, 'easeInOut')] },
+      { fadeIn: 0.55, keys: [...pair('rotation', -180, 0, 'easeInOut'), ...pair('scale', 0.7, 1, 'easeInOut')] },
+      ['cw', '180', '3d'],
+    ),
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Flip Up', 0.5,
+      { fadeOut: 0.45, keys: [...pair('rotation', 0, 90, 'easeIn'), ...pair('y', 0, -0.25, 'easeIn'), ...pair('scale', 1, 0.75, 'easeIn')] },
+      { fadeIn: 0.45, keys: [...pair('rotation', -90, 0, 'easeOut'), ...pair('y', 0.25, 0, 'easeOut'), ...pair('scale', 0.75, 1, 'easeOut')] },
+      ['cw', 'vertical', 'up', '3d'],
+    ),
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Flip Down', 0.5,
+      { fadeOut: 0.45, keys: [...pair('rotation', 0, 90, 'easeIn'), ...pair('y', 0, 0.25, 'easeIn'), ...pair('scale', 1, 0.75, 'easeIn')] },
+      { fadeIn: 0.45, keys: [...pair('rotation', -90, 0, 'easeOut'), ...pair('y', -0.25, 0, 'easeOut'), ...pair('scale', 0.75, 1, 'easeOut')] },
+      ['ccw', 'vertical', 'down', '3d'],
+    ),
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Bounce', 0.6,
+      { fadeOut: 0.5, keys: [...pair('rotation', 0, 90, 'bounce'), ...pair('scale', 1, 0.65, 'bounce')] },
+      { fadeIn: 0.5, keys: [...pair('rotation', -90, 0, 'easeOut'), ...pair('scale', 0.65, 1, 'easeOut')] },
+      ['cw', 'bounce', '3d'],
+    ),
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Tumble', 0.7,
+      { fadeOut: 0.6, keys: [...pair('rotation', 0, 180, 'easeIn'), ...pair('y', 0, -0.2, 'easeIn'), ...pair('scale', 1, 0.6, 'easeIn')] },
+      { fadeIn: 0.6, keys: [...pair('rotation', -180, 0, 'easeOut'), ...pair('y', 0.2, 0, 'easeOut'), ...pair('scale', 0.6, 1, 'easeOut')] },
+      ['cw', 'tumble', '3d'],
+    ),
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Swift', 0.25,
+      { fadeOut: 0.08, keys: [...pair('rotation', 0, 90, 'easeIn'), ...pair('scale', 1, 0.7, 'easeIn')] },
+      { fadeIn: 0.08, keys: [...pair('rotation', -90, 0, 'easeOut'), ...pair('scale', 0.7, 1, 'easeOut')] },
+      ['cw', 'fast', '3d'],
+    ),
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Cinematic', 1.0,
+      { fadeOut: 0.9, keys: [...pair('rotation', 0, 90, 'easeInOut'), ...pair('scale', 1, 0.65, 'easeInOut')] },
+      { fadeIn: 0.9, keys: [...pair('rotation', -90, 0, 'easeInOut'), ...pair('scale', 0.65, 1, 'easeInOut')] },
+      ['cw', 'slow', '3d'],
+    ),
+    mk(
+      'cube-spin', 'Cube Spin', 'Cube Spin · Pop', 0.3,
+      { fadeOut: 0.1, keys: [...pair('rotation', 0, 90, 'easeIn'), ...pair('scale', 1, 1.3, 'easeIn')] },
+      { fadeIn: 0.1, keys: [...pair('rotation', -90, 0, 'easeOut'), ...pair('scale', 1.3, 1, 'easeOut')] },
+      ['cw', 'pop', '3d'],
+    ),
+  ]
+}
+
+/* ---------------- Swap family (out one way, in from the opposite, v2) ----------------
+ * The outgoing clip throws toward a side while the incoming clip arrives from
+ * the exact opposite — minimal fades (0–0.15s) keep it snappy.
+ */
+
+function buildSwap(): TransitionEffect[] {
+  const swap = (
+    label: string,
+    d: number,
+    fade: number,
+    dirs: Array<{ prop: KeyframeProperty; sign: -1 | 1 }>,
+    outEase: EasingType,
+    inEase: EasingType,
+    extraTags: string[],
+    extraOutKeys: KeyPair[] = [],
+    extraInKeys: KeyPair[] = [],
+  ): TransitionEffect =>
+    mk(
+      'swap',
+      'Swap',
+      `Swap · ${label}`,
+      d,
+      fade > 0 ? { fadeOut: fade, keys: [...dirs.flatMap((a) => pair(a.prop, 0, a.sign * 1.25, outEase)), ...extraOutKeys] } : { keys: [...dirs.flatMap((a) => pair(a.prop, 0, a.sign * 1.25, outEase)), ...extraOutKeys] },
+      // out exits toward `sign`, in arrives from the OPPOSITE side
+      fade > 0 ? { fadeIn: fade, keys: [...dirs.flatMap((a) => pair(a.prop, -a.sign * 1.25, 0, inEase)), ...extraInKeys] } : { keys: [...dirs.flatMap((a) => pair(a.prop, -a.sign * 1.25, 0, inEase)), ...extraInKeys] },
+      ['swap', ...extraTags],
+    )
+  return [
+    swap('Left', 0.35, 0.08, [{ prop: 'x', sign: -1 }], 'easeIn', 'easeOut', ['left']),
+    swap('Right', 0.35, 0.08, [{ prop: 'x', sign: 1 }], 'easeIn', 'easeOut', ['right']),
+    swap('Up', 0.4, 0.08, [{ prop: 'y', sign: -1 }], 'easeIn', 'easeOut', ['up']),
+    swap('Down', 0.4, 0.08, [{ prop: 'y', sign: 1 }], 'easeIn', 'easeOut', ['down']),
+    swap('Diagonal', 0.45, 0.08, [{ prop: 'x', sign: -1 }, { prop: 'y', sign: -1 }], 'easeIn', 'easeOut', ['diagonal']),
+    swap('Counter', 0.45, 0.08, [{ prop: 'x', sign: -1 }, { prop: 'y', sign: 1 }], 'easeIn', 'easeOut', ['diagonal', 'counter']),
+    swap('Snap', 0.2, 0, [{ prop: 'x', sign: 1 }], 'easeIn', 'easeOut', ['right', 'no-fade', 'snap']),
+    swap('Float', 0.6, 0.15, [{ prop: 'x', sign: -1 }], 'easeInOut', 'easeInOut', ['left', 'gentle']),
+    swap('Bounce', 0.5, 0.1, [{ prop: 'x', sign: 1 }], 'easeIn', 'bounce', ['right', 'bounce']),
+    swap('Shrink', 0.4, 0.08, [{ prop: 'x', sign: -1 }], 'easeIn', 'easeOut', ['left', 'scale'], pair('scale', 1, 0.85, 'easeIn'), pair('scale', 1.15, 1, 'easeOut')),
+  ]
+}
+
+/* ---------------- Warp Zoom family (extreme scale throw, v2) ----------------
+ * Outgoing zooms violently toward the camera (scale up to 3.2) while the
+ * incoming clip lands from far away (0.2..0.35 → 1); some variants add a
+ * ±15° twist. Punchy easeIn/easeOut only.
+ */
+
+function buildWarpZoom(): TransitionEffect[] {
+  return [
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Punch', 0.3, { fadeOut: 0.22, keys: pair('scale', 1, 2.6, 'easeIn') }, { fadeIn: 0.22, keys: pair('scale', 0.3, 1, 'easeOut') }, ['zoom-in', 'punch']),
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Deep', 0.5, { fadeOut: 0.35, keys: pair('scale', 1, 2.8, 'easeIn') }, { fadeIn: 0.35, keys: pair('scale', 0.28, 1, 'easeOut') }, ['zoom-in', 'deep']),
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Twist', 0.45, { fadeOut: 0.3, keys: [...pair('scale', 1, 2.4, 'easeIn'), ...pair('rotation', 0, 15, 'easeIn')] }, { fadeIn: 0.3, keys: [...pair('scale', 0.35, 1, 'easeOut'), ...pair('rotation', -15, 0, 'easeOut')] }, ['zoom-in', 'twist', 'cw']),
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Counter-Twist', 0.45, { fadeOut: 0.3, keys: [...pair('scale', 1, 2.4, 'easeIn'), ...pair('rotation', 0, -15, 'easeIn')] }, { fadeIn: 0.3, keys: [...pair('scale', 0.35, 1, 'easeOut'), ...pair('rotation', 15, 0, 'easeOut')] }, ['zoom-in', 'twist', 'ccw']),
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Hyperspace', 0.6, { fadeOut: 0.45, keys: pair('scale', 1, 3.2, 'easeIn') }, { fadeIn: 0.45, keys: pair('scale', 0.2, 1, 'easeOut') }, ['zoom-in', 'extreme']),
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Bounce', 0.5, { fadeOut: 0.35, keys: pair('scale', 1, 2.6, 'easeIn') }, { fadeIn: 0.35, keys: pair('scale', 0.4, 1, 'bounce') }, ['zoom-in', 'bounce']),
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Snap', 0.2, { fadeOut: 0.06, keys: pair('scale', 1, 2.4, 'easeIn') }, { fadeIn: 0.06, keys: pair('scale', 0.35, 1, 'easeOut') }, ['zoom-in', 'snap']),
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Cinematic', 0.9, { fadeOut: 0.7, keys: pair('scale', 1, 2.6, 'easeInOut') }, { fadeIn: 0.7, keys: pair('scale', 0.3, 1, 'easeInOut') }, ['zoom-in', 'slow']),
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Vortex', 0.55, { fadeOut: 0.4, keys: [...pair('scale', 1, 3.0, 'easeIn'), ...pair('rotation', 0, 15, 'easeIn')] }, { fadeIn: 0.4, keys: [...pair('scale', 0.25, 1, 'easeOut'), ...pair('rotation', -15, 0, 'easeOut')] }, ['zoom-in', 'vortex']),
+    mk('warp-zoom', 'Warp Zoom', 'Warp Zoom · Reverse', 0.45, { fadeOut: 0.3, keys: pair('scale', 1, 0.35, 'easeIn') }, { fadeIn: 0.3, keys: pair('scale', 2.6, 1, 'easeOut') }, ['zoom-out', 'reverse']),
+  ]
+}
+
+/* ---------------- Stutter Cut family (glitchy hard cuts, v2) ----------------
+ * Dip-to-black / dip-to-white moments plus abrupt scale pops; uses real
+ * opacity keyframes (opacity IS keyframable) or near-zero fades. Never
+ * smooth — everything reads as a hard, beat-cut rhythm.
+ */
+
+function buildStutterCut(): TransitionEffect[] {
+  return [
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · Black Dip', 0.4,
+      { fadeOut: 0.35, keys: pair('scale', 1, 1.06, 'easeIn') },
+      { fadeIn: 0.35, keys: pair('scale', 1.06, 1, 'easeOut') },
+      ['dip-to-black'],
+    ),
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · White Dip', 0.4,
+      { fadeOut: 0.35, keys: pair('scale', 1, 1.06, 'easeIn') },
+      { fadeIn: 0.35, keys: pair('scale', 1.06, 1, 'easeOut') },
+      ['dip-to-white', 'whiteout'],
+    ),
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · Hard', 0.2,
+      { fadeOut: 0.02, keys: pair('scale', 1, 1.1, 'easeIn') },
+      { fadeIn: 0.02, keys: pair('scale', 1.1, 1, 'easeOut') },
+      ['hard-cut'],
+    ),
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · Double Tap', 0.25,
+      { fadeOut: 0.05, keys: pair('scale', 1, 1.12, 'easeIn') },
+      { fadeIn: 0.05, keys: pair('scale', 1.12, 1, 'easeOut') },
+      ['double-tap'],
+    ),
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · Jolt', 0.3,
+      { fadeOut: 0.06, keys: [...pair('scale', 1, 1.1, 'easeIn'), ...pair('rotation', 0, 3, 'easeIn')] },
+      { fadeIn: 0.06, keys: [...pair('scale', 1.1, 1, 'easeOut'), ...pair('rotation', -3, 0, 'easeOut')] },
+      ['jolt'],
+    ),
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · Shutter', 0.35,
+      { keys: [...pair('opacity', 1, 0, 'linear'), ...pair('scale', 1, 1.08, 'easeIn')] },
+      { keys: [...pair('opacity', 0, 1, 'linear'), ...pair('scale', 1.08, 1, 'easeOut')] },
+      ['opacity-keys', 'shutter'],
+    ),
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · Flash Frame', 0.25,
+      { fadeOut: 0.04 },
+      { fadeIn: 0.04, keys: pair('scale', 1.15, 1, 'bounce') },
+      ['flash-frame', 'bounce'],
+    ),
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · Strobe', 0.3,
+      { fadeOut: 0.08, keys: [...pair('rotation', 0, 3, 'easeIn'), ...pair('scale', 1, 1.08, 'easeIn')] },
+      { fadeIn: 0.08, keys: [...pair('rotation', -3, 0, 'easeOut'), ...pair('scale', 1.08, 1, 'easeOut')] },
+      ['strobe'],
+    ),
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · Drop', 0.35,
+      { keys: [...pair('opacity', 1, 0, 'easeIn'), ...pair('scale', 1, 1.12, 'easeIn')] },
+      { keys: [...pair('opacity', 0, 1, 'easeOut'), ...pair('scale', 1.12, 1, 'bounce')] },
+      ['opacity-keys', 'drop'],
+    ),
+    mk(
+      'stutter-cut', 'Stutter Cut', 'Stutter Cut · Glitch Punch', 0.3,
+      { fadeOut: 0.06, keys: [...pair('x', 0, 0.04, 'easeIn'), ...pair('scale', 1, 1.1, 'easeIn')] },
+      { fadeIn: 0.06, keys: [...pair('x', -0.04, 0, 'easeOut'), ...pair('scale', 1.1, 1, 'easeOut')] },
+      ['glitchy'],
+    ),
+  ]
+}
+
+/* ---------------- assembly (11 × 10 + 5 × 10 = 160) ---------------- */
 
 export const TRANSITION_EFFECTS: TransitionEffect[] = [
   ...buildFade(),
@@ -364,4 +613,10 @@ export const TRANSITION_EFFECTS: TransitionEffect[] = [
   ...buildBlur(),
   ...buildFlash(),
   ...buildReveal(),
+  // v2 families (Task 10-a)
+  ...buildWhipPan(),
+  ...buildCubeSpin(),
+  ...buildSwap(),
+  ...buildWarpZoom(),
+  ...buildStutterCut(),
 ]

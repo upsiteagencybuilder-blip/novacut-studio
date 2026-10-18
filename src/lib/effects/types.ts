@@ -2,17 +2,21 @@
  * NovaCut Studio — Mega Effects Library contract
  *
  * This file is THE contract for the whole effects system.
- * 6 categories × families × variants ≈ 794 total effects:
+ * 10 categories × families × variants ≈ 1059 total effects:
  *
  *   color      220  → Filters (+ ColorGrade) patches on a clip
- *   transition 110  → paired patches on outgoing + incoming clips
+ *   transition 160  → paired patches on outgoing + incoming clips
  *   text       150  → extended TextAnimation + TextStyle patches
- *   sound      160  → procedural Web Audio SFX, rendered offline → WAV
+ *   sound      200  → procedural Web Audio SFX, rendered offline → WAV
  *   music       64  → procedural music loops, rendered offline → WAV
  *   overlay     90  → deterministic canvas-drawn overlays
+ *   vision      60  → stylized canvas post-FX (pixelate/mirror/glow/chroma...)
+ *   voice       50  → offline DSP voice transformations (pitch/robot/echo...)
+ *   motion      40  → Ken Burns / pan / orbit / punch camera presets
+ *   speed       25  → playback-rate presets with duration compensation
  *
- * Every effect is a plain serializable definition (except overlay draw kinds,
- * which are closed union tags interpreted by the engine renderer).
+ * Every effect is a plain serializable definition (except overlay/vision draw
+ * kinds, which are closed union tags interpreted by the engine renderer).
  * Do not break existing shapes — the engine, panels and registry all read this.
  */
 
@@ -27,7 +31,17 @@ import type {
   TextStyle,
 } from '@/lib/editor/types'
 
-export type EffectCategory = 'color' | 'transition' | 'text' | 'sound' | 'music' | 'overlay'
+export type EffectCategory =
+  | 'color'
+  | 'transition'
+  | 'text'
+  | 'sound'
+  | 'music'
+  | 'overlay'
+  | 'vision'
+  | 'voice'
+  | 'motion'
+  | 'speed'
 
 /* ------------------------------------------------------------------ */
 /* Color effects                                                       */
@@ -128,6 +142,12 @@ export interface SoundSynthSpec {
     | 'shimmer'
     | 'drop'
     | 'chime'
+    // v4 nature/human/foley/event families
+    | 'heartbeat'
+    | 'ambience'
+    | 'thunder'
+    | 'crowd'
+    | 'chirp'
   params: {
     /** Hz — start frequency */
     freqStart: number
@@ -232,6 +252,117 @@ export interface OverlayEffect {
 }
 
 /* ------------------------------------------------------------------ */
+/* Vision effects (stylized canvas post-processing)                    */
+/* ------------------------------------------------------------------ */
+
+/** Closed-union draw recipe — the engine vision renderer interprets these. */
+export type VisionDraw =
+  | { kind: 'pixelate'; size: number }
+  | { kind: 'mirror'; mode: 'left' | 'right' | 'top' | 'bottom' | 'quad' }
+  | { kind: 'kaleido'; slices: 2 | 4 | 8 }
+  | { kind: 'blur'; px: number }
+  | { kind: 'glow'; amount: number; color: string; radius: number }
+  | { kind: 'chroma'; shift: number }
+  | { kind: 'duotone'; dark: string; light: string }
+  | { kind: 'dreamy'; amount: number }
+  | { kind: 'vhs'; shift: number; amount: number }
+  | { kind: 'poster'; levels: number; strength: number }
+
+export interface VisionEffect {
+  id: string
+  name: string
+  family: string
+  category: 'vision'
+  tags: string[]
+  emoji: string
+  draw: VisionDraw
+  /** default intensity 0..1 */
+  intensity: number
+  /** css background for the preview card */
+  swatch: string
+}
+
+/* ------------------------------------------------------------------ */
+/* Voice effects (offline DSP transforms of an audio clip)             */
+/* ------------------------------------------------------------------ */
+
+/** DSP recipe — interpreted by the offline voice renderer (voice.ts). */
+export interface VoiceFxSpec {
+  /** granular pitch shift in semitones (-12..12) */
+  pitch?: number
+  /** 0.5..2 spectral tilt: >1 brighter/thinner, <1 darker/warmer */
+  tilt?: number
+  /** explicit biquad chain (telephone/radio bands etc.) */
+  eq?: Array<{ type: BiquadFilterType; freq: number; q?: number; gain?: number }>
+  /** 0..1 waveshaper drive */
+  drive?: number
+  /** ring modulation (robot timbres) */
+  ringMod?: { freq: number; mix: number }
+  /** feedback delay */
+  echo?: { time: number; feedback: number; mix: number }
+  /** generated noise-impulse reverb */
+  reverb?: { seconds: number; decay: number; mix: number }
+  /** amplitude LFO */
+  tremolo?: { rate: number; depth: number }
+  /** 0..1 added breath/hiss noise */
+  noise?: number
+  /** 0..1 stereo widener (Haas-style) */
+  width?: number
+}
+
+export interface VoiceFxEffect {
+  id: string
+  name: string
+  family: string
+  category: 'voice'
+  tags: string[]
+  emoji: string
+  /** dry/wet mix 0..1 (wet share), applied on top of spec */
+  mix: number
+  spec: VoiceFxSpec
+}
+
+/* ------------------------------------------------------------------ */
+/* Motion presets (camera move presets on a clip)                      */
+/* ------------------------------------------------------------------ */
+
+export interface MotionEffect {
+  id: string
+  name: string
+  family: string
+  category: 'motion'
+  tags: string[]
+  emoji: string
+  /** base engine motion ('none' when pure keyframes) */
+  motion: MotionType
+  /** 0..1 Ken Burns intensity */
+  motionIntensity: number
+  /**
+   * Optional extra transform keyframes.
+   * `at` is a FRACTION of clip duration (0 | 0.5 | 1) — the applier
+   * multiplies by clip.duration and generates keyframe ids.
+   */
+  keys?: Array<{ property: KeyframeProperty; at: 0 | 0.5 | 1; value: number; easing: EasingType }>
+}
+
+/* ------------------------------------------------------------------ */
+/* Speed presets (playback-rate presets on a clip)                     */
+/* ------------------------------------------------------------------ */
+
+export interface SpeedEffect {
+  id: string
+  name: string
+  family: string
+  category: 'speed'
+  tags: string[]
+  emoji: string
+  /** playback rate multiplier (0.1..10) */
+  speed: number
+  /** short hint shown on the card, e.g. "smooth slow motion" */
+  hint?: string
+}
+
+/* ------------------------------------------------------------------ */
 /* Union + registry API                                                */
 /* ------------------------------------------------------------------ */
 
@@ -242,6 +373,10 @@ export type Effect =
   | SoundFxEffect
   | MusicEffect
   | OverlayEffect
+  | VisionEffect
+  | VoiceFxEffect
+  | MotionEffect
+  | SpeedEffect
 
 /** State persisted on a Clip (see editor types Clip.overlay). */
 export interface ClipOverlay {
