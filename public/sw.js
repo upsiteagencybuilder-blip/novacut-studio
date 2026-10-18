@@ -1,6 +1,21 @@
 /* NovaCut Studio service worker — offline-first shell */
-const CACHE = 'novacut-v2'
-const PRECACHE = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png']
+const CACHE = 'novacut-v4'
+const IS_DEV_HOST = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1'
+const PRECACHE = IS_DEV_HOST
+  ? ['/manifest.webmanifest']
+  : [
+      '/',
+      '/manifest.webmanifest',
+      '/logo.svg',
+      '/icons/icon-192.png',
+      '/icons/icon-512.png',
+      '/icons/maskable-512.png',
+      '/icons/apple-touch-icon.png',
+      '/icons/favicon-64.png',
+      '/samples/demo-1.jpg',
+      '/samples/demo-2.jpg',
+      '/samples/demo-3.jpg',
+    ]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -17,17 +32,29 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+/* allow the page to activate a waiting worker (update flow) */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+    if (event.ports && event.ports[0]) event.ports[0].postMessage({ activated: true })
+  }
+})
+
 self.addEventListener('fetch', (event) => {
   const req = event.request
   if (req.method !== 'GET') return
   const url = new URL(req.url)
 
-  // static assets: cache-first
+  // static assets: cache-first — ONLY in production, where /_next/static URLs
+  // are content-hashed and immutable. In dev, Turbopack reuses un-hashed URLs,
+  // so caching them would serve stale code after every edit.
   if (
+    !IS_DEV_HOST &&
     url.origin === self.location.origin &&
     (url.pathname.startsWith('/_next/static') ||
       url.pathname.startsWith('/icons') ||
       url.pathname.startsWith('/samples') ||
+      url.pathname === '/logo.svg' ||
       url.pathname === '/manifest.webmanifest')
   ) {
     event.respondWith(

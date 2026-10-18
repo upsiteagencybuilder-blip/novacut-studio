@@ -35,7 +35,7 @@ import {
   createTrack,
   type TextPreset,
 } from './constants'
-import { baseValueForProperty, clamp, evaluateKeyframeProperty, projectDuration, round2, uid } from './utils'
+import { baseValueForProperty, clamp, evaluateKeyframeProperty, landingTime, projectDuration, round2, uid } from './utils'
 import * as db from './db'
 
 /** Panel-friendly patch type: nested objects accept partials */
@@ -224,8 +224,21 @@ export const useEditor = create<EditorStore>((set, get) => ({
       if (!project && projects.length) project = projects.sort((a, b) => b.updatedAt - a.updatedAt)[0]
       if (!project) project = createDefaultProject()
       suppressSave = true
-      set({ media, project, ready: true })
+      // land on a frame that actually shows content (never greet with a black canvas)
+      const land = landingTime(project)
+      set({ media, project, ready: true, currentTime: land })
       setTimeout(() => (suppressSave = false), 0)
+      // manifest app-shortcut actions (?action=new|demo|export)
+      if (typeof window !== 'undefined') {
+        const action = new URLSearchParams(window.location.search).get('action')
+        if (action === 'new') {
+          get().newProject()
+          void db.setKV('onboarded', true)
+        } else if (action === 'demo') {
+          void get().loadDemoProject()
+        }
+        // 'export' is handled in EditorShell once ready
+      }
       // autosave subscription (runs once)
       useEditor.subscribe((state, prev) => {
         if (state.project !== prev.project && !suppressSave) {
@@ -282,7 +295,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
       selectedClipIds: [],
       past: [],
       future: [],
-      currentTime: 0,
+      // land on a frame where the demo is fully visible (intro clips fade in,
+      // so t=0 would greet the user with a black canvas)
+      currentTime: landingTime(project),
       isPlaying: false,
     }))
     await db.saveProject(project)

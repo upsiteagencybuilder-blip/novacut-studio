@@ -18,6 +18,7 @@ import { useEditor } from '@/lib/editor/store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ConnectionPill, InstallApp, PWAUpdateToast } from '@/components/editor/pwa/PWAStatus'
 
 function AutosaveIndicator() {
   const autosave = useEditor((s) => s.autosave)
@@ -83,7 +84,7 @@ export function TopBar() {
         </span>
       </div>
 
-      {/* project name + autosave */}
+      {/* project name + autosave + connection */}
       <div className="ml-3 flex flex-col gap-0.5">
         <Input
           value={projectName}
@@ -92,6 +93,9 @@ export function TopBar() {
           className="h-8 w-44 border-(--nc-line) bg-(--nc-panel) text-xs focus-visible:ring-fuchsia-400/50"
         />
         <AutosaveIndicator />
+      </div>
+      <div className="ml-2 hidden md:flex">
+        <ConnectionPill />
       </div>
 
       {/* undo / redo — centered */}
@@ -139,6 +143,7 @@ export function TopBar() {
 
       {/* right actions */}
       <div className="ml-auto flex items-center gap-1.5">
+        <InstallApp />
         <Button
           variant="ghost"
           size="icon"
@@ -179,6 +184,7 @@ export function TopBar() {
           Export
         </Button>
       </div>
+      <PWAUpdateToast />
     </header>
   )
 }

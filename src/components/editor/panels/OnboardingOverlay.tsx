@@ -5,7 +5,7 @@
  * "demo project" or "start from scratch". Choice is persisted in IndexedDB.
  */
 import { useEffect, useState } from 'react'
-import { Loader2, Play, Scissors, ShieldCheck, Zap } from 'lucide-react'
+import { Loader2, Scissors, ShieldCheck, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -88,14 +88,14 @@ export function OnboardingOverlay() {
       <div className="nc-glass-strong nc-fade-up w-full max-w-md rounded-2xl p-8 text-center">
         {/* logo */}
         <div className="nc-gradient nc-glow mx-auto flex h-16 w-16 items-center justify-center rounded-2xl">
-          <Play className="size-8 fill-white text-white" />
+          <img src="/icons/novacut-mark.svg" alt="NovaCut logo" className="size-9" />
         </div>
 
         <h2 className="mt-4 text-xl font-bold">
           Welcome to <span className="nc-gradient-text">NovaCut</span> Studio
         </h2>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          প্রফেশনাল ভিডিও এডিটিং — সম্পূর্ণ লোকাল, সম্পূর্ণ আপনার
+          Professional video editing — fully local, fully yours.
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           Professional editing that never uploads your files.

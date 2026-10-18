@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- NovaCut brand mark: play triangle + nova sparkle (white glyph, transparent bg) -->
+  <path d="M20 14.5c0-2.6 2.8-4.2 5-2.9l26 15.5c2.2 1.3 2.2 4.5 0 5.8L25 48.4c-2.2 1.3-5-.3-5-2.9V14.5Z"
+        fill="#FFFFFF" fill-opacity="0.97"/>
+  <path d="M46 8l1.9 5.1L53 15l-5.1 1.9L46 22l-1.9-5.1L39 15l5.1-1.9L46 8Z" fill="#FFFFFF"/>
+  <path d="M52.5 24l1.2 3.3 3.3 1.2-3.3 1.2-1.2 3.3-1.2-3.3-3.3-1.2 3.3-1.2 1.2-3.3Z"
+        fill="#FFFFFF" fill-opacity="0.85"/>
+</svg>

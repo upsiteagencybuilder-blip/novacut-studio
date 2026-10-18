@@ -19,6 +19,33 @@ export function clipsOnTrack(project: Project, trackId: string): Clip[] {
   return project.clips.filter((c) => c.trackId === trackId).sort((a, b) => a.start - b.start)
 }
 
+/**
+ * Pick a playhead position that shows actual content when a project opens.
+ * If t=0 only intersects fully transparent clips (long fade-ins or intro text
+ * animations), land just past the longest intro so users never meet a black
+ * preview on first paint.
+ */
+export function landingTime(project: Project): number {
+  const covering = project.clips.filter((c) => {
+    if (c.kind === 'audio') return false
+    const track = project.tracks.find((tr) => tr.id === c.trackId)
+    return !track?.hidden && c.start <= 0.001 && c.start + c.duration > 0.001
+  })
+  if (covering.length === 0) return 0
+
+  let invisibleFor = 0
+  for (const c of covering) {
+    invisibleFor = Math.max(invisibleFor, c.fadeIn)
+    if (c.kind === 'text' && c.textStyle) {
+      const a = c.textStyle.animation
+      if (a === 'fadeIn' || a === 'pop' || a === 'slideUp' || a === 'wipe') {
+        invisibleFor = Math.max(invisibleFor, Math.max(0.5, c.textStyle.animationDuration))
+      }
+    }
+  }
+  return invisibleFor > 0.05 ? Math.min(invisibleFor + 0.2, projectDuration(project)) : 0
+}
+
 /** mm:ss:ff style timecode */
 export function formatTimecode(t: number, fps = 30): string {
   const safe = Math.max(0, t)

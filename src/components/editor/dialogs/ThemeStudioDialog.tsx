@@ -27,7 +27,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { useEditor } from '@/lib/editor/store'
@@ -251,7 +250,7 @@ export function ThemeStudioDialog() {
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="flex flex-col gap-5 px-5 py-4">
             {/* live preview */}
             <LiveMiniPreview />
@@ -387,7 +386,7 @@ export function ThemeStudioDialog() {
               </Button>
             </div>
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   )

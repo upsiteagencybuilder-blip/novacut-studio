@@ -17,6 +17,13 @@ const TARGET_RATE = 16000
 /** Analysis window for silence detection, in timeline seconds */
 const ANALYSIS_WINDOW = 0.05
 
+/** Throw a friendly error when the user is offline (AI routes need the network). */
+export function requireOnline(): void {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    throw new Error('AI features need internet — everything else keeps working offline')
+  }
+}
+
 /* ---------------- audio decoding ---------------- */
 
 type AudioContextCtor = typeof AudioContext

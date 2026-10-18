@@ -85,6 +85,7 @@ export function PreviewPane() {
   const mediaMap = useMemo(() => useEditor.getState().getMediaMap(), [mediaVersion])
 
   /* -------- empty-stage hint -------- */
+  const visualClipCount = project.clips.filter((c) => c.kind !== 'audio').length
   const hasVisual = project.clips.some((c) => {
     if (c.kind === 'audio') return false
     const track = project.tracks.find((tr) => tr.id === c.trackId)
@@ -225,7 +226,9 @@ export function PreviewPane() {
             {!hasVisual && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <span className="rounded-full bg-(--nc-scrim) px-3 py-1 text-xs text-muted-foreground backdrop-blur-sm">
-                  Add media to start
+                  {visualClipCount === 0
+                    ? 'Add media to start'
+                    : 'Nothing at the playhead — drag it over a clip'}
                 </span>
               </div>
             )}

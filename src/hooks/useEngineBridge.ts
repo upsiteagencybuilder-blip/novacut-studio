@@ -43,6 +43,10 @@ export function useEngineBridge(canvasRef: React.RefObject<HTMLCanvasElement | n
         },
       }
     )
+    // sync the engine clock with the restored playhead (subscribe below only
+    // sees changes that happen AFTER mount — without this the first frame
+    // renders at t=0, e.g. a black canvas when clips fade in)
+    engine.seekTo(useEditor.getState().currentTime)
 
     const unsubscribe = useEditor.subscribe((state, prev) => {
       // play / pause

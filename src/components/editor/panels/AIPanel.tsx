@@ -28,7 +28,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
-import { analyzeClipSilence, base64ToBlob, exportAudioSegmentWav, fileToBase64, imageBase64ToFile, sniffImageMime } from '@/lib/editor/ai'
+import { analyzeClipSilence, base64ToBlob, exportAudioSegmentWav, fileToBase64, imageBase64ToFile, requireOnline, sniffImageMime } from '@/lib/editor/ai'
 import type { SilenceAnalysis } from '@/lib/editor/ai'
 import { importFiles } from '@/lib/editor/importer'
 import { useEditor } from '@/lib/editor/store'
@@ -317,6 +317,7 @@ export function AIPanel() {
 
   const handleGenerateCaptions = useCallback(async () => {
     if (!selectedClip || !clipMedia || captionBusy) return
+    requireOnline()
     setCaptionBusy(true)
     try {
       setCaptionPhase('Extracting audio…')
@@ -499,6 +500,7 @@ export function AIPanel() {
       toast.error('Describe the image you want first')
       return
     }
+    requireOnline()
     setImageBusy(true)
     try {
       const res = await fetch('/api/ai/image', {
@@ -541,6 +543,7 @@ export function AIPanel() {
       toast.error('Write the voiceover script first')
       return
     }
+    requireOnline()
     setVoiceBusy(true)
     try {
       const chunks = splitTextForTts(text)

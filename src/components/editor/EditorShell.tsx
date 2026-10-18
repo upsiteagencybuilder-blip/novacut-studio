@@ -227,6 +227,14 @@ export function EditorShell() {
     void init()
   }, [init])
 
+  // manifest app-shortcut: /?action=export opens the export dialog once ready
+  useEffect(() => {
+    if (!ready) return
+    if (new URLSearchParams(window.location.search).get('action') === 'export') {
+      useEditor.getState().openDialog('export')
+    }
+  }, [ready])
+
   if (!ready) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
