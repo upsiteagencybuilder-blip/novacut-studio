@@ -32,6 +32,31 @@ let deferredPrompt: DeferredPrompt | null = null
 let swWaiting: ServiceWorker | null = null
 const installSubs = new Set<(s: InstallState) => void>()
 const updateSubs = new Set<(waiting: boolean) => void>()
+const promptWaiters: Array<(p: DeferredPrompt | null) => void> = []
+
+/**
+ * Resolve with the deferred install prompt as soon as the browser fires
+ * `beforeinstallprompt` (or `null` after `timeoutMs`). Chrome can deliver the
+ * event slightly after first paint / first user interaction, so the install
+ * buttons wait briefly instead of falling back to a manual guide — this is
+ * what makes "tap → native install dialog" feel direct.
+ */
+function waitForDeferredPrompt(timeoutMs = 4000): Promise<DeferredPrompt | null> {
+  if (deferredPrompt) return Promise.resolve(deferredPrompt)
+  if (typeof window === 'undefined') return Promise.resolve(null)
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (p: DeferredPrompt | null) => {
+      if (settled) return
+      settled = true
+      const i = promptWaiters.indexOf(finish)
+      if (i >= 0) promptWaiters.splice(i, 1)
+      resolve(p)
+    }
+    promptWaiters.push(finish)
+    window.setTimeout(() => finish(deferredPrompt), timeoutMs)
+  })
+}
 
 function isIOS(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -71,6 +96,8 @@ function bindGlobalListeners() {
     e.preventDefault()
     deferredPrompt = e as DeferredPrompt
     emitInstall()
+    // release any install() calls that were waiting for the prompt
+    while (promptWaiters.length) promptWaiters.pop()?.(deferredPrompt)
   })
   window.addEventListener('appinstalled', () => {
     deferredPrompt = null
@@ -115,15 +142,27 @@ export function usePWAInstall() {
     }
   }, [])
 
+  /**
+   * Direct install: fires the native install dialog as soon as possible.
+   * If the browser hasn't delivered `beforeinstallprompt` yet, we wait for it
+   * briefly (Chrome often delivers it right after first interaction) so a tap
+   * on any install button leads straight to the native dialog — no guide.
+   */
   const install = useCallback(async (): Promise<'accepted' | 'dismissed' | 'unavailable'> => {
-    if (!deferredPrompt) return 'unavailable'
-    void deferredPrompt.prompt()
-    const choice = await deferredPrompt.userChoice
-    if (choice.outcome === 'accepted') {
+    const prompt = deferredPrompt ?? (await waitForDeferredPrompt(4000))
+    if (!prompt) return 'unavailable'
+    try {
+      void prompt.prompt()
+      const choice = await prompt.userChoice
+      // the event is single-use — a fresh one must arrive for a retry
       deferredPrompt = null
       emitInstall()
+      return choice.outcome
+    } catch {
+      deferredPrompt = null
+      emitInstall()
+      return 'unavailable'
     }
-    return choice.outcome
   }, [])
 
   return { ...state, install }

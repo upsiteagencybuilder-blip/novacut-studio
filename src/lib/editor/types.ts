@@ -293,5 +293,5 @@ export interface ExportState {
   durationMs?: number
 }
 
-export type PanelTab = 'media' | 'text' | 'stickers' | 'effects' | 'audio' | 'ai'
+export type PanelTab = 'media' | 'text' | 'stickers' | 'effects' | 'audio' | 'ai' | 'pro'
 export type DialogName = 'export' | 'projects' | 'shortcuts' | 'mixer' | 'versions' | 'theme' | null

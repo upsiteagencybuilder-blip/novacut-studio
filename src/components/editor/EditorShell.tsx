@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
+  Briefcase,
   Music,
   Settings2,
   WandSparkles,
@@ -179,12 +180,13 @@ const MOBILE_TABS = [
   { id: 'stickers', label: 'Stickers', icon: SmilePlus },
   { id: 'effects', label: 'Effects', icon: WandSparkles },
   { id: 'audio', label: 'Audio', icon: Music },
+  { id: 'pro', label: 'Pro', icon: Briefcase },
 ] as const
 
 function MobileBar({ onOpenPanel, onOpenProps, propsActive }: { onOpenPanel: () => void; onOpenProps: () => void; propsActive: boolean }) {
   const panelTab = useEditor((s) => s.panelTab)
   return (
-    <nav className="flex h-14 shrink-0 items-center justify-around border-t border-(--nc-line) bg-(--nc-chrome) px-1 pb-[env(safe-area-inset-bottom)] lg:hidden">
+    <nav className="flex h-14 shrink-0 items-stretch justify-around border-t border-(--nc-line) bg-(--nc-chrome) px-0.5 pb-[env(safe-area-inset-bottom)] lg:hidden">
       {MOBILE_TABS.map((tab) => {
         const Icon = tab.icon
         const active = propsActive === false && panelTab === tab.id
@@ -198,20 +200,20 @@ function MobileBar({ onOpenPanel, onOpenProps, propsActive }: { onOpenPanel: () 
               useEditor.getState().setPanelTab(tab.id)
               onOpenPanel()
             }}
-            className={`flex h-11 flex-col items-center justify-center gap-0.5 rounded-lg px-2 ${active ? 'text-white' : 'text-muted-foreground'}`}
+            className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-0.5 ${active ? 'text-white' : 'text-muted-foreground'}`}
           >
             <Icon className={`size-[18px] ${active ? 'text-fuchsia-400' : ''}`} />
-            <span className="text-[8px] leading-none">{tab.label}</span>
+            <span className="max-w-full truncate text-[8px] leading-none">{tab.label}</span>
           </button>
         )
       })}
       <button
         type="button"
         onClick={onOpenProps}
-        className={`flex h-11 flex-col items-center justify-center gap-0.5 rounded-lg px-2 ${propsActive ? 'text-white' : 'text-muted-foreground'}`}
+        className={`flex h-11 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-0.5 ${propsActive ? 'text-white' : 'text-muted-foreground'}`}
       >
         <Settings2 className={`size-[18px] ${propsActive ? 'text-fuchsia-400' : ''}`} />
-        <span className="text-[8px] leading-none">Edit</span>
+        <span className="max-w-full truncate text-[8px] leading-none">Edit</span>
       </button>
     </nav>
   )

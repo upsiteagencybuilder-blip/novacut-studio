@@ -64,23 +64,24 @@ export function PWAUpdateToast() {
   return null
 }
 
-/* ---------------- install button + iOS guide ---------------- */
+/* ---------------- install button (direct native install) ---------------- */
 
 export function InstallApp() {
-  const { available, iosGuide, installed, install } = usePWAInstall()
+  const { iosGuide, installed, install } = usePWAInstall()
   const [guideOpen, setGuideOpen] = useState(false)
 
   // hidden when already running as the installed app
   if (installed) return null
 
   const handleClick = async () => {
-    if (available) {
-      const outcome = await install()
-      if (outcome === 'accepted') toast.success('NovaCut installed 🎉 — find it on your home screen')
-      return
+    // Direct install — the native dialog opens immediately (the hook waits
+    // briefly for `beforeinstallprompt` if needed). No suggestion screens.
+    const outcome = await install()
+    if (outcome === 'accepted') toast.success('NovaCut installed 🎉 — find it on your home screen')
+    if (outcome === 'unavailable') {
+      if (iosGuide) setGuideOpen(true)
+      else toast('To install: open the browser menu ⋮ and choose "Install NovaCut"', { duration: 6000 })
     }
-    // Chrome/desktop without the event yet, or iOS Safari → guide
-    setGuideOpen(true)
   }
 
   return (
@@ -96,7 +97,7 @@ export function InstallApp() {
         <ArrowDownToLine className="h-4 w-4" />
       </Button>
 
-      <Dialog open={guideOpen} onOpenChange={setGuideOpen}>
+      <Dialog open={guideOpen} onOpenChange={setGuideOpen}> {/* iOS-only fallback */}
         <DialogContent className="nc-glass-strong rounded-2xl border-(--nc-line) p-6 sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">

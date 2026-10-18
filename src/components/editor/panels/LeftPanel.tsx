@@ -5,6 +5,7 @@
  * plus the switchable content area. State lives in the editor store.
  */
 import {
+  Briefcase,
   CircleHelp,
   FolderOpen,
   Music,
@@ -21,6 +22,7 @@ import { AudioPanel } from './AudioPanel'
 import { AIPanel } from './AIPanel'
 import { EffectsPanel } from './EffectsPanel'
 import { MediaPanel } from './MediaPanel'
+import { ProToolkitPanel } from './ProToolkitPanel'
 import { StickerPanel } from './StickerPanel'
 import { TextPanel } from './TextPanel'
 
@@ -37,6 +39,7 @@ const TABS: TabDef[] = [
   { id: 'effects', label: 'Effects', icon: WandSparkles },
   { id: 'audio', label: 'Audio', icon: Music },
   { id: 'ai', label: 'AI', icon: Sparkles },
+  { id: 'pro', label: 'Pro', icon: Briefcase },
 ]
 
 const PANEL_TITLES: Record<PanelTab, string> = {
@@ -46,6 +49,7 @@ const PANEL_TITLES: Record<PanelTab, string> = {
   effects: 'Effects',
   audio: 'Audio',
   ai: 'AI magic',
+  pro: 'Pro toolkit',
 }
 
 export function LeftPanel() {
@@ -116,6 +120,7 @@ export function LeftPanel() {
           {panelTab === 'effects' && <EffectsPanel />}
           {panelTab === 'audio' && <AudioPanel />}
           {panelTab === 'ai' && <AIPanel />}
+          {panelTab === 'pro' && <ProToolkitPanel />}
         </div>
       </div>
     </div>

@@ -1,0 +1,108 @@
+import type { ProTool } from '../types'
+
+/**
+ * Pro Toolkit — timeline section.
+ * Industry timeline tools mapped to NovaCut: shortcuts and gestures cited in
+ * descriptions are the ones that actually ship (S split, D duplicate,
+ * Shift+Delete ripple delete, K keyframe, magnet snap, beat-sync markers).
+ */
+
+export const TIMELINE_TOOLS: ProTool[] = [
+  // -------- Tools & modes --------
+  { id: 'timeline-selection-tool', name: 'Selection Tool (V)', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Click clips to select them, shift-click extends the selection' },
+  { id: 'timeline-track-select-forward', name: 'Track Select Forward Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Select every clip from the playhead rightward in one gesture' },
+  { id: 'timeline-track-select-backward', name: 'Track Select Backward Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Select every clip from the playhead leftward in one gesture' },
+  { id: 'timeline-ripple-edit-tool', name: 'Ripple Edit Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Trim a clip and close the gap automatically across the track' },
+  { id: 'timeline-rolling-edit-tool', name: 'Rolling Edit Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Move the cut point between two clips without changing duration' },
+  { id: 'timeline-rate-stretch-tool', name: 'Rate Stretch Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Drag a clip edge to retime it into the available gap' },
+  { id: 'timeline-razor-tool', name: 'Razor Tool (Ctrl+B)', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Press S to split the selected clip at the playhead' },
+  { id: 'timeline-slip-tool', name: 'Slip Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Shift the source in-point without moving the clip on the timeline' },
+  { id: 'timeline-slide-tool', name: 'Slide Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Move a clip while neighbors close the gap around it' },
+  { id: 'timeline-pen-tool', name: 'Pen Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Draw or adjust keyframe and mask points directly on clips' },
+  { id: 'timeline-hand-tool', name: 'Hand Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Pan the timeline view by dragging with the mouse' },
+  { id: 'timeline-zoom-tool', name: 'Zoom Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Magnify a timeline region by clicking or dragging a range' },
+  { id: 'timeline-text-tool', name: 'Text Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Click the program monitor to place text directly on canvas' },
+  { id: 'timeline-type-tool', name: 'Type Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Create point text by typing straight onto the preview' },
+  { id: 'timeline-vertical-type-tool', name: 'Vertical Type Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Type vertically stacked text for CJK and side captions' },
+  { id: 'timeline-rectangle-tool', name: 'Rectangle Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Drag on the preview to draw a rectangle shape layer' },
+  { id: 'timeline-ellipse-tool', name: 'Ellipse Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Drag on the preview to draw an ellipse shape layer' },
+  { id: 'timeline-polygon-tool', name: 'Polygon Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Draw multi-sided polygons as shape layers on the canvas' },
+  { id: 'timeline-free-draw-bezier-tool', name: 'Free Draw Bezier Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Sketch freeform bezier masks and paths on the preview' },
+  { id: 'timeline-rotation-tool', name: 'Rotation Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Rotate clips by dragging a handle around the anchor point' },
+  { id: 'timeline-anchor-point-tool', name: 'Anchor Point Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Reposition the transform anchor directly on the preview' },
+  { id: 'timeline-scale-tool', name: 'Scale Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Resize clips by dragging corner handles on the preview' },
+  { id: 'timeline-position-tool', name: 'Position Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Reposition clips by dragging them across the preview canvas' },
+  { id: 'timeline-opacity-slider', name: 'Opacity Slider', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Drag the opacity slider in properties, animate it with keyframes' },
+  { id: 'timeline-blend-mode-dropdown', name: 'Blend Mode Dropdown', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Pick from fifteen blend modes in clip properties, engine composited' },
+  { id: 'timeline-crop-tool', name: 'Crop Tool (Alt+C)', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Crop frame edges of a clip without scaling the picture' },
+
+  // -------- Cutting & trimming --------
+  { id: 'timeline-playhead', name: 'Playhead', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Drag the fuchsia handle or scrub the ruler to seek' },
+  { id: 'timeline-in-point-marker', name: 'In Point Marker', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Mark the start of a source or sequence range for edits' },
+  { id: 'timeline-out-point-marker', name: 'Out Point Marker', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Mark the end of a source or sequence range for edits' },
+  { id: 'timeline-clear-in-out', name: 'Clear In/Out Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Remove the marked in and out points in one command' },
+  { id: 'timeline-go-to-in-out', name: 'Go to In/Out Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Jump the playhead to the marked in or out point' },
+  { id: 'timeline-lift-button', name: 'Lift Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Remove the marked range and leave the gap in place' },
+  { id: 'timeline-extract-button', name: 'Extract Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Remove the marked range and ripple everything after closed' },
+  { id: 'timeline-insert-button', name: 'Insert Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Push source material into the timeline, shifting later clips' },
+  { id: 'timeline-overlay-button', name: 'Overlay Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Write source material over the timeline, replacing underneath' },
+  { id: 'timeline-replace-edit-tool', name: 'Replace Edit Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Swap a timeline clip with source while keeping the duration' },
+  { id: 'timeline-fit-to-fill-tool', name: 'Fit to Fill Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Retime a source to exactly fill the marked duration' },
+  { id: 'timeline-three-point-editing', name: 'Three-Point Editing Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Perform edits from three marked points across source and record' },
+  { id: 'timeline-four-point-editing', name: 'Four-Point Editing Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Fit or fill source between four marked in and out points' },
+  { id: 'timeline-multicam-monitor', name: 'Multi-Camera Monitor', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Cut between synchronized angles live in a grid monitor' },
+  { id: 'timeline-sync-clips-tool', name: 'Sync Clips Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Align clips by audio waveforms or timecode automatically' },
+  { id: 'timeline-nest-sequence', name: 'Nest Sequence Command', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Bundle selected clips into one nested sequence container' },
+  { id: 'timeline-unlink-audio-video', name: 'Unlink Audio/Video', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Detach a linked clip audio and video for separate edits' },
+  { id: 'timeline-link-audio-video', name: 'Link Audio/Video', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Relink clip audio and video so they edit as one' },
+  { id: 'timeline-group-clips', name: 'Group Clips', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Bind clips so they move and trim as a single block' },
+  { id: 'timeline-ungroup-clips', name: 'Ungroup Clips', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Release a group back into individually editable clips' },
+  { id: 'timeline-match-frame', name: 'Match Frame Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Reveal the exact source frame under the playhead' },
+  { id: 'timeline-reverse-match-frame', name: 'Reverse Match Frame', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Jump from the source monitor back to the timeline clip' },
+  { id: 'timeline-find-panel', name: 'Find Panel', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Search the project for clips by name or metadata' },
+  { id: 'timeline-replace-clip-tool', name: 'Replace Clip Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Swap one media asset for another across the timeline' },
+  { id: 'timeline-make-subclip', name: 'Make Subclip', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Save a marked source range as its own subclip asset' },
+  { id: 'timeline-delete-ripple-delete', name: 'Delete / Ripple Delete', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Press Delete to remove clips, Shift Delete ripples the gap' },
+
+  // -------- Speed & duration --------
+  { id: 'timeline-speed-controls', name: 'Speed Controls (Uniform Speed / Speed Ramping)', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Speed slider and 25 presets change rate with automatic duration compensation' },
+  { id: 'timeline-duration-tool', name: 'Duration Tool', section: 'timeline', group: 'Speed & duration', status: 'planned', desc: 'Set exact clip duration numerically with automatic retime' },
+
+  // -------- Markers & navigation --------
+  { id: 'timeline-time-ruler', name: 'Time Ruler', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Click or drag the adaptive ruler to scrub the playhead' },
+  { id: 'timeline-work-area-bar', name: 'Work Area Bar', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Limit preview and render to a marked work area range' },
+  { id: 'timeline-zoom-bar', name: 'Zoom Bar', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Zoom buttons and plus minus keys scale pixels per second' },
+  { id: 'timeline-safe-margins-guide', name: 'Safe Margins Guide', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Overlay action and title safe guides on the preview' },
+  { id: 'timeline-grid-overlays', name: 'Grid Overlays', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Draw composition grids and thirds guides on the monitor' },
+  { id: 'timeline-rulers', name: 'Rulers', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Canvas-edge rulers for precise on-screen graphic placement' },
+  { id: 'timeline-guides', name: 'Guides', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Draggable non-printing guides for layout on the canvas' },
+  { id: 'timeline-snapping-guides', name: 'Snapping Guides', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Yellow guide line flashes when a dragged edge snaps' },
+  { id: 'timeline-add-marker', name: 'Add Marker (M)', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Timeline markers beyond beat sync remain roadmap, M mutes clips' },
+  { id: 'timeline-beat-sync-markers', name: 'Beat-Sync Markers', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Toolbar beat menu detects BPM and draws snap markers on the clip' },
+  { id: 'timeline-zoom-to-fit', name: 'Zoom to Fit Timeline (Shift+Z)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Click the fit button to frame the whole project' },
+
+  // -------- Tracks & locking --------
+  { id: 'timeline-toggle-track-output', name: 'Toggle Track Output', section: 'timeline', group: 'Tracks & locking', status: 'planned', desc: 'Enable or disable what a track feeds into the composite' },
+  { id: 'timeline-toggle-track-lock', name: 'Toggle Track Lock', section: 'timeline', group: 'Tracks & locking', status: 'planned', desc: 'Freeze a whole lane against accidental edits in one click' },
+  { id: 'timeline-sync-lock-toggle', name: 'Sync Lock Toggle', section: 'timeline', group: 'Tracks & locking', status: 'planned', desc: 'Keep linked tracks in sync during ripple operations' },
+  { id: 'timeline-source-patching-indicators', name: 'Source Patching Indicators', section: 'timeline', group: 'Tracks & locking', status: 'planned', desc: 'Choose which tracks receive source edits via patch targets' },
+  { id: 'timeline-track-target-indicators', name: 'Track Target Indicators', section: 'timeline', group: 'Tracks & locking', status: 'planned', desc: 'Show which tracks edits and effects are aimed at' },
+  { id: 'timeline-snap-toggle', name: 'Snap Toggle', section: 'timeline', group: 'Tracks & locking', status: 'live', desc: 'Magnet button in the toolbar enables edge snapping' },
+  { id: 'timeline-linked-selection-toggle', name: 'Linked Selection Toggle', section: 'timeline', group: 'Tracks & locking', status: 'planned', desc: 'Select linked audio and video together or separately' },
+  { id: 'timeline-track-manager', name: 'Track Manager', section: 'timeline', group: 'Tracks & locking', status: 'live', desc: 'Corner menu adds video, overlay or audio lanes, headers remove them' },
+  { id: 'timeline-hide-show-track', name: 'Hide/Show Track (Eye Icon)', section: 'timeline', group: 'Tracks & locking', status: 'live', desc: 'Eye icon hides the lane from preview and export' },
+  { id: 'timeline-lock-unlock-track', name: 'Lock/Unlock Track', section: 'timeline', group: 'Tracks & locking', status: 'live', desc: 'Padlock toggle prevents edits and dims the locked clips' },
+  { id: 'timeline-mute-unmute-track', name: 'Mute/Unmute Track', section: 'timeline', group: 'Tracks & locking', status: 'live', desc: 'Speaker icon in the header silences the whole track' },
+
+  // -------- Audio on timeline --------
+  { id: 'timeline-voiceover-record-tool', name: 'Voiceover Record Tool', section: 'timeline', group: 'Audio on timeline', status: 'live', desc: 'Record voiceover from the audio panel, saved into the media library', action: 'open-audio' },
+  { id: 'timeline-audio-meter', name: 'Audio Meter', section: 'timeline', group: 'Audio on timeline', status: 'planned', desc: 'Level meter beside the timeline while playing the sequence' },
+
+  // -------- Rendering & preview --------
+  { id: 'timeline-render-in-to-out', name: 'Render In to Out', section: 'timeline', group: 'Rendering & preview', status: 'planned', desc: 'Pre-render the marked work area for smooth full-quality preview' },
+  { id: 'timeline-render-effects', name: 'Render Effects', section: 'timeline', group: 'Rendering & preview', status: 'planned', desc: 'Render only effect-heavy clips that lag the preview' },
+  { id: 'timeline-render-selection', name: 'Render Selection', section: 'timeline', group: 'Rendering & preview', status: 'planned', desc: 'Pre-render exactly the clips selected in the timeline' },
+  { id: 'timeline-delete-render-files', name: 'Delete Render Files', section: 'timeline', group: 'Rendering & preview', status: 'planned', desc: 'Clear cached preview renders to reclaim disk space' },
+  { id: 'timeline-global-fx-mute', name: 'Global FX Mute', section: 'timeline', group: 'Rendering & preview', status: 'planned', desc: 'Bypass every effect at once to compare clean output' },
+  { id: 'timeline-render-timeline', name: 'Render Timeline', section: 'timeline', group: 'Rendering & preview', status: 'planned', desc: 'Render the whole timeline ahead of playback on demand' },
+]

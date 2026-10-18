@@ -11,10 +11,13 @@
  *    = { at: Date.now() } and suppresses the card for 3 days.
  *  - Accepting the install stores the same record via the `appinstalled`
  *    event → never shows again on this device.
- *  - When the native install prompt is unavailable (iOS Safari, some desktops),
- *    the primary button opens the step-by-step Add-to-Home-Screen guide.
+ *  - Tapping "Install app" triggers the NATIVE install dialog directly —
+ *    no intermediate suggestion screens. The step-by-step guide exists only
+ *    as an iOS Safari fallback (Apple does not expose the programmatic
+ *    install prompt there).
  */
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { ArrowDownToLine, Share, SquarePlus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -53,7 +56,7 @@ function writeHint(): void {
 }
 
 export function InstallSuggestion() {
-  const { available, iosGuide, installed, install } = usePWAInstall()
+  const { iosGuide, installed, install } = usePWAInstall()
   const reducedMotion = useReducedMotion()
   const [standalone, setStandalone] = useState(false)
   const [show, setShow] = useState(false)
@@ -94,20 +97,33 @@ export function InstallSuggestion() {
   }, [])
 
   const handleInstall = useCallback(async () => {
-    if (available) {
-      const outcome = await install()
-      if (outcome === 'accepted') {
-        writeHint()
-        setShow(false)
-        // success toast comes from the global 'appinstalled' listener in register-sw
-      } else {
-        // declined the native prompt — same cooldown as a manual dismiss
-        dismiss()
-      }
+    // Direct install — the native dialog opens immediately (the hook waits
+    // briefly for `beforeinstallprompt` if it hasn't fired yet). No suggestion
+    // screens in between.
+    const outcome = await install()
+    if (outcome === 'accepted') {
+      writeHint()
+      setShow(false)
+      // success toast comes from the global 'appinstalled' listener in register-sw
       return
     }
-    setGuideOpen(true)
-  }, [available, install, dismiss])
+    if (outcome === 'dismissed') {
+      // declined the native prompt — same cooldown as a manual dismiss
+      dismiss()
+      return
+    }
+    // Native prompt unavailable: iOS Safari requires the manual
+    // Add-to-Home-Screen flow (platform limitation), other browsers get a
+    // one-line hint instead of any dialog. The card also steps aside — the
+    // toast carries the instruction.
+    if (iosGuide) {
+      setGuideOpen(true)
+    } else {
+      writeHint()
+      setShow(false)
+      toast('To install: open the browser menu ⋮ and choose "Install NovaCut"', { duration: 6000 })
+    }
+  }, [install, dismiss, iosGuide])
 
   const hidden = installed || standalone
 
