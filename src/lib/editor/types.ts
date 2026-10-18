@@ -72,7 +72,35 @@ export interface Filters {
 
 export type MotionType = 'none' | 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight' | 'panUp' | 'panDown'
 
-export type TextAnimation = 'none' | 'fadeIn' | 'slideUp' | 'pop' | 'typewriter' | 'wipe'
+/**
+ * Extended text animation set (v3 mega-effects).
+ * Original six are legacy and always render; the rest are engine-rendered
+ * families used by the 150 text-effect presets.
+ */
+export type TextAnimation =
+  | 'none'
+  | 'fadeIn'
+  | 'slideUp'
+  | 'pop'
+  | 'typewriter'
+  | 'wipe'
+  // --- v3 mega text families ---
+  | 'slideLeft'
+  | 'slideRight'
+  | 'slideDown'
+  | 'bounceIn'
+  | 'elastic'
+  | 'zoomBlur'
+  | 'flipX'
+  | 'rotateIn'
+  | 'trackingIn'
+  | 'blurIn'
+  | 'swing'
+  // loops (animate while clip plays)
+  | 'waveLoop'
+  | 'shakeLoop'
+  | 'neonFlicker'
+  | 'glitchLoop'
 export type StickerAnimation = 'none' | 'pop' | 'float' | 'spin' | 'pulse'
 
 /** Properties that can be keyframed */
@@ -203,6 +231,8 @@ export interface Clip {
   lutIntensity?: number
   /** audio clips: lower volume automatically when video audio plays */
   autoDuck?: boolean
+  /** mega-effects overlay (particles/grain/vignette/leaks...) drawn over this clip */
+  overlay?: { effectId: string; intensity: number } | null
   /** label color chip on the timeline */
   color: string
 }

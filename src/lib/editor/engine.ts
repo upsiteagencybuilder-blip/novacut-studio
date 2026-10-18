@@ -6,6 +6,9 @@
  * Pure module: no direct store import — state arrives via a snapshot fn (see bridge hook).
  */
 import type { Clip, LutData, MediaAssetRuntime, Project } from './types'
+import type { OverlayDraw } from '@/lib/effects/types'
+import { getOverlayDraw } from '@/lib/effects/registry'
+import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
 import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, evaluateKeyframeProperty, projectDuration } from './utils'
 import { CANVAS_FONT_LOAD_LIST, MIN_CLIP_DURATION } from './constants'
 
@@ -40,6 +43,65 @@ export interface ClipBounds {
 const driftTolerancePlay = 0.16
 const driftTolerancePause = 0.03
 
+/** Adaptive preview quality tier */
+export type RenderQuality = 'low' | 'medium' | 'high'
+
+/* ---------------- local easing helpers (v3 text animations) ---------------- */
+
+function easeOutCubic(p: number): number {
+  return 1 - Math.pow(1 - p, 3)
+}
+
+/** Spring overshoot easing in [0, 1+] (exactly 0 at p=0, exactly 1 at p=1) */
+function elasticOut(p: number): number {
+  if (p <= 0) return 0
+  if (p >= 1) return 1
+  const c4 = (2 * Math.PI) / 3
+  return Math.pow(2, -10 * p) * Math.sin((p * 10 - 0.75) * c4) + 1
+}
+
+/* ---------------- deterministic text loop curves ---------------- */
+
+interface GlitchSlice {
+  /** vertical position as fraction of the text block height */
+  y: number
+  /** slice height as fraction of the font size */
+  h: number
+  /** horizontal rgb-split offset in px */
+  dx: number
+}
+
+interface GlitchState {
+  active: boolean
+  slices: GlitchSlice[]
+}
+
+/** Deterministic neon flicker: smooth noise + rare deep dips (no Math.random) */
+function neonFlickerCurve(t: number, seed: number): number {
+  let f = 0.72 + 0.28 * valueNoise(t * 9, seed)
+  if (hash01(hashInt(seed, Math.floor(t * 7) + 555)) < 0.1) f *= 0.45
+  return clamp(f, 0.05, 1)
+}
+
+/** Deterministic glitch windows (~2-4 per second) with 2-3 slice offsets */
+function glitchWindows(t: number, seed: number): GlitchState {
+  const slot = Math.floor(t * 6)
+  if (hash01(hashInt(seed, slot)) > 0.42) return { active: false, slices: [] }
+  const frac = t * 6 - slot
+  const win = 0.3 + hash01(hashInt(seed, slot * 7 + 13)) * 0.45
+  if (frac > win) return { active: false, slices: [] }
+  const n = 2 + Math.floor(hash01(hashInt(seed, slot * 3 + 5)) * 1.99)
+  const slices: GlitchSlice[] = []
+  for (let i = 0; i < n; i++) {
+    slices.push({
+      y: hash01(hashInt(seed, slot * 31 + i * 7 + 101)),
+      h: 0.06 + hash01(hashInt(seed, slot * 17 + i * 11 + 233)) * 0.16,
+      dx: (hash01(hashInt(seed, slot * 13 + i * 5 + 401)) - 0.5) * 9,
+    })
+  }
+  return { active: true, slices }
+}
+
 class PreviewEngine {
   private canvas: HTMLCanvasElement | null = null
   private ctx: CanvasRenderingContext2D | null = null
@@ -69,6 +131,35 @@ class PreviewEngine {
   private fxCanvas: HTMLCanvasElement | null = null
   private fxCtx: CanvasRenderingContext2D | null = null
   private lutCache = new Map<string, LutData | null>()
+
+  /* adaptive render quality */
+  private renderScale = 1
+  private renderQuality: RenderQuality = 'high'
+  /** forced scale while exporting (always full project resolution) */
+  private exportScaleOverride: number | null = null
+
+  /** Detect device tier once and pick the adaptive preview render scale */
+  initAdaptiveQuality() {
+    const tier = detectDeviceTier()
+    this.renderQuality = tier.quality
+    this.renderScale = tier.scale
+  }
+
+  /** Scale currently applied to the canvas backing store */
+  private activeScale(): number {
+    return this.exportScaleOverride ?? this.renderScale
+  }
+
+  /** Override the preview render scale (0.5..2); export resolution is unaffected */
+  setRenderScale(scale: number) {
+    this.renderScale = clamp(scale, 0.5, 2)
+    this.renderQuality = this.renderScale <= 1.001 ? 'low' : this.renderScale <= 1.501 ? 'medium' : 'high'
+    if (this.exportScaleOverride === null) this.invalidate()
+  }
+
+  getRenderQuality(): RenderQuality {
+    return this.renderQuality
+  }
 
   /* -------------------------------------------------- lifecycle */
 
@@ -195,6 +286,13 @@ class PreviewEngine {
   /** Route all element audio through WebAudio and return a capture stream for export */
   beginExport(fps: number): MediaStream | null {
     if (!this.canvas) return null
+    // Export always records at full project resolution — never the adaptive preview scale.
+    this.exportScaleOverride = 1
+    const proj = this.snapshotFn?.().project
+    if (proj) {
+      this.canvas.width = proj.canvasWidth
+      this.canvas.height = proj.canvasHeight
+    }
     try {
       if (!this.audioCtx) this.audioCtx = new AudioContext()
       if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
@@ -229,6 +327,10 @@ class PreviewEngine {
 
   endExport() {
     // keep audioCtx alive (elements are permanently routed); nothing to tear down
+    if (this.exportScaleOverride !== null) {
+      this.exportScaleOverride = null
+      this.invalidate()
+    }
   }
 
   /** RMS master level 0..1 for UI meters (0 when audio graph not yet built) */
@@ -554,16 +656,21 @@ class PreviewEngine {
     this.masterVolume = snap.masterVolume
     this.masterMuted = snap.masterMuted
 
-    if (canvas.width !== project.canvasWidth || canvas.height !== project.canvasHeight) {
-      canvas.width = project.canvasWidth
-      canvas.height = project.canvasHeight
+    // canvas backing store: project size × adaptive render scale (1 while exporting)
+    const scale = this.activeScale()
+    const bw = Math.max(1, Math.round(project.canvasWidth * scale))
+    const bh = Math.max(1, Math.round(project.canvasHeight * scale))
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw
+      canvas.height = bh
     }
-    const W = canvas.width
-    const H = canvas.height
+    const W = project.canvasWidth
+    const H = project.canvasHeight
     const t = this.time
 
-    // background
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    // background (drawing happens in logical canvas space; the base transform
+    // maps it onto the scaled backing store)
+    ctx.setTransform(scale, 0, 0, scale, 0, 0)
     ctx.globalAlpha = 1
     ctx.filter = 'none'
     ctx.fillStyle = project.backgroundColor || '#000000'
@@ -619,6 +726,39 @@ class PreviewEngine {
     const alpha = (kfOpacity ?? clip.transform.opacity) * this.fadeFactor(clip, tLocal)
     if (alpha <= 0.002) return
 
+    // ---- mega-effects overlay pre-pass (shake / zoomPulse alter the transform) ----
+    let ovDraw: OverlayDraw | null = null
+    let overlayIntensity = 0
+    if (clip.overlay && clip.kind !== 'audio') {
+      overlayIntensity = clamp(clip.overlay.intensity, 0, 1)
+      if (overlayIntensity > 0.001) {
+        try {
+          ovDraw = getOverlayDraw(clip.overlay.effectId) ?? null
+        } catch {
+          ovDraw = null
+        }
+      }
+    }
+    let shakeX = 0
+    let shakeY = 0
+    let shakeRot = 0
+    let overlayZoom = 1
+    if (ovDraw && clip.overlay) {
+      const ovSeed = clip.id + clip.overlay.effectId
+      try {
+        if (ovDraw.kind === 'shake') {
+          const s = overlayShake(tLocal, ovDraw.amount * overlayIntensity, ovDraw.speed, ovDraw.variant, ovSeed)
+          shakeX = s.dx
+          shakeY = s.dy
+          shakeRot = s.rot
+        } else if (ovDraw.kind === 'zoomPulse') {
+          overlayZoom = overlayZoomPulse(tLocal, ovDraw.amount * overlayIntensity, ovDraw.speed, ovDraw.variant)
+        }
+      } catch {
+        ovDraw = null
+      }
+    }
+
     // audio sync for video clips happens here; visual draw below
     const snap = this.snapshotFn!
     if (clip.kind === 'video' && clip.mediaId) {
@@ -672,18 +812,24 @@ class PreviewEngine {
       }
     }
 
-    ctx.translate(W / 2 + tx * W + motionX, H / 2 + ty * H + motionY)
-    ctx.rotate((trot * Math.PI) / 180)
+    ctx.translate(W / 2 + tx * W + motionX + shakeX * W, H / 2 + ty * H + motionY + shakeY * H)
+    ctx.rotate(((trot + shakeRot) * Math.PI) / 180)
+
+    // zoomPulse scales text/sticker around their center; media kinds fold it
+    // into their draw scale below (avoid double application)
+    if (overlayZoom !== 1 && (clip.kind === 'text' || clip.kind === 'sticker')) {
+      ctx.scale(overlayZoom, overlayZoom)
+    }
 
     if (clip.kind === 'text' && clip.textStyle) {
-      this.drawText(ctx, clip, tLocal, q, tx, ty)
+      this.drawText(ctx, clip, tLocal, q, W, H, tx, ty)
     } else if (clip.kind === 'sticker' && clip.sticker) {
-      this.drawSticker(ctx, clip, tLocal, q, tx, ty)
+      this.drawSticker(ctx, clip, tLocal, q, W, H, tx, ty)
     } else if (clip.kind === 'image' && clip.mediaId) {
       const asset = mediaMap.get(clip.mediaId)
       const img = asset ? this.getImage(asset.id, asset.objectUrl) : null
       if (img && img.naturalWidth > 0) {
-        const s = tscale * motionScale
+        const s = tscale * motionScale * overlayZoom
         ctx.scale(s, s)
         const base = Math.max(W / img.naturalWidth, H / img.naturalHeight)
         const dw = img.naturalWidth * base
@@ -698,7 +844,7 @@ class PreviewEngine {
     } else if (clip.kind === 'video' && clip.mediaId) {
       const el = this.videos.get(clip.id)?.el as HTMLVideoElement | undefined
       if (el && el.readyState >= 2 && el.videoWidth > 0) {
-        const s = tscale * motionScale
+        const s = tscale * motionScale * overlayZoom
         ctx.scale(s, s)
         const base = Math.max(W / el.videoWidth, H / el.videoHeight)
         const dw = el.videoWidth * base
@@ -716,6 +862,17 @@ class PreviewEngine {
     ctx.filter = 'none'
     ctx.globalAlpha = 1
     ctx.globalCompositeOperation = 'source-over'
+
+    // ---- full-frame overlay pass (particles/grain/vignette/scanlines/leak/flash) ----
+    // Drawn in canvas space after the clip content so overlays like grain and
+    // vignette cover the whole frame; transform kinds were applied pre-draw.
+    if (ovDraw && clip.overlay && ovDraw.kind !== 'shake' && ovDraw.kind !== 'zoomPulse') {
+      try {
+        drawOverlayFrame(ctx, W, H, tLocal, overlayIntensity, ovDraw, clip.id + clip.overlay.effectId)
+      } catch {
+        /* overlays must never break playback */
+      }
+    }
   }
 
   private boundsFromTransform(clip: Clip, W: number, H: number, w: number, h: number, tx?: number, ty?: number, trot?: number): ClipBounds {
@@ -756,9 +913,8 @@ class PreviewEngine {
     return lines
   }
 
-  private drawText(ctx: CanvasRenderingContext2D, clip: Clip, tLocal: number, q: number, tx?: number, ty?: number) {
+  private drawText(ctx: CanvasRenderingContext2D, clip: Clip, tLocal: number, q: number, W: number, H: number, tx?: number, ty?: number) {
     const style = clip.textStyle!
-    const W = this.canvas!.width
     const maxWidth = W * 0.9
 
     ctx.font = `${style.italic ? 'italic ' : ''}${style.bold ? 700 : 400} ${style.fontSize}px "${style.fontFamily}", sans-serif`
@@ -767,14 +923,23 @@ class PreviewEngine {
     if (supportsLetterSpacing) ctxAny.letterSpacing = `${style.letterSpacing}px`
 
     let content = style.content || ' '
-    // text entry animations
+    // text entry animations — the legacy six keep their exact original math
     let animAlpha = 1
+    let animX = 0
     let animY = 0
     let animScale = 1
+    let animScaleX = 1
+    let animRot = 0
+    let animBlur = 0
+    let animTracking: number | null = null
+    let neonGlow: number | null = null
+    let glitch: GlitchState | null = null
     const ad = Math.max(0.01, style.animationDuration)
+    const seedNum = hashString(clip.id)
     if (style.animation !== 'none') {
       const p = clamp(tLocal / ad, 0, 1)
       switch (style.animation) {
+        // ---- legacy (do not alter math) ----
         case 'fadeIn':
           animAlpha = p
           break
@@ -794,8 +959,83 @@ class PreviewEngine {
         case 'wipe':
           // handled below via clipping
           break
+        // ---- v3 entrance families (rest state after d seconds) ----
+        case 'slideLeft':
+          // enters from the right edge, sliding left into place
+          animAlpha = p
+          animX = (1 - easeOutCubic(p)) * W * 0.6
+          break
+        case 'slideRight':
+          animAlpha = p
+          animX = -(1 - easeOutCubic(p)) * W * 0.6
+          break
+        case 'slideDown':
+          animAlpha = p
+          animY = -(1 - easeOutCubic(p)) * H * 0.35
+          break
+        case 'bounceIn':
+          animAlpha = Math.min(1, p * 2.5)
+          animScale = p >= 1 ? 1 : Math.max(0.001, 0.6 + 0.4 * easeOutBack(p))
+          break
+        case 'elastic':
+          animAlpha = Math.min(1, p * 2.5)
+          animScale = p >= 1 ? 1 : Math.max(0.001, 0.5 + 0.5 * elasticOut(p))
+          animRot = -8 * (1 - easeOutCubic(p))
+          break
+        case 'zoomBlur':
+          animScale = 1.8 - 0.8 * easeOutCubic(p)
+          animAlpha = Math.min(1, p * 1.6)
+          if (p < 1) animBlur = 8 * (1 - p)
+          break
+        case 'flipX': {
+          animAlpha = Math.min(1, p * 1.5)
+          const sx = -0.2 + 1.2 * easeOutCubic(p)
+          animScaleX = Math.abs(sx) < 0.02 ? (sx < 0 ? -0.02 : 0.02) : sx
+          break
+        }
+        case 'rotateIn': {
+          const e = easeOutCubic(p)
+          animRot = -12 * (1 - e)
+          animScale = 0.85 + 0.15 * e
+          animAlpha = p
+          break
+        }
+        case 'trackingIn':
+          animTracking = style.fontSize * 0.5 + (style.letterSpacing - style.fontSize * 0.5) * easeOutCubic(p)
+          animAlpha = p
+          break
+        case 'blurIn':
+          animAlpha = p
+          if (p < 1) animBlur = 6 * (1 - p)
+          break
+        case 'swing':
+          animRot = Math.sin(p * Math.PI * 2.5) * (1 - easeOutCubic(p)) * 10
+          animAlpha = Math.min(1, p * 2)
+          break
+        // ---- v3 loop families (run while the clip plays) ----
+        case 'waveLoop':
+          animY = Math.sin(tLocal * 3) * style.fontSize * 0.06
+          animRot = Math.sin(tLocal * 3 + 1.1) * 1.3
+          break
+        case 'shakeLoop': {
+          const f = Math.floor(tLocal * 30)
+          animX = (hash01(hashInt(seedNum, f)) - 0.5) * 2 * style.fontSize * 0.03
+          animY = (hash01(hashInt(seedNum, f + 7919)) - 0.5) * 2 * style.fontSize * 0.03
+          break
+        }
+        case 'neonFlicker': {
+          const flick = neonFlickerCurve(tLocal, seedNum)
+          animAlpha *= flick
+          neonGlow = style.fontSize * (0.2 + 0.5 * flick)
+          break
+        }
+        case 'glitchLoop':
+          glitch = glitchWindows(tLocal, seedNum)
+          break
       }
     }
+    // animated tracking must be applied before measuring so wrap/bounds agree
+    if (animTracking !== null && supportsLetterSpacing) ctxAny.letterSpacing = `${animTracking}px`
 
     const lines = this.wrapLines(ctx, content, maxWidth)
     const lineH = style.fontSize * style.lineHeight
@@ -807,8 +1047,18 @@ class PreviewEngine {
     maxW = Math.max(maxW, style.fontSize * 0.5)
 
     ctx.globalAlpha *= animAlpha
-    if (animScale !== 1) ctx.scale(animScale, animScale)
-    ctx.translate(0, animY)
+    if (animRot) ctx.rotate((animRot * Math.PI) / 180)
+    if (animX || animY) ctx.translate(animX, animY)
+    if (animScale !== 1 || animScaleX !== 1) ctx.scale(animScale * animScaleX, animScale)
+    // fake motion blur for zoomBlur/blurIn (skipped on low tier — filter is costly)
+    if (animBlur > 0.15 && this.renderQuality !== 'low') {
+      try {
+        const base = ctx.filter
+        ctx.filter = base === 'none' ? `blur(${animBlur.toFixed(2)}px)` : `${base} blur(${animBlur.toFixed(2)}px)`
+      } catch {
+        /* filter unsupported — skip the fake blur */
+      }
+    }
 
     // wipe clip
     if (style.animation === 'wipe' && tLocal < ad) {
@@ -837,6 +1087,12 @@ class PreviewEngine {
       ctx.shadowBlur = style.shadowBlur
       ctx.shadowOffsetY = 2
     }
+    if (neonGlow !== null) {
+      // neon glow: color-matched shadow pulsing with the deterministic flicker
+      ctx.shadowColor = style.color
+      ctx.shadowBlur = neonGlow
+      ctx.shadowOffsetY = 0
+    }
 
     ctx.textBaseline = 'middle'
     ctx.textAlign = style.align
@@ -844,34 +1100,52 @@ class PreviewEngine {
     // when textAlign=left we anchor at -maxW/2 so the block stays centered
     const drawX = style.align === 'left' ? -maxW / 2 : style.align === 'right' ? maxW / 2 : 0
 
-    for (let i = 0; i < lines.length; i++) {
-      const y = -totalH / 2 + lineH * (i + 0.5)
-      const line = lines[i]
-      if (!line) continue
-      const x = supportsLetterSpacing ? drawX + anchorX : drawX
-      if (style.strokeWidth > 0) {
-        ctx.lineJoin = 'round'
-        ctx.lineWidth = style.strokeWidth
-        ctx.strokeStyle = style.strokeColor
-        ctx.strokeText(line, x, y)
+    const paintLines = (offsetX: number, fillOverride?: string) => {
+      for (let i = 0; i < lines.length; i++) {
+        const y = -totalH / 2 + lineH * (i + 0.5)
+        const line = lines[i]
+        if (!line) continue
+        const x = (supportsLetterSpacing ? drawX + anchorX : drawX) + offsetX
+        if (!fillOverride && style.strokeWidth > 0) {
+          ctx.lineJoin = 'round'
+          ctx.lineWidth = style.strokeWidth
+          ctx.strokeStyle = style.strokeColor
+          ctx.strokeText(line, x, y)
+        }
+        ctx.fillStyle = fillOverride ?? style.color
+        ctx.fillText(line, x, y)
       }
-      ctx.fillStyle = style.color
-      ctx.fillText(line, x, y)
+    }
+    paintLines(0)
+
+    // glitchLoop: during a deterministic window, redraw thin horizontal slices
+    // with an rgb split (two colored passes offset ±dx)
+    if (glitch && glitch.active) {
+      for (const s of glitch.slices) {
+        const sliceY = -totalH / 2 + s.y * totalH * 0.92
+        const sliceH = Math.max(3, style.fontSize * s.h)
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(-maxW / 2 - style.fontSize * 0.5, sliceY, maxW + style.fontSize, sliceH)
+        ctx.clip()
+        ctx.shadowBlur = 0
+        paintLines(s.dx, 'rgba(255,72,72,0.55)')
+        paintLines(-s.dx, 'rgba(72,255,255,0.55)')
+        ctx.restore()
+      }
     }
     if (supportsLetterSpacing) ctxAny.letterSpacing = '0px'
 
     this.bounds.set(
       clip.id,
-      this.boundsFromTransform(clip, W, this.canvas!.height, maxW * animScale, totalH * animScale, tx, ty)
+      this.boundsFromTransform(clip, W, H, maxW * animScale * Math.abs(animScaleX), totalH * animScale, tx, ty)
     )
   }
 
   /* -------------------------------------------------- sticker drawing */
 
-  private drawSticker(ctx: CanvasRenderingContext2D, clip: Clip, tLocal: number, _q: number, tx?: number, ty?: number) {
+  private drawSticker(ctx: CanvasRenderingContext2D, clip: Clip, tLocal: number, _q: number, W: number, H: number, tx?: number, ty?: number) {
     const style = clip.sticker!
-    const W = this.canvas!.width
-    const H = this.canvas!.height
 
     let animScale = 1
     let animY = 0
@@ -922,8 +1196,41 @@ class PreviewEngine {
 let engineInstance: PreviewEngine | null = null
 
 export function getEngine(): PreviewEngine {
-  if (!engineInstance) engineInstance = new PreviewEngine()
+  if (!engineInstance) {
+    engineInstance = new PreviewEngine()
+    engineInstance.initAdaptiveQuality()
+  }
   return engineInstance
+}
+
+/* -------------------------------------------------- adaptive render quality */
+
+function detectDeviceTier(): { quality: RenderQuality; scale: number } {
+  if (typeof navigator === 'undefined') return { quality: 'medium', scale: 1 }
+  const nav = navigator as Navigator & { deviceMemory?: number }
+  const cores = typeof nav.hardwareConcurrency === 'number' ? nav.hardwareConcurrency : 4
+  const mem = typeof nav.deviceMemory === 'number' ? nav.deviceMemory : 8
+  const dpr = typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1
+  // worst signal wins: cores (<4 low, 4-7 medium, 8+ high) + memory (<4 low, <8 medium)
+  let quality: RenderQuality = 'high'
+  if (cores < 4 || mem < 4) quality = 'low'
+  else if (cores <= 7 || mem < 8) quality = 'medium'
+  const cap = quality === 'low' ? 1 : quality === 'medium' ? 1.5 : 2
+  return { quality, scale: Math.min(dpr, cap) }
+}
+
+/**
+ * Override the adaptive preview render scale (clamped 0.5..2) and re-size the
+ * canvas on the next frame. Export always records at full project resolution
+ * regardless of this setting.
+ */
+export function setRenderScale(scale: number): void {
+  getEngine().setRenderScale(scale)
+}
+
+/** Current detected/selected preview quality tier */
+export function getRenderQuality(): RenderQuality {
+  return getEngine().getRenderQuality()
 }
 
 /** UI helper: estimated on-canvas rect for a clip (fallback when engine has no bounds yet) */

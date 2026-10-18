@@ -30,6 +30,7 @@ import { VersionsDialog } from '@/components/editor/dialogs/VersionsDialog'
 import { ThemeStudioDialog } from '@/components/editor/dialogs/ThemeStudioDialog'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
+import { InstallSuggestion } from '@/components/editor/pwa/InstallSuggestion'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 function useDesktop(): boolean {
@@ -191,7 +192,12 @@ function MobileBar({ onOpenPanel, onOpenProps, propsActive }: { onOpenPanel: () 
           <button
             key={tab.id}
             type="button"
-            onClick={onOpenPanel}
+            aria-pressed={active}
+            onClick={() => {
+              // switch the tool panel to this tab, then open the tools sheet
+              useEditor.getState().setPanelTab(tab.id)
+              onOpenPanel()
+            }}
             className={`flex h-11 flex-col items-center justify-center gap-0.5 rounded-lg px-2 ${active ? 'text-white' : 'text-muted-foreground'}`}
           >
             <Icon className={`size-[18px] ${active ? 'text-fuchsia-400' : ''}`} />
@@ -324,6 +330,7 @@ export function EditorShell() {
       <VersionsDialog />
       <ThemeStudioDialog />
       <OnboardingOverlay />
+      <InstallSuggestion />
     </div>
   )
 }

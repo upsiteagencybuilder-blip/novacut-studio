@@ -857,3 +857,149 @@ input[type="range"].nc-range::-webkit-slider-thumb {
     color 0.2s ease,
     box-shadow 0.35s ease !important;
 }
+
+/* ============================================================
+   Mega text effects — preview keyframes (Task 9-d)
+   Referenced verbatim by `previewCss` in src/lib/effects/textfx.ts:
+   `ncTx<PascalAnimation> <duration>s <easing> both|infinite`.
+   GPU-cheap on purpose: transform / opacity / letter-spacing only.
+   ============================================================ */
+
+/* --- entrances --- */
+@keyframes ncTxSlideLeft {
+  from { opacity: 0; transform: translateX(1.6em); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes ncTxSlideRight {
+  from { opacity: 0; transform: translateX(-1.6em); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes ncTxSlideDown {
+  from { opacity: 0; transform: translateY(-1.1em); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ncTxBounceIn {
+  0% { opacity: 0; transform: scale(0.55); }
+  55% { opacity: 1; transform: scale(1.12); }
+  75% { transform: scale(0.94); }
+  90% { transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes ncTxElastic {
+  0% { opacity: 0; transform: scale(0.4); }
+  35% { opacity: 1; transform: scale(1.18); }
+  50% { transform: scale(0.9); }
+  65% { transform: scale(1.08); }
+  80% { transform: scale(0.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* zoom-blur feel via scale + opacity (filter blur is too costly to animate) */
+@keyframes ncTxZoomBlur {
+  from { opacity: 0; transform: scale(1.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes ncTxFlipX {
+  from { opacity: 0; transform: scaleX(-0.2); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+@keyframes ncTxRotateIn {
+  from { opacity: 0; transform: rotate(-12deg) scale(0.85); }
+  to { opacity: 1; transform: rotate(0deg) scale(1); }
+}
+@keyframes ncTxTrackingIn {
+  from { opacity: 0; letter-spacing: 0.5em; }
+  to { opacity: 1; letter-spacing: normal; }
+}
+/* blur-in feel via opacity + micro scale (no animated filter) */
+@keyframes ncTxBlurIn {
+  from { opacity: 0; transform: scale(1.05); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes ncTxSwing {
+  0% { opacity: 0; transform: rotate(14deg); }
+  30% { opacity: 1; transform: rotate(-9deg); }
+  55% { transform: rotate(5deg); }
+  75% { transform: rotate(-2.5deg); }
+  100% { opacity: 1; transform: rotate(0deg); }
+}
+
+/* --- loops --- */
+@keyframes ncTxWaveLoop {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-6%); }
+  75% { transform: translateY(6%); }
+}
+@keyframes ncTxShakeLoop {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5%); }
+  40% { transform: translateX(4%); }
+  60% { transform: translateX(-3%); }
+  80% { transform: translateX(2%); }
+}
+@keyframes ncTxNeonFlicker {
+  0%, 100% { opacity: 1; }
+  8% { opacity: 0.55; }
+  10% { opacity: 1; }
+  38% { opacity: 1; }
+  40% { opacity: 0.35; }
+  42% { opacity: 1; }
+  68% { opacity: 0.8; }
+  70% { opacity: 1; }
+}
+/* quick clip-path slices + x-offset steps — reads as rgb-split glitch */
+@keyframes ncTxGlitchLoop {
+  0%, 100% { transform: translateX(0); clip-path: inset(0 0 0 0); }
+  18% { transform: translateX(-6%); clip-path: inset(18% 0 42% 0); }
+  22% { transform: translateX(5%); clip-path: inset(62% 0 8% 0); }
+  46% { transform: translateX(-4%); clip-path: inset(0 0 58% 0); }
+  50% { transform: translateX(4%); clip-path: inset(34% 0 22% 0); }
+  74% { transform: translateX(-2%); clip-path: inset(8% 0 74% 0); }
+  78% { transform: translateX(2%); clip-path: inset(0 0 0 0); }
+}
+
+/* text preview cards — kill animation for reduced-motion users */
+.nc-tx-preview {
+  backface-visibility: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-tx-preview {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   InstallSuggestion — floating mark + pulsing accent glow ring
+   ============================================================ */
+@keyframes ncFloatY {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.nc-install-float {
+  animation: ncFloatY 3.2s ease-in-out infinite;
+}
+@keyframes ncPulseRing {
+  0% {
+    box-shadow:
+      0 0 0 0 var(--nc-accent-glow),
+      0 0 18px var(--nc-accent-glow-soft);
+  }
+  70% {
+    box-shadow:
+      0 0 0 10px transparent,
+      0 0 26px var(--nc-accent-glow);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0 transparent,
+      0 0 18px var(--nc-accent-glow-soft);
+  }
+}
+.nc-pulse-ring {
+  animation: ncPulseRing 2.4s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-install-float,
+  .nc-pulse-ring {
+    animation: none !important;
+  }
+}
