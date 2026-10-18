@@ -27,6 +27,9 @@ import { TimelineToolbar } from './TimelineToolbar'
 
 const RULER_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60]
 
+/** stable empty reference so Ruler's memo doesn't churn when beats are hidden */
+const EMPTY_BEATS: number[] = []
+
 const HEADER_BTN =
   'flex size-5 shrink-0 items-center justify-center rounded text-foreground/40 transition-colors hover:bg-(--nc-panel-strong) hover:text-foreground/90 disabled:pointer-events-none disabled:opacity-40'
 
@@ -42,6 +45,8 @@ export function Timeline() {
   const zoom = useEditor((s) => s.zoom)
   const isPlaying = useEditor((s) => s.isPlaying)
   const selectedIds = useEditor((s) => s.selectedClipIds)
+  const beatMarkers = useEditor((s) => s.beatMarkers)
+  const showBeatMarkers = useEditor((s) => s.showBeatMarkers)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const laneEls = useRef(new Map<string, HTMLDivElement>())
@@ -167,7 +172,7 @@ export function Timeline() {
                 >
                   <AddTrackMenu />
                 </div>
-                <Ruler zoom={zoom} width={laneWidth} onScrubDown={beginScrub} />
+                <Ruler zoom={zoom} width={laneWidth} onScrubDown={beginScrub} beatMarkers={showBeatMarkers ? beatMarkers : EMPTY_BEATS} />
               </div>
 
               {/* track rows */}
@@ -194,6 +199,23 @@ export function Timeline() {
                   </div>
                 )
               })}
+
+              {/* beat-sync markers — faint guides across the lanes */}
+              {showBeatMarkers && beatMarkers.length > 0 && (
+                <div
+                  className="pointer-events-none absolute z-[6]"
+                  style={{ left: HEADER_WIDTH, right: 0, top: RULER_HEIGHT, bottom: 0 }}
+                  aria-hidden
+                >
+                  {beatMarkers.map((t, i) => (
+                    <div
+                      key={i}
+                      className="absolute bottom-0 top-0 w-px bg-emerald-400/12"
+                      style={{ left: t * zoom }}
+                    />
+                  ))}
+                </div>
+              )}
 
               {/* snapping guide line */}
               {snapLineX !== null && (
@@ -365,10 +387,12 @@ function Ruler({
   zoom,
   width,
   onScrubDown,
+  beatMarkers,
 }: {
   zoom: number
   width: number
   onScrubDown: (e: ReactPointerEvent<HTMLDivElement>) => void
+  beatMarkers: number[]
 }) {
   const step = RULER_STEPS.find((s) => s * zoom >= 64) ?? 60
 
@@ -387,6 +411,11 @@ function Ruler({
     return out
   }, [step, zoom, width])
 
+  const visibleBeats = useMemo(
+    () => beatMarkers.filter((t) => t * zoom <= width + 8),
+    [beatMarkers, zoom, width],
+  )
+
   return (
     <div
       onPointerDown={onScrubDown}
@@ -403,6 +432,15 @@ function Ruler({
           <div key={i} className="absolute bottom-0 h-[5px] w-px bg-(--nc-panel-strong)" style={{ left: t.x }} />
         ),
       )}
+
+      {/* beat-sync markers: emerald diamonds just above the tick baseline */}
+      {visibleBeats.map((t, i) => (
+        <div
+          key={`beat-${i}`}
+          className="absolute bottom-[6px] size-[5px] -translate-x-1/2 rotate-45 rounded-[1px] bg-emerald-400 shadow-[0_0_5px_var(--nc-audio-300)]"
+          style={{ left: t * zoom }}
+        />
+      ))}
     </div>
   )
 }

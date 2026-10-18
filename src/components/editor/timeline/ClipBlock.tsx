@@ -133,6 +133,8 @@ export function ClipBlock({
           if (c.id === clip.id) continue
           targets.push(c.start, c.start + c.duration)
         }
+        // beat-sync markers act as snap targets while they are visible
+        if (st.showBeatMarkers && st.beatMarkers.length > 0) targets.push(...st.beatMarkers)
         const snap = snapTime(newStart, targets, 8, zoom)
         if (snap.snapped) {
           newStart = snap.value

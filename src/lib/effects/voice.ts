@@ -455,11 +455,12 @@ async function renderVoiceBuffer(
   source: AudioBuffer,
   effect: VoiceFxEffect,
   mixOverride?: number,
+  pitchOverride?: number,
 ): Promise<AudioBuffer> {
   const OfflineCtor = offlineContextCtor()
   const mix = clamp(mixOverride ?? effect.mix, 0, 1)
   const spec = effect.spec
-  const pitch = clamp(spec.pitch ?? 0, -12, 12)
+  const pitch = clamp(pitchOverride ?? spec.pitch ?? 0, -12, 12)
   const ratio = Math.pow(2, pitch / 12)
   const srcDur = source.duration
   // duration-preserving: grains cover srcDur of output time (+ one grain of slack)
@@ -554,18 +555,29 @@ function sliceBuffer(buf: AudioBuffer, offset: number, duration: number): AudioB
  * Renders a voice effect offline to a stereo WAV blob.
  * The rendered buffer is peak-normalized to ~0.9 while encoding (matching
  * audio-render.ts usage of encodeWav16BitStereo).
+ *
+ * `opts.pitch` / `opts.mix` override the effect definition (custom controls):
+ * pitch in semitones (-12..12), mix 0..1. Omitted values fall back to the
+ * effect spec, so plain applies stay byte-identical to previous behavior.
  */
 export async function renderVoiceToWav(
   source: Blob,
   effect: VoiceFxEffect,
-  opts?: { mix?: number; /** source in-point seconds (respects timeline trims) */ offset?: number; /** source window seconds — omit for the full source */ duration?: number },
+  opts?: {
+    mix?: number
+    pitch?: number
+    /** source in-point seconds (respects timeline trims) */
+    offset?: number
+    /** source window seconds — omit for the full source */
+    duration?: number
+  },
 ): Promise<{ blob: Blob; duration: number }> {
   const decoded = await decodeSource(source)
   const windowed =
     opts?.offset !== undefined || opts?.duration !== undefined
       ? sliceBuffer(decoded, opts?.offset ?? 0, opts?.duration ?? decoded.duration)
       : decoded
-  const buffer = await renderVoiceBuffer(windowed, effect, opts?.mix)
+  const buffer = await renderVoiceBuffer(windowed, effect, opts?.mix, opts?.pitch)
   let peak = 0
   for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
     const data = buffer.getChannelData(ch)
@@ -682,15 +694,20 @@ export function stopVoicePreview(): void {
  * Renders the effect on the cached demo voice buffer offline and plays it
  * through a shared AudioContext. Calling this again (or stopVoicePreview)
  * stops the previous sound; superseded renders are discarded via token.
+ *
+ * `overrides` mirror the custom controls: mix 0..1, pitch -12..12 semitones.
  */
-export async function previewVoiceEffect(effect: VoiceFxEffect): Promise<void> {
+export async function previewVoiceEffect(
+  effect: VoiceFxEffect,
+  overrides?: { mix?: number; pitch?: number },
+): Promise<void> {
   if (typeof window === 'undefined') throw new Error('Audio is not supported in this environment')
   audioContextCtor() // early friendly failure before doing work
   stopVoicePreview()
   const token = voicePreviewToken
   if (!demoVoiceBuffer) demoVoiceBuffer = await renderDemoVoice()
   if (token !== voicePreviewToken) return // superseded while rendering demo
-  const rendered = await renderVoiceBuffer(demoVoiceBuffer, effect)
+  const rendered = await renderVoiceBuffer(demoVoiceBuffer, effect, overrides?.mix, overrides?.pitch)
   if (token !== voicePreviewToken) return // superseded while rendering
   const ctx = ensureVoicePreviewContext()
   stopVoicePreview() // another preview may have raced in during the await

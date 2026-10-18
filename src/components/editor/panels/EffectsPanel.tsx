@@ -22,6 +22,7 @@ import {
   Search,
   SearchX,
   Sparkles,
+  Star,
   Wand2,
   X,
 } from 'lucide-react'
@@ -47,19 +48,20 @@ import type {
   VisionEffect,
   VoiceFxEffect,
 } from '@/lib/effects/types'
-import { DEFAULT_COLOR_GRADE, DEFAULT_FILTERS, MOTION_PRESETS } from '@/lib/editor/constants'
+import { DEFAULT_COLOR_GRADE, DEFAULT_FILTERS, MOTION_PRESETS, createClipFromMedia } from '@/lib/editor/constants'
 import { importFiles } from '@/lib/editor/importer'
 import { useEditor, type ClipPatch } from '@/lib/editor/store'
 import { round2, uid } from '@/lib/editor/utils'
 import type { Clip, ColorGrade, Filters, MotionType, TextStyle } from '@/lib/editor/types'
+import { cn } from '@/lib/utils'
 
-type CategoryFilter = EffectCategory | 'all'
+type CategoryFilter = EffectCategory | 'all' | 'favorites' | 'recent'
 
 /** Cards rendered per page — keeps 220+ result sets smooth on low-end phones */
 const PAGE_SIZE = 60
 
 const CATEGORY_CHIPS: Array<{ id: CategoryFilter; label: string; emoji: string; count: number }> = [
-  { id: 'all', label: 'All', emoji: '✨', count: TOTAL_EFFECTS },
+  // 'all', 'favorites' and 'recent' are prepended dynamically (live counts)
   { id: 'color', label: 'Color', emoji: '🎨', count: EFFECT_COUNTS.color },
   { id: 'transition', label: 'Transitions', emoji: '🎬', count: EFFECT_COUNTS.transition },
   { id: 'text', label: 'Text', emoji: '🔤', count: EFFECT_COUNTS.text },
@@ -74,6 +76,42 @@ const CATEGORY_CHIPS: Array<{ id: CategoryFilter; label: string; emoji: string; 
 
 /** Voice previews render a short snippet (~2.4s) — keep the playing state a beat longer */
 const VOICE_PREVIEW_MS = 2600
+
+/* ---------------- favorites / recent (local-first persistence) ---------------- */
+
+const FAVORITES_KEY = 'novacut.fx.favorites.v1'
+const RECENT_KEY = 'novacut.fx.recent.v1'
+const RECENT_CAP = 24
+
+function loadIdList(key: string, cap = 200): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((x): x is string => typeof x === 'string').slice(0, cap)
+  } catch {
+    return []
+  }
+}
+
+function saveIdList(key: string, ids: string[]): void {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(ids))
+  } catch {
+    // storage blocked/full — favorites stay session-only
+  }
+}
+
+/** Registry text-match shared with searchEffects (name / family / tags). */
+function matchesSearch(effect: Effect, search: string): boolean {
+  const q = search.trim().toLowerCase()
+  if (!q) return true
+  return (
+    effect.name.toLowerCase().includes(q) ||
+    effect.family.toLowerCase().includes(q) ||
+    effect.tags.some((tag) => tag.toLowerCase().includes(q))
+  )
+}
 
 /* ---------------- helpers ---------------- */
 
@@ -451,6 +489,29 @@ export function EffectsPanel() {
   const previewEndTimer = useRef<number | null>(null)
   const voiceEndTimer = useRef<number | null>(null)
 
+  /* favorites & recent — persisted locally, restored on every mount */
+  const [favorites, setFavorites] = useState<string[]>(() => loadIdList(FAVORITES_KEY))
+  const [recent, setRecent] = useState<string[]>(() => loadIdList(RECENT_KEY, RECENT_CAP))
+  /** per-effect custom controls for voice FX (pitch slider + mix knob) */
+  const [customVoice, setCustomVoice] = useState<{ effectId: string; pitch: number; mix: number } | null>(null)
+
+  const toggleFavorite = useCallback((id: string) => {
+    setFavorites((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [id, ...prev]
+      saveIdList(FAVORITES_KEY, next)
+      return next
+    })
+  }, [])
+
+  /** Records an apply/add into the Recent rail (deduped, capped). */
+  const noteUsed = useCallback((id: string) => {
+    setRecent((prev) => {
+      const next = [id, ...prev.filter((x) => x !== id)].slice(0, RECENT_CAP)
+      saveIdList(RECENT_KEY, next)
+      return next
+    })
+  }, [])
+
   // leaving the panel must stop any playing preview
   useEffect(() => {
     return () => {
@@ -466,10 +527,26 @@ export function EffectsPanel() {
     setVisibleCount(PAGE_SIZE)
   }, [category, search])
 
-  const results = useMemo(
-    () => searchEffects({ category: category === 'all' ? undefined : category, search: search.trim() || undefined }),
-    [category, search]
+  const chips = useMemo(
+    () => [
+      { id: 'all' as CategoryFilter, label: 'All', emoji: '✨', count: TOTAL_EFFECTS },
+      { id: 'favorites' as CategoryFilter, label: 'Favorites', emoji: '⭐', count: favorites.length },
+      { id: 'recent' as CategoryFilter, label: 'Recent', emoji: '🕘', count: recent.length },
+      ...CATEGORY_CHIPS,
+    ],
+    [favorites.length, recent.length],
   )
+
+  const results = useMemo(() => {
+    if (category === 'favorites' || category === 'recent') {
+      const ids = category === 'favorites' ? favorites : recent
+      return ids
+        .map((id) => getEffect(id))
+        .filter((e): e is Effect => e !== undefined)
+        .filter((e) => matchesSearch(e, search))
+    }
+    return searchEffects({ category: category === 'all' ? undefined : category, search: search.trim() || undefined })
+  }, [category, search, favorites, recent])
   const visible = useMemo(() => results.slice(0, visibleCount), [results, visibleCount])
 
   const overlayState = clip?.overlay ?? null
@@ -500,9 +577,10 @@ export function EffectsPanel() {
         },
         true
       )
+      noteUsed(effect.id)
       toast(`Color · ${effect.name}`)
     },
-    [clip, updateClip]
+    [clip, updateClip, noteUsed]
   )
 
   /* ---------- apply: transition (outgoing + incoming clip) ---------- */
@@ -523,9 +601,10 @@ export function EffectsPanel() {
       const historyKey = `transition-${clip.id}-${incoming.id}`
       if (effect.out) updateClip(clip.id, transitionClipPatch(effect.out, clip, 'out', effect.duration), historyKey)
       if (effect.in) updateClip(incoming.id, transitionClipPatch(effect.in, incoming, 'in', effect.duration), historyKey)
+      noteUsed(effect.id)
       toast.success(`Transition applied · ${formatDuration(effect.duration)}`)
     },
-    [clip, updateClip]
+    [clip, updateClip, noteUsed]
   )
 
   /* ---------- apply: text ---------- */
@@ -550,9 +629,10 @@ export function EffectsPanel() {
         },
         true
       )
+      noteUsed(effect.id)
       toast(`Text effect · ${effect.name}`)
     },
-    [clip, updateClip]
+    [clip, updateClip, noteUsed]
   )
 
   /* ---------- apply: overlay (tap active card again to remove) ---------- */
@@ -572,9 +652,10 @@ export function EffectsPanel() {
         return
       }
       updateClip(clip.id, { overlay: { effectId: effect.id, intensity: effect.intensity } }, true)
+      noteUsed(effect.id)
       toast(`Overlay · ${effect.name}`)
     },
-    [clip, updateClip]
+    [clip, updateClip, noteUsed]
   )
 
   const removeOverlay = useCallback(() => {
@@ -598,9 +679,10 @@ export function EffectsPanel() {
         return
       }
       updateClip(clip.id, { vision: { effectId: effect.id, intensity: effect.intensity } }, true)
+      noteUsed(effect.id)
       toast(`Vision · ${effect.name}`)
     },
-    [clip, updateClip]
+    [clip, updateClip, noteUsed]
   )
 
   const removeVision = useCallback(() => {
@@ -637,9 +719,10 @@ export function EffectsPanel() {
         },
         `motion-${clip.id}-${effect.id}`
       )
+      noteUsed(effect.id)
       toast('Motion preset applied')
     },
-    [clip, updateClip]
+    [clip, updateClip, noteUsed]
   )
 
   /* ---------- apply: speed (media clips only, duration compensated) ---------- */
@@ -658,9 +741,10 @@ export function EffectsPanel() {
       // keeping trimStart untouched.
       const newDuration = round2(Math.max(0.1, (clip.duration * clip.speed) / effect.speed))
       updateClip(clip.id, { speed: effect.speed, duration: newDuration }, `speed-${clip.id}`)
+      noteUsed(effect.id)
       toast(`Speed set to ${formatSpeed(effect.speed)}`)
     },
-    [clip, updateClip]
+    [clip, updateClip, noteUsed]
   )
 
   /* ---------- audio: preview toggle ---------- */
@@ -718,6 +802,7 @@ export function EffectsPanel() {
           return
         }
         assets.forEach(addMediaAsset)
+        noteUsed(effect.id)
         toast.success('Added to library')
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Audio render failed')
@@ -725,7 +810,7 @@ export function EffectsPanel() {
         setAddingId(null)
       }
     },
-    [addingId, addMediaAsset]
+    [addingId, addMediaAsset, noteUsed]
   )
 
   /* ---------- voice: preview toggle (short ~2.4s snippet) ---------- */
@@ -754,8 +839,17 @@ export function EffectsPanel() {
       stopVoicePreview()
       clearEndTimer()
       setVoiceLoadingId(effect.id)
+      // tapping a voice card opens its custom controls (pitch + mix), seeded
+      // from the definition; previously-tweaked values are remembered
+      setCustomVoice((cv) =>
+        cv && cv.effectId === effect.id ? cv : { effectId: effect.id, pitch: effect.spec.pitch ?? 0, mix: effect.mix },
+      )
       try {
-        await previewVoiceEffect(effect)
+        const overrides =
+          customVoice && customVoice.effectId === effect.id
+            ? { pitch: customVoice.pitch, mix: customVoice.mix }
+            : undefined
+        await previewVoiceEffect(effect, overrides)
         setVoicePreviewId(effect.id)
         voiceEndTimer.current = window.setTimeout(() => {
           setVoicePreviewId((cur) => (cur === effect.id ? null : cur))
@@ -766,30 +860,57 @@ export function EffectsPanel() {
         setVoiceLoadingId(null)
       }
     },
-    [voiceLoadingId, voicePreviewId]
+    [voiceLoadingId, voicePreviewId, customVoice]
   )
 
-  /* ---------- voice: apply — offline DSP the source audio → new clip audio ---------- */
+  /** Re-renders the custom-controlled preview after a slider commit. */
+  const rePreviewCustomVoice = useCallback(async () => {
+    if (!customVoice) return
+    const effect = getEffect(customVoice.effectId)
+    if (!effect || effect.category !== 'voice') return
+    try {
+      await previewVoiceEffect(effect, { pitch: customVoice.pitch, mix: customVoice.mix })
+      setVoicePreviewId(effect.id)
+      if (voiceEndTimer.current !== null) window.clearTimeout(voiceEndTimer.current)
+      voiceEndTimer.current = window.setTimeout(() => {
+        setVoicePreviewId((cur) => (cur === effect.id ? null : cur))
+      }, VOICE_PREVIEW_MS)
+    } catch {
+      // slider-commit re-previews are best-effort
+    }
+  }, [customVoice])
+
+  /* ---------- voice: apply — offline DSP the source audio → new clip audio ----------
+   * Audio clips: the processed render replaces the clip's audio in place.
+   * Video clips: extract-to-track — the processed audio lands as a NEW clip on
+   * an audio track at the same start, and the video's own audio is silenced
+   * (volume 0 — the engine's per-clip mute path) in the same undo step. */
   const applyVoiceFx = useCallback(
     async (effect: VoiceFxEffect) => {
       if (voiceApplyingId !== null) return
-      if (!clip || clip.kind !== 'audio') {
-        toast('Voice FX need an audio clip — select one first')
+      if (!clip || (clip.kind !== 'audio' && clip.kind !== 'video')) {
+        toast('Voice FX need an audio or video clip — select one first')
         return
       }
       const sourceAsset = useEditor.getState().media.find((m) => m.id === clip.mediaId)
       if (!sourceAsset) {
-        toast.error('Source audio for this clip was not found')
+        toast.error('Source media for this clip was not found')
         return
       }
       setVoiceApplyingId(effect.id)
       try {
+        const overrides =
+          customVoice && customVoice.effectId === effect.id
+            ? { pitch: customVoice.pitch, mix: customVoice.mix }
+            : undefined
         // Render exactly the clip's trimmed source window (trim in-point +
         // timeline duration · speed = source seconds), so the processed swap
         // keeps the timeline edit intact instead of restoring the full take.
+        // For video blobs decodeAudioData extracts the embedded audio track.
         const rendered = await renderVoiceToWav(sourceAsset.rawBlob, effect, {
           offset: clip.trimStart,
           duration: clip.duration * clip.speed,
+          ...(overrides ?? {}),
         })
         const file = new File([rendered.blob], `voice-${effect.id}.wav`, { type: 'audio/wav' })
         const assets = await importFiles([file])
@@ -799,28 +920,47 @@ export function EffectsPanel() {
         }
         const newAsset = assets[0]
         assets.forEach(addMediaAsset)
-        // swap the clip's audio to the processed render — one undoable step.
-        // speed resets to 1: the render already covers the source window.
-        updateClip(
-          clip.id,
-          {
-            mediaId: newAsset.id,
-            duration: newAsset.duration,
-            sourceDuration: newAsset.duration,
-            trimStart: 0,
-            speed: 1,
-            name: `${effect.name} (voice FX)`,
-          },
-          true
-        )
-        toast.success('Voice effect applied — undo restores the original')
+        noteUsed(effect.id)
+
+        if (clip.kind === 'video') {
+          const st = useEditor.getState()
+          let audioTrack = st.project.tracks.find((t) => t.kind === 'audio' && !t.locked) ?? st.project.tracks.find((t) => t.kind === 'audio')
+          if (!audioTrack) {
+            st.addTrack('audio')
+            audioTrack = useEditor.getState().project.tracks.find((t) => t.kind === 'audio')
+          }
+          if (!audioTrack) throw new Error('Could not find or create an audio track')
+          const audioClip = createClipFromMedia(useEditor.getState().project, newAsset, audioTrack.id, clip.start)
+          audioClip.name = `${effect.name} (voice FX)`
+          // addClip pushes the history snapshot; the volume-0 patch below has
+          // no history flag, so ONE undo reverts clip + mute together
+          useEditor.getState().addClip(audioClip)
+          updateClip(clip.id, { volume: 0, muted: true })
+          toast.success('Audio extracted with voice FX — video audio muted (undo reverts both)')
+        } else {
+          // swap the clip's audio to the processed render — one undoable step.
+          // speed resets to 1: the render already covers the source window.
+          updateClip(
+            clip.id,
+            {
+              mediaId: newAsset.id,
+              duration: newAsset.duration,
+              sourceDuration: newAsset.duration,
+              trimStart: 0,
+              speed: 1,
+              name: `${effect.name} (voice FX)`,
+            },
+            true
+          )
+          toast.success('Voice effect applied — undo restores the original')
+        }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Voice effect failed')
       } finally {
         setVoiceApplyingId(null)
       }
     },
-    [voiceApplyingId, clip, addMediaAsset, updateClip]
+    [voiceApplyingId, clip, customVoice, addMediaAsset, updateClip, noteUsed]
   )
 
   /* ---------- card switch ---------- */

@@ -63,6 +63,12 @@ interface EditorStore {
   /** timeline px per second */
   zoom: number
   snapEnabled: boolean
+  /** beat-sync marker times (seconds) from the last detection */
+  beatMarkers: number[]
+  /** detected tempo, null before any detection */
+  beatBpm: number | null
+  /** beat markers visible on the timeline (also gates snap-to-beat) */
+  showBeatMarkers: boolean
   panelTab: PanelTab
   activeDialog: DialogName
   exportState: ExportState
@@ -138,6 +144,9 @@ interface EditorStore {
   /* ---------- view / dialogs ---------- */
   setZoom: (z: number) => void
   toggleSnap: () => void
+  setBeatMarkers: (times: number[], bpm: number | null) => void
+  clearBeatMarkers: () => void
+  toggleShowBeatMarkers: () => void
   setPanelTab: (tab: PanelTab) => void
   openDialog: (d: DialogName) => void
 
@@ -197,6 +206,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
   masterMuted: false,
   zoom: 70,
   snapEnabled: true,
+  beatMarkers: [],
+  beatBpm: null,
+  showBeatMarkers: true,
   panelTab: 'media',
   activeDialog: null,
   exportState: { phase: 'idle', progress: 0 },
@@ -731,6 +743,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
 
   setZoom: (z) => set({ zoom: clamp(z, 8, 400) }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
+  setBeatMarkers: (times, bpm) => set({ beatMarkers: times, beatBpm: bpm, showBeatMarkers: true }),
+  clearBeatMarkers: () => set({ beatMarkers: [], beatBpm: null }),
+  toggleShowBeatMarkers: () => set((s) => ({ showBeatMarkers: !s.showBeatMarkers })),
   setPanelTab: (tab) => set({ panelTab: tab }),
   openDialog: (d) => set({ activeDialog: d }),
 
