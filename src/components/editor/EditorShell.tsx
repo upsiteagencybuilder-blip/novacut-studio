@@ -148,7 +148,19 @@ function useKeyboardShortcuts() {
 
 function useTimelineHeight() {
   const [height, setHeight] = useState(292)
+  const [viewportH, setViewportH] = useState(() =>
+    typeof window !== 'undefined' ? window.innerHeight : 900,
+  )
   const dragging = useRef<{ startY: number; startH: number } | null>(null)
+
+  // keep the upper studio row (rail needs ~312px) from being covered by the
+  // timeline on short viewports — shrink the timeline instead.
+  useEffect(() => {
+    const onResize = () => setViewportH(window.innerHeight)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     dragging.current = { startY: e.clientY, startH: 0 }
@@ -169,7 +181,11 @@ function useTimelineHeight() {
     dragging.current = null
   }, [])
 
-  return { height, onPointerDown, onPointerMove, onPointerUp }
+  // top bar (56) + resizer (8) + minimum upper-row height for the tool rail (312)
+  const maxFittingHeight = Math.max(150, viewportH - 56 - 8 - 312)
+  const effectiveHeight = Math.min(height, maxFittingHeight)
+
+  return { height: effectiveHeight, onPointerDown, onPointerMove, onPointerUp }
 }
 
 /* ---------------- mobile bottom bar ---------------- */
@@ -263,7 +279,7 @@ export function EditorShell() {
       {isDesktop ? (
         <>
           <main className="relative z-10 flex min-h-0 flex-1">
-            <aside className="h-full w-[318px] shrink-0 border-r border-(--nc-line) bg-(--nc-panel-soft)">
+            <aside className="h-full w-[318px] shrink-0 overflow-hidden border-r border-(--nc-line) bg-(--nc-panel-soft)">
               <LeftPanel />
             </aside>
             <section className="h-full min-w-0 flex-1">

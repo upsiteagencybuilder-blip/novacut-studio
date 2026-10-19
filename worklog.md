@@ -506,3 +506,20 @@ Stage Summary:
 - NovaCut now catalogues the ENTIRE professional post-production taxonomy in-app: 661 tools/panels/roles across 12 sections, 129 marked live with one-tap deep-links into the shipped features — the platform answers "does it have X?" for every industry tool honestly (LIVE/BETA/SOON/ROLE).
 - Install flow is now truly direct: tap install → native dialog (guide dialog only for iOS Safari's manual flow).
 - Files: src/lib/tools/* (15 new files), src/components/editor/panels/ProToolkitPanel.tsx (new), LeftPanel/EditorShell/types/usePWA/InstallSuggestion/PWAStatus (extended).
+
+---
+Task ID: 13
+Agent: main (orchestrator)
+Task: "All tools are not working properly" — full E2E tool audit, root-cause 2 layout bugs, fix, verify, ship
+
+Work Log:
+- Full tool-by-tool audit via agent-browser (desktop 1440x900 / 1280x577 / 1366x640 + mobile 390x844): playback, seek, clip selection, color/transition/sound/music/overlays/vision/voice/motion/speed categories, voice FX render+swap, SFX add, text presets, stickers, media import (real file upload), export dialog + REAL export (2.9MB WebM, 8.6s), projects/mixer/theme/shortcuts dialogs, undo/redo, timeline resize drag, mobile sheet flows.
+- BUG #1 (critical): on viewports < ~660px tall (very common laptop heights and the preview panel), the desktop timeline's FIXED 292px height left only ~221px for the upper row — the left rail (needs ~312px for 7 tabs + Help) overflowed UNDER the timeline section which painted on top and swallowed all clicks: Pro + Help tabs were literally unclickable (elementFromPoint returned the timeline toolbar). Fix in EditorShell.useTimelineHeight: viewportH resize listener + effectiveHeight = min(userHeight, viewportH - 56 - 8 - 312, floor 150) — the timeline auto-shrinks so the rail always fits; aside also gets overflow-hidden; LeftPanel nav gets overflow-y-auto (scrollbar hidden) as a last-resort safety net for ultra-short screens. Verified: 1280x577 and 1366x640 now render ALL 8 rail buttons above the timeline and a real mouse click opens the Pro toolkit; 1440x900 keeps the full 292px timeline.
+- BUG #2 (critical): shadcn DialogContent had no max-height/overflow — the Export dialog is ~757px tall, so on <=640px viewports the "Start export" button was below the fold and unreachable (clicking near it hit the backdrop and silently closed the dialog = "export button does nothing"). Fix: dialog.tsx DialogContent now has max-h-[min(92dvh,900px)] + overflow-y-auto + overscroll-contain globally (fixes Export, Projects, Mixer, Versions, Theme, Shortcuts at any height). Verified: dialog fits 640px viewport, Start export reachable, full export completed.
+- A11Y/automation: added aria-labels to all PreviewPane transport buttons (Play/Pause, frame step, skip, mute, fullscreen) and TopBar icon buttons (Undo, Redo, Versions, Mixer, Projects, Theme Studio, Shortcuts) — icon-only buttons previously had empty accessible names.
+- Verified post-fix: export runs end-to-end (41% -> Export complete! 2.9 MB / 8.6s / WEBM with inline preview player), media import via real file input ("1 file imported", 77B png appears in library), mobile 390x844: bottom-bar Effects tab opens the 1059-effect sheet, "Select a clip first" guard toast, clip select + apply "Vintage Film · Soft" (active ring + toast), projects + theme studio dialogs open/close.
+- bun run lint clean; tsc --noEmit clean (src); dev.log clean (all 200s, no runtime errors, no console errors in browser).
+
+Stage Summary:
+- "All tools not working" was NOT broken tools — every tool passed functional testing. The real defect was layout layering on short viewports: the fixed-height timeline covered the rail's bottom tabs and the over-tall export dialog buried its own action button, which made several tools FEEL dead depending on window size.
+- Files changed: src/components/editor/EditorShell.tsx (responsive timeline height + aside overflow-hidden), src/components/editor/panels/LeftPanel.tsx (scroll-safe rail), src/components/ui/dialog.tsx (global dialog max-h + scroll), src/components/editor/preview/PreviewPane.tsx + src/components/editor/TopBar.tsx (aria-labels).

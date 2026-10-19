@@ -105,6 +105,7 @@ export function TopBar() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Undo (Ctrl+Z)"
+          aria-label="Undo"
           disabled={pastCount === 0}
           onClick={() => useEditor.getState().undo()}
         >
@@ -115,6 +116,7 @@ export function TopBar() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Redo (Ctrl+Shift+Z)"
+          aria-label="Redo"
           disabled={futureCount === 0}
           onClick={() => useEditor.getState().redo()}
         >
@@ -126,6 +128,7 @@ export function TopBar() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Version history"
+          aria-label="Version history"
           onClick={() => openDialog('versions')}
         >
           <Archive className="h-4 w-4" />
@@ -135,6 +138,7 @@ export function TopBar() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Audio mixer"
+          aria-label="Audio mixer"
           onClick={() => openDialog('mixer')}
         >
           <SlidersVertical className="h-4 w-4" />
@@ -149,6 +153,7 @@ export function TopBar() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Projects"
+          aria-label="Projects"
           onClick={() => openDialog('projects')}
         >
           <FolderOpen className="h-4 w-4" />
@@ -158,6 +163,7 @@ export function TopBar() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Theme Studio"
+          aria-label="Open Theme Studio panel"
           onClick={() => openDialog('theme')}
         >
           <Palette className="h-4 w-4" />
@@ -167,6 +173,7 @@ export function TopBar() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Keyboard shortcuts"
+          aria-label="Keyboard shortcuts"
           onClick={() => openDialog('shortcuts')}
         >
           <Keyboard className="h-4 w-4" />

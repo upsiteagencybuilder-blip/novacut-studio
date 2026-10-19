@@ -243,6 +243,7 @@ export function PreviewPane() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Go to start (Home)"
+          aria-label="Go to start"
           onClick={() => setCurrentTime(0)}
         >
           <SkipBack className="h-4 w-4" />
@@ -252,6 +253,7 @@ export function PreviewPane() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Previous frame (←)"
+          aria-label="Previous frame"
           onClick={() => frameStep(-1)}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -261,6 +263,7 @@ export function PreviewPane() {
           size="icon"
           className="nc-gradient nc-glow h-10 w-10 rounded-full text-white hover:opacity-90"
           title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+          aria-label={isPlaying ? 'Pause' : 'Play'}
           onClick={togglePlay}
         >
           {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
@@ -270,6 +273,7 @@ export function PreviewPane() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Next frame (→)"
+          aria-label="Next frame"
           onClick={() => frameStep(1)}
         >
           <ChevronRight className="h-4 w-4" />
@@ -279,6 +283,7 @@ export function PreviewPane() {
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Go to end (End)"
+          aria-label="Go to end"
           onClick={() => setCurrentTime(projectDuration(project))}
         >
           <SkipForward className="h-4 w-4" />
@@ -296,6 +301,7 @@ export function PreviewPane() {
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             title={volumeMuted ? 'Unmute' : 'Mute'}
+            aria-label={volumeMuted ? 'Unmute master volume' : 'Mute master volume'}
             onClick={toggleMasterMuted}
           >
             {volumeMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
@@ -334,6 +340,7 @@ export function PreviewPane() {
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             title="Fullscreen"
+            aria-label="Toggle fullscreen preview"
             onClick={toggleFullscreen}
           >
             <Maximize className="h-4 w-4" />

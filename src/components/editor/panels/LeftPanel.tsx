@@ -61,7 +61,7 @@ export function LeftPanel() {
   return (
     <div className="flex h-full min-h-0">
       {/* ------- icon rail ------- */}
-      <nav className="flex w-14 shrink-0 flex-col items-center gap-1.5 border-r border-(--nc-line) py-3">
+      <nav className="flex w-14 shrink-0 flex-col items-center gap-1.5 overflow-x-hidden overflow-y-auto border-r border-(--nc-line) py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {TABS.map((tab) => {
           const Icon = tab.icon
           const active = panelTab === tab.id
