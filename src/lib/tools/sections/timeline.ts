@@ -9,7 +9,9 @@ import type { ProTool } from '../types'
 
 export const TIMELINE_TOOLS: ProTool[] = [
   // -------- Tools & modes --------
-  { id: 'timeline-selection-tool', name: 'Selection Tool (V)', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Click clips to select them, shift-click extends the selection' },
+  { id: 'timeline-selection-tool', name: 'Selection Tool (V)', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Click clips to select them, shift or ctrl-click extends the selection' },
+  { id: 'timeline-clipboard-copy-paste', name: 'Copy / Cut / Paste', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Ctrl C, X and V move clips with full styles to the playhead position' },
+  { id: 'timeline-select-all', name: 'Select All (Ctrl+A)', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Grab every clip at once, Esc deselects' },
   { id: 'timeline-track-select-forward', name: 'Track Select Forward Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Select every clip from the playhead rightward in one gesture' },
   { id: 'timeline-track-select-backward', name: 'Track Select Backward Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Select every clip from the playhead leftward in one gesture' },
   { id: 'timeline-ripple-edit-tool', name: 'Ripple Edit Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Trim a clip and close the gap automatically across the track' },
@@ -55,8 +57,8 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-nest-sequence', name: 'Nest Sequence Command', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Bundle selected clips into one nested sequence container' },
   { id: 'timeline-unlink-audio-video', name: 'Unlink Audio/Video', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Detach a linked clip audio and video for separate edits' },
   { id: 'timeline-link-audio-video', name: 'Link Audio/Video', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Relink clip audio and video so they edit as one' },
-  { id: 'timeline-group-clips', name: 'Group Clips', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Bind clips so they move and trim as a single block' },
-  { id: 'timeline-ungroup-clips', name: 'Ungroup Clips', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Release a group back into individually editable clips' },
+  { id: 'timeline-group-clips', name: 'Group Clips', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Multi-select clips and drag once to move the whole group in sync' },
+  { id: 'timeline-ungroup-clips', name: 'Ungroup Clips', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Click a single clip or press Esc to release back into individual editing' },
   { id: 'timeline-match-frame', name: 'Match Frame Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Reveal the exact source frame under the playhead' },
   { id: 'timeline-reverse-match-frame', name: 'Reverse Match Frame', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Jump from the source monitor back to the timeline clip' },
   { id: 'timeline-find-panel', name: 'Find Panel', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Search the project for clips by name or metadata' },
@@ -77,7 +79,7 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-rulers', name: 'Rulers', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Canvas-edge rulers for precise on-screen graphic placement' },
   { id: 'timeline-guides', name: 'Guides', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Draggable non-printing guides for layout on the canvas' },
   { id: 'timeline-snapping-guides', name: 'Snapping Guides', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Yellow guide line flashes when a dragged edge snaps' },
-  { id: 'timeline-add-marker', name: 'Add Marker (M)', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Timeline markers beyond beat sync remain roadmap, M mutes clips' },
+  { id: 'timeline-add-marker', name: 'Add Marker (Shift+M)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Bookmark menu or Shift M drops accent markers, click their spot to seek' },
   { id: 'timeline-beat-sync-markers', name: 'Beat-Sync Markers', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Toolbar beat menu detects BPM and draws snap markers on the clip' },
   { id: 'timeline-zoom-to-fit', name: 'Zoom to Fit Timeline (Shift+Z)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Click the fit button to frame the whole project' },
 

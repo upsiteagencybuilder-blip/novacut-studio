@@ -81,6 +81,37 @@ function useKeyboardShortcuts() {
         s.openDialog('export')
         return
       }
+      if (mod && key === 'c') {
+        e.preventDefault()
+        if (s.selectedClipIds.length) {
+          s.copySelected()
+          toast(`${s.selectedClipIds.length} clip${s.selectedClipIds.length > 1 ? 's' : ''} copied`)
+        }
+        return
+      }
+      if (mod && key === 'x') {
+        e.preventDefault()
+        if (s.selectedClipIds.length) {
+          s.cutSelected()
+          toast('Clip cut to clipboard')
+        }
+        return
+      }
+      if (mod && key === 'v') {
+        e.preventDefault()
+        if (s.hasClipboard) {
+          const before = s.project.clips.length
+          s.pasteAtPlayhead()
+          const added = useEditor.getState().project.clips.length - before
+          if (added > 0) toast.success(`${added} clip${added > 1 ? 's' : ''} pasted at playhead`)
+        }
+        return
+      }
+      if (mod && key === 'a') {
+        e.preventDefault()
+        s.selectAll()
+        return
+      }
 
       switch (e.key) {
         case ' ':
@@ -121,12 +152,25 @@ function useKeyboardShortcuts() {
         case 'Delete':
         case 'Backspace':
           e.preventDefault()
-          s.deleteSelected()
+          if (e.shiftKey) {
+            s.rippleDeleteSelected()
+            toast('Clips removed — gap closed (ripple delete)')
+          } else {
+            s.deleteSelected()
+          }
+          break
+        case 'Escape':
+          if (s.selectedClipIds.length) s.selectClip(null)
           break
         case 'm':
         case 'M': {
-          const clip = s.project.clips.find((c) => c.id === s.selectedClipIds[0])
-          if (clip) s.updateClip(clip.id, { muted: !clip.muted }, true)
+          if (e.shiftKey) {
+            s.addMarkerAtPlayhead()
+            toast.success('Marker added at playhead')
+          } else {
+            const clip = s.project.clips.find((c) => c.id === s.selectedClipIds[0])
+            if (clip) s.updateClip(clip.id, { muted: !clip.muted }, true)
+          }
           break
         }
         case '+':

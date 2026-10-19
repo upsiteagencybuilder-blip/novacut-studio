@@ -8,10 +8,15 @@
 import { useState } from 'react'
 import {
   AudioWaveform,
+  Bookmark,
+  ChevronDown,
   Clock3,
   Copy,
+  CopyPlus,
   Eye,
   EyeOff,
+  ClipboardPaste,
+  Slice,
   Loader2,
   Magnet,
   Maximize2,
@@ -50,6 +55,8 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
   const zoom = useEditor((s) => s.zoom)
   const snapEnabled = useEditor((s) => s.snapEnabled)
   const selectedIds = useEditor((s) => s.selectedClipIds)
+  const hasClipboard = useEditor((s) => s.hasClipboard)
+  const userMarkers = useEditor((s) => s.userMarkers)
   const beatMarkers = useEditor((s) => s.beatMarkers)
   const beatBpm = useEditor((s) => s.beatBpm)
   const showBeatMarkers = useEditor((s) => s.showBeatMarkers)
@@ -79,7 +86,69 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
         className,
       )}
     >
-      {/* left group — edit actions */}
+      {/* left group — clipboard actions */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={TOOL_BTN}
+            disabled={!hasSelection}
+            aria-label="Copy selected clips"
+            onClick={() => {
+              useEditor.getState().copySelected()
+              toast(`${selectedIds.length} clip${selectedIds.length > 1 ? 's' : ''} copied`)
+            }}
+          >
+            <Copy className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Copy (Ctrl+C)</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={TOOL_BTN}
+            disabled={!hasSelection}
+            aria-label="Cut selected clips"
+            onClick={() => {
+              useEditor.getState().cutSelected()
+              toast('Clip cut to clipboard')
+            }}
+          >
+            <Slice className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Cut (Ctrl+X)</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={TOOL_BTN}
+            disabled={!hasClipboard}
+            aria-label="Paste clips at playhead"
+            onClick={() => {
+              const before = useEditor.getState().project.clips.length
+              useEditor.getState().pasteAtPlayhead()
+              const added = useEditor.getState().project.clips.length - before
+              if (added > 0) toast.success(`${added} clip${added > 1 ? 's' : ''} pasted at playhead`)
+            }}
+          >
+            <ClipboardPaste className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Paste at playhead (Ctrl+V)</TooltipContent>
+      </Tooltip>
+
+      <div className="mx-1.5 h-5 w-px shrink-0 bg-(--nc-panel-strong)" />
+
+      {/* edit actions */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -108,27 +177,55 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
               if (selectedIds[0]) useEditor.getState().duplicateClip(selectedIds[0])
             }}
           >
-            <Copy className="size-4" />
+            <CopyPlus className="size-4" />
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">Duplicate (D)</TooltipContent>
       </Tooltip>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(TOOL_BTN, 'hover:bg-rose-500/10 hover:text-rose-400')}
-            disabled={!hasSelection}
-            aria-label="Delete selected clips"
-            onClick={() => useEditor.getState().deleteSelected()}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">Delete (Del)</TooltipContent>
-      </Tooltip>
+      {/* delete split-button — plain delete, or ripple delete via the chevron menu */}
+      <div className="flex items-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(TOOL_BTN, 'hover:bg-rose-500/10 hover:text-rose-400')}
+              disabled={!hasSelection}
+              aria-label="Delete selected clips"
+              onClick={() => useEditor.getState().deleteSelected()}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Delete (Del)</TooltipContent>
+        </Tooltip>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(TOOL_BTN, '-ml-1.5 w-4 min-w-0 px-0')}
+              disabled={!hasSelection}
+              aria-label="More delete options"
+            >
+              <ChevronDown className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="nc-glass-strong border-(--nc-line)">
+            <DropdownMenuItem
+              className="text-rose-300 focus:text-rose-200"
+              onClick={() => {
+                useEditor.getState().rippleDeleteSelected()
+                toast('Clips removed — gap closed (ripple delete)')
+              }}
+            >
+              <Trash2 className="mr-2 size-3.5" />
+              Ripple delete — close the gap (Shift+Del)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       <div className="mx-1.5 h-5 w-px shrink-0 bg-(--nc-panel-strong)" />
 
@@ -152,6 +249,55 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
         </TooltipTrigger>
         <TooltipContent side="bottom">Snapping</TooltipContent>
       </Tooltip>
+
+      {/* user markers — add / remove / clear */}
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(TOOL_BTN, 'relative w-9', userMarkers.length > 0 && 'text-(--nc-accent-300) hover:text-(--nc-accent-200)')}
+                aria-label="Timeline markers"
+              >
+                <Bookmark className="size-4" />
+                {userMarkers.length > 0 && (
+                  <span className="absolute -right-1.5 -top-1 rounded-full bg-(--nc-accent-400) px-1 text-[8px] font-bold leading-[13px] text-white tabular-nums">
+                    {userMarkers.length}
+                  </span>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Markers — drop & jump points (Shift+M)</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="start" className="nc-glass-strong border-(--nc-line)">
+          <DropdownMenuItem onClick={() => useEditor.getState().addMarkerAtPlayhead()}>
+            <Bookmark className="mr-2 size-3.5" />
+            Add marker at playhead (Shift+M)
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={userMarkers.length === 0}
+            onClick={() => useEditor.getState().removeMarkerAtPlayhead()}
+          >
+            <Bookmark className="mr-2 size-3.5 opacity-50" />
+            Remove marker at playhead
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={userMarkers.length === 0}
+            className="text-rose-300 focus:text-rose-200"
+            onClick={() => {
+              useEditor.getState().clearUserMarkers()
+              toast('All markers cleared')
+            }}
+          >
+            <Trash2 className="mr-2 size-3.5" />
+            Clear all markers
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* beat-sync markers (detect / show-hide / clear) */}
       <DropdownMenu>

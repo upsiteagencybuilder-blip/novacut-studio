@@ -47,6 +47,7 @@ export function Timeline() {
   const selectedIds = useEditor((s) => s.selectedClipIds)
   const beatMarkers = useEditor((s) => s.beatMarkers)
   const showBeatMarkers = useEditor((s) => s.showBeatMarkers)
+  const userMarkers = useEditor((s) => s.userMarkers)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const laneEls = useRef(new Map<string, HTMLDivElement>())
@@ -172,7 +173,13 @@ export function Timeline() {
                 >
                   <AddTrackMenu />
                 </div>
-                <Ruler zoom={zoom} width={laneWidth} onScrubDown={beginScrub} beatMarkers={showBeatMarkers ? beatMarkers : EMPTY_BEATS} />
+                <Ruler
+                  zoom={zoom}
+                  width={laneWidth}
+                  onScrubDown={beginScrub}
+                  beatMarkers={showBeatMarkers ? beatMarkers : EMPTY_BEATS}
+                  userMarkers={userMarkers}
+                />
               </div>
 
               {/* track rows */}
@@ -211,6 +218,23 @@ export function Timeline() {
                     <div
                       key={i}
                       className="absolute bottom-0 top-0 w-px bg-emerald-400/12"
+                      style={{ left: t * zoom }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* user markers — accent guides across the lanes */}
+              {userMarkers.length > 0 && (
+                <div
+                  className="pointer-events-none absolute z-[7]"
+                  style={{ left: HEADER_WIDTH, right: 0, top: RULER_HEIGHT, bottom: 0 }}
+                  aria-hidden
+                >
+                  {userMarkers.map((t, i) => (
+                    <div
+                      key={i}
+                      className="absolute bottom-0 top-0 w-px bg-(--nc-accent-400)/20 shadow-[0_0_4px_var(--nc-accent-glow)]"
                       style={{ left: t * zoom }}
                     />
                   ))}
@@ -388,11 +412,13 @@ function Ruler({
   width,
   onScrubDown,
   beatMarkers,
+  userMarkers,
 }: {
   zoom: number
   width: number
   onScrubDown: (e: ReactPointerEvent<HTMLDivElement>) => void
   beatMarkers: number[]
+  userMarkers: number[]
 }) {
   const step = RULER_STEPS.find((s) => s * zoom >= 64) ?? 60
 
@@ -414,6 +440,11 @@ function Ruler({
   const visibleBeats = useMemo(
     () => beatMarkers.filter((t) => t * zoom <= width + 8),
     [beatMarkers, zoom, width],
+  )
+
+  const visibleUserMarkers = useMemo(
+    () => userMarkers.filter((t) => t * zoom <= width + 8),
+    [userMarkers, zoom, width],
   )
 
   return (
@@ -440,6 +471,18 @@ function Ruler({
           className="absolute bottom-[6px] size-[5px] -translate-x-1/2 rotate-45 rounded-[1px] bg-emerald-400 shadow-[0_0_5px_var(--nc-audio-300)]"
           style={{ left: t * zoom }}
         />
+      ))}
+
+      {/* user markers: accent bookmark flags hanging from the ruler top */}
+      {visibleUserMarkers.map((t, i) => (
+        <div
+          key={`marker-${i}`}
+          className="absolute top-0 -translate-x-1/2"
+          style={{ left: t * zoom }}
+        >
+          <div className="size-[7px] rotate-45 rounded-[1px] bg-(--nc-accent-400) shadow-[0_0_6px_var(--nc-accent-glow)]" />
+          <div className="mx-auto h-[9px] w-px bg-(--nc-accent-400)/70" />
+        </div>
       ))}
     </div>
   )

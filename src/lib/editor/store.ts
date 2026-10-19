@@ -76,6 +76,10 @@ interface EditorStore {
   past: Project[]
   future: Project[]
   importing: boolean
+  /** true once copy/cut has stashed at least one clip (enables Paste UI) */
+  hasClipboard: boolean
+  /** user-placed timeline markers in seconds (Shift+M) — view state, not project state */
+  userMarkers: number[]
 
   /* ---------- lifecycle ---------- */
   init: () => Promise<void>
@@ -109,6 +113,19 @@ interface EditorStore {
   rippleDeleteSelected: () => void
   duplicateClip: (id: string) => void
   selectClip: (id: string | null, additive?: boolean) => void
+  /** copy selected clips to the internal clipboard (Ctrl+C) */
+  copySelected: () => void
+  /** copy then delete in one history step (Ctrl+X) */
+  cutSelected: () => void
+  /** paste clipboard clips starting at the playhead (Ctrl+V) */
+  pasteAtPlayhead: () => void
+  /** select every clip in the project (Ctrl+A) */
+  selectAll: () => void
+  /** drop a user marker at the playhead (Shift+M) */
+  addMarkerAtPlayhead: () => void
+  /** remove the user marker nearest the playhead (within 0.5s) */
+  removeMarkerAtPlayhead: () => void
+  clearUserMarkers: () => void
 
   /* ---------- keyframes ---------- */
   addKeyframeAtPlayhead: (clipId: string, property: KeyframeProperty) => void
@@ -165,6 +182,8 @@ let lastHistoryKey: string | null = null
 let lastHistoryTime = 0
 let savingTimer: ReturnType<typeof setTimeout> | null = null
 let suppressSave = false
+/** internal copy/cut clipboard — session scope, deep-cloned clips */
+let clipboardClips: Clip[] = []
 
 function cloneProject(p: Project): Project {
   return JSON.parse(JSON.stringify(p)) as Project
@@ -215,6 +234,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
   autosave: 'idle',
   past: [],
   future: [],
+  hasClipboard: false,
+  userMarkers: [],
   importing: false,
 
   /* ================= lifecycle ================= */
@@ -621,6 +642,75 @@ export const useEditor = create<EditorStore>((set, get) => ({
       return { selectedClipIds: [id] }
     })
   },
+
+  copySelected: () => {
+    const s = get()
+    if (!s.selectedClipIds.length) return
+    clipboardClips = s.project.clips
+      .filter((c) => s.selectedClipIds.includes(c.id))
+      .map((c) => JSON.parse(JSON.stringify(c)) as Clip)
+      .sort((a, b) => a.start - b.start)
+    if (clipboardClips.length) set({ hasClipboard: true })
+  },
+
+  cutSelected: () => {
+    const s = get()
+    if (!s.selectedClipIds.length) return
+    s.copySelected()
+    s.deleteSelected()
+  },
+
+  pasteAtPlayhead: () => {
+    const s = get()
+    if (!clipboardClips.length) return
+    const offset = round2(s.currentTime - clipboardClips[0].start)
+    const trackIds = new Set(s.project.tracks.map((tr) => tr.id))
+    const clones = clipboardClips.map((c) => {
+      const copy: Clip = { ...JSON.parse(JSON.stringify(c)), id: uid('clip_') }
+      copy.start = Math.max(0, round2(copy.start + offset))
+      // original track may have been deleted since the copy — fall back to a compatible one
+      if (!trackIds.has(copy.trackId)) {
+        const fallback =
+          copy.kind === 'audio'
+            ? s.project.tracks.find((tr) => tr.kind === 'audio')
+            : s.project.tracks.find((tr) => tr.kind === 'video' || tr.kind === 'overlay')
+        if (fallback) copy.trackId = fallback.id
+      }
+      return copy
+    })
+    s.pushHistory()
+    set((st) => ({
+      project: withUpdatedAt({ ...st.project, clips: [...st.project.clips, ...clones] }),
+      selectedClipIds: clones.map((c) => c.id),
+    }))
+  },
+
+  selectAll: () => {
+    set((s) => ({ selectedClipIds: s.project.clips.map((c) => c.id) }))
+  },
+
+  addMarkerAtPlayhead: () => {
+    const t = round2(get().currentTime)
+    set((s) =>
+      s.userMarkers.some((m) => Math.abs(m - t) < 0.05)
+        ? s
+        : { userMarkers: [...s.userMarkers, t].sort((a, b) => a - b) },
+    )
+  },
+
+  removeMarkerAtPlayhead: () => {
+    const t = get().currentTime
+    set((s) => {
+      if (!s.userMarkers.length) return s
+      const nearest = s.userMarkers.reduce((best, m) =>
+        Math.abs(m - t) < Math.abs(best - t) ? m : best,
+      )
+      if (Math.abs(nearest - t) > 0.5) return s
+      return { userMarkers: s.userMarkers.filter((m) => m !== nearest) }
+    })
+  },
+
+  clearUserMarkers: () => set({ userMarkers: [] }),
 
   /* ================= tracks ================= */
 

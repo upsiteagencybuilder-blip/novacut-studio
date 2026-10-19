@@ -54,6 +54,13 @@ interface DragOrigin {
   trackId: string
 }
 
+/** frozen positions of every other selected clip, captured once at group-drag start */
+interface GroupOrigin {
+  id: string
+  start: number
+  trackId: string
+}
+
 const DRAG_THRESHOLD_PX = 2
 
 export function ClipBlock({
@@ -77,6 +84,7 @@ export function ClipBlock({
   const startXRef = useRef(0)
   const origRef = useRef<DragOrigin | null>(null)
   const hoverLaneRef = useRef<string | null>(null)
+  const groupOrigRef = useRef<GroupOrigin[] | null>(null)
 
   const asset = useEditor((s) => (clip.mediaId ? s.media.find((m) => m.id === clip.mediaId) : undefined))
 
@@ -89,7 +97,7 @@ export function ClipBlock({
     e.stopPropagation()
     e.preventDefault()
     if (e.button !== 0 || track.locked) return
-    useEditor.getState().selectClip(clip.id, e.shiftKey)
+    useEditor.getState().selectClip(clip.id, e.shiftKey || e.ctrlKey || e.metaKey)
     e.currentTarget.setPointerCapture(e.pointerId)
     activeRef.current = true
     startedRef.current = false
@@ -104,6 +112,14 @@ export function ClipBlock({
       sourceDuration: clip.sourceDuration,
       trackId: clip.trackId,
     }
+    // group-move: freeze the other selected clips' positions once, at drag start
+    const st = useEditor.getState()
+    groupOrigRef.current =
+      st.selectedClipIds.includes(clip.id) && st.selectedClipIds.length > 1
+        ? st.project.clips
+            .filter((c) => st.selectedClipIds.includes(c.id) && c.id !== clip.id)
+            .map((c) => ({ id: c.id, start: c.start, trackId: c.trackId }))
+        : null
     setDragMode(mode)
     onDragChange({ clipId: clip.id, kind: clip.kind })
     document.body.style.userSelect = 'none'
@@ -124,6 +140,7 @@ export function ClipBlock({
     const st = useEditor.getState()
     const dx = (e.clientX - startXRef.current) / zoom
 
+    // beat-sync markers AND user markers act as snap targets while visible
     if (modeRef.current === 'move') {
       let newStart = Math.max(0, orig.start + dx)
       let snappedPx: number | null = null
@@ -133,8 +150,8 @@ export function ClipBlock({
           if (c.id === clip.id) continue
           targets.push(c.start, c.start + c.duration)
         }
-        // beat-sync markers act as snap targets while they are visible
         if (st.showBeatMarkers && st.beatMarkers.length > 0) targets.push(...st.beatMarkers)
+        if (st.userMarkers.length > 0) targets.push(...st.userMarkers)
         const snap = snapTime(newStart, targets, 8, zoom)
         if (snap.snapped) {
           newStart = snap.value
@@ -145,6 +162,14 @@ export function ClipBlock({
       hoverLaneRef.current = hit?.trackId ?? null
       onHoverTrack(hoverLaneRef.current)
       st.moveClip(clip.id, newStart, hoverLaneRef.current ?? orig.trackId, `move-${clip.id}`)
+      // group-move: shift every other selected clip by the SAME delta the primary
+      // clip actually moved (including its snap), keeping their own tracks
+      if (groupOrigRef.current) {
+        const groupDx = newStart - orig.start
+        for (const g of groupOrigRef.current) {
+          st.moveClip(g.id, Math.max(0, g.start + groupDx), g.trackId, `move-${clip.id}`)
+        }
+      }
       onSnapLine(snappedPx)
       setTip(`${formatTimecode(newStart, fps)} · ${formatShortTime(clip.duration)}`)
       return
@@ -183,6 +208,7 @@ export function ClipBlock({
     activeRef.current = false
     startedRef.current = false
     origRef.current = null
+    groupOrigRef.current = null
     hoverLaneRef.current = null
     const el = e.currentTarget
     if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
