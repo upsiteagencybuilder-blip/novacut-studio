@@ -75,6 +75,12 @@ function useKeyboardShortcuts() {
         s.redo()
         return
       }
+      if (mod && key === 's') {
+        e.preventDefault()
+        void s.saveNow()
+        toast.success('Project saved')
+        return
+      }
       if (mod && key === 'e') {
         e.preventDefault()
         s.pause()
@@ -112,6 +118,9 @@ function useKeyboardShortcuts() {
         s.selectAll()
         return
       }
+      // any other Ctrl/Cmd combination must never fall through to the
+      // single-letter shortcuts below (Ctrl+S used to split the clip!)
+      if (mod) return
 
       switch (e.key) {
         case ' ':
@@ -165,8 +174,7 @@ function useKeyboardShortcuts() {
         case 'm':
         case 'M': {
           if (e.shiftKey) {
-            s.addMarkerAtPlayhead()
-            toast.success('Marker added at playhead')
+            if (s.addMarkerAtPlayhead()) toast.success('Marker added at playhead')
           } else {
             const clip = s.project.clips.find((c) => c.id === s.selectedClipIds[0])
             if (clip) s.updateClip(clip.id, { muted: !clip.muted }, true)

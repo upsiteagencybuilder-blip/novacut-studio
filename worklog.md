@@ -523,3 +523,25 @@ Work Log:
 Stage Summary:
 - "All tools not working" was NOT broken tools — every tool passed functional testing. The real defect was layout layering on short viewports: the fixed-height timeline covered the rail's bottom tabs and the over-tall export dialog buried its own action button, which made several tools FEEL dead depending on window size.
 - Files changed: src/components/editor/EditorShell.tsx (responsive timeline height + aside overflow-hidden), src/components/editor/panels/LeftPanel.tsx (scroll-safe rail), src/components/ui/dialog.tsx (global dialog max-h + scroll), src/components/editor/preview/PreviewPane.tsx + src/components/editor/TopBar.tsx (aria-labels).
+
+---
+Task ID: Sector-1
+Agent: main (orchestrator)
+Task: Sector 1 — General Editing (Timeline): verify every tool, close feature gaps (clipboard, select-all, ripple UI, user markers, multi-select upgrades, group move)
+
+Work Log:
+- Audit of Timeline/ClipBlock/TimelineToolbar/store/EditorShell against the Sector 1 checklist (trim, split, cut, copy/paste, ripple delete, multi-select, snapping, markers, undo/redo, zoom, shortcuts). Already-live: trim handles, split (S + toolbar, selection-aware multi-split), delete, duplicate, shift-click select, snap toggle + guide line, undo/redo, zoom (slider/keys/fit), beat markers.
+- GAP: no clipboard → store.ts adds copySelected/cutSelected/pasteAtPlayhead (module-level clipboardClips; paste re-bases clips at playhead, keeps relative offsets, falls back to a compatible track if the original was deleted, single undo step, selects pasted clips, hasClipboard flag gates UI).
+- GAP: Shift+Delete documented but unwired → EditorShell Delete case now branches on shiftKey → rippleDeleteSelected (+toast); also wired Ctrl+C/X/V (with toasts), Ctrl+A selectAll, Escape deselect, Shift+M addMarkerAtPlayhead.
+- GAP: user markers → store userMarkers[] (session view-state) + addMarkerAtPlayhead (0.05s dedupe), removeMarkerAtPlayhead (nearest within 0.5s), clearUserMarkers; toolbar Bookmark dropdown (add / remove at playhead / clear all) with count badge in accent; Ruler renders accent bookmark flags + faint lane guides; user markers now snap targets in ClipBlock (alongside beats).
+- GAP: multi-select only shift-based → ClipBlock accepts shift OR ctrl/cmd; NEW group-move: multi-selected clips drag together (group origins frozen at drag start, each keeps its track, follows the primary clip's SNAPPED delta — groupDx = newStart − orig.start).
+- Toolbar: Copy / Cut / Paste buttons (disabled states from selection/hasClipboard), duplicate icon → CopyPlus, delete is now a split-button with chevron menu exposing "Ripple delete — close the gap (Shift+Del)", marker menu. Cut icon uses lucide Slice (no `Cut` export in this lucide version).
+- Honesty fixes: removed the phantom "K = add keyframe" shortcut (never wired; keyframes live in PropertiesPanel), added Copy/Cut/Paste/SelectAll/Esc/Shift+M rows → ShortcutsDialog now 19 verified entries; timeline tools catalog: group/ungroup, add-marker, copy-cut-paste, select-all flipped planned→live with real descriptions.
+- E2E (agent-browser 1440×900 + 390×844, demo project 6 clips): click-select ✅, Ctrl+A 6/6 ✅, Esc 0 ✅, Ctrl+C toast + Ctrl+V 6→7 + Ctrl+Z 6 ✅, Ctrl+X 7→6 + paste-back 7 ✅, S with no selection splits all clips under playhead 8→11 ✅ (selection-aware: selected clip not under playhead = no split), duplicate 7→8 ✅, trim-end handle +50px drag = +49.7px width ✅, ripple delete Shift+Del closes gap exactly (neighbor 417.9px→358.4px = removed 59.5px span) ✅, ctrl-click additive 1→2 ✅, group move 5 selected clips uniform ~120px delta ✅, markers: Shift+M → flag at 70px (1s × 70 zoom) ✅, Clear all ✅, Remove at playhead via menu badge 1→none ✅, ShortcutsDialog 19 rows with all new keys ✅, zero console errors, dev.log clean, eslint clean, tsc (src) clean, mobile 390px: no horizontal overflow, toolbar strip renders all new tools.
+- Testing notes: synthetic PointerEvents need setPointerCapture patched to no-op (pointerId 0 inactive) and rAF waits before DOM reads (React batches renders) — real user input unaffected.
+- Commit 82b83a5 created; push to GitHub failed: no GitHub token in this session (previous session's token not persisted locally) — needs re-push when credentials are available.
+
+Stage Summary:
+- Sector 1 COMPLETE: every general-editing tool now exists and is browser-verified end-to-end — clipboard (copy/cut/paste at playhead), select-all/Esc, ripple delete (keyboard + UI), user markers (add/remove/clear, ruler flags, lane guides, snap targets), ctrl/cmd multi-select, group move with snap-follow — on top of the already-verified trim/split/duplicate/snap/undo/redo/zoom/beat-markers.
+- 7 files changed: store.ts, EditorShell.tsx, ClipBlock.tsx, TimelineToolbar.tsx, Timeline.tsx, constants.ts, tools/sections/timeline.ts.
+- Pending: git push (token needed).

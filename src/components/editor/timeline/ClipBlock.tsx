@@ -85,6 +85,8 @@ export function ClipBlock({
   const origRef = useRef<DragOrigin | null>(null)
   const hoverLaneRef = useRef<string | null>(null)
   const groupOrigRef = useRef<GroupOrigin[] | null>(null)
+  /** was the clip already inside the selection when the pointer went down? */
+  const wasSelectedRef = useRef(false)
 
   const asset = useEditor((s) => (clip.mediaId ? s.media.find((m) => m.id === clip.mediaId) : undefined))
 
@@ -97,7 +99,14 @@ export function ClipBlock({
     e.stopPropagation()
     e.preventDefault()
     if (e.button !== 0 || track.locked) return
-    useEditor.getState().selectClip(clip.id, e.shiftKey || e.ctrlKey || e.metaKey)
+    const st0 = useEditor.getState()
+    wasSelectedRef.current = st0.selectedClipIds.includes(clip.id)
+    if (!wasSelectedRef.current) {
+      // clip outside the current selection → select (or toggle into) it
+      st0.selectClip(clip.id, e.shiftKey || e.ctrlKey || e.metaKey)
+    }
+    // if the clip was already selected the WHOLE selection is kept — dragging
+    // a member of a multi-selection must never collapse it to one clip
     e.currentTarget.setPointerCapture(e.pointerId)
     activeRef.current = true
     startedRef.current = false
@@ -205,8 +214,14 @@ export function ClipBlock({
 
   const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!activeRef.current) return
+    // modifier-click on an already-selected clip with no drag movement →
+    // toggle it back OFF (deselect from the multi-selection)
+    if (!startedRef.current && wasSelectedRef.current && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+      useEditor.getState().selectClip(clip.id, true)
+    }
     activeRef.current = false
     startedRef.current = false
+    wasSelectedRef.current = false
     origRef.current = null
     groupOrigRef.current = null
     hoverLaneRef.current = null

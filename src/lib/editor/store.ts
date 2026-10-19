@@ -121,10 +121,10 @@ interface EditorStore {
   pasteAtPlayhead: () => void
   /** select every clip in the project (Ctrl+A) */
   selectAll: () => void
-  /** drop a user marker at the playhead (Shift+M) */
-  addMarkerAtPlayhead: () => void
-  /** remove the user marker nearest the playhead (within 0.5s) */
-  removeMarkerAtPlayhead: () => void
+  /** drop a user marker at the playhead (Shift+M) — returns true when a new marker was added */
+  addMarkerAtPlayhead: () => boolean
+  /** remove the user marker nearest the playhead (within 0.5s) — returns true when removed */
+  removeMarkerAtPlayhead: () => boolean
   clearUserMarkers: () => void
 
   /* ---------- keyframes ---------- */
@@ -691,23 +691,28 @@ export const useEditor = create<EditorStore>((set, get) => ({
 
   addMarkerAtPlayhead: () => {
     const t = round2(get().currentTime)
-    set((s) =>
-      s.userMarkers.some((m) => Math.abs(m - t) < 0.05)
-        ? s
-        : { userMarkers: [...s.userMarkers, t].sort((a, b) => a - b) },
-    )
+    let added = false
+    set((s) => {
+      if (s.userMarkers.some((m) => Math.abs(m - t) < 0.05)) return s
+      added = true
+      return { userMarkers: [...s.userMarkers, t].sort((a, b) => a - b) }
+    })
+    return added
   },
 
   removeMarkerAtPlayhead: () => {
     const t = get().currentTime
+    let removed = false
     set((s) => {
       if (!s.userMarkers.length) return s
       const nearest = s.userMarkers.reduce((best, m) =>
         Math.abs(m - t) < Math.abs(best - t) ? m : best,
       )
       if (Math.abs(nearest - t) > 0.5) return s
+      removed = true
       return { userMarkers: s.userMarkers.filter((m) => m !== nearest) }
     })
+    return removed
   },
 
   clearUserMarkers: () => set({ userMarkers: [] }),

@@ -455,6 +455,7 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'Ctrl + X', action: 'Cut selected clips' },
   { keys: 'Ctrl + V', action: 'Paste at playhead' },
   { keys: 'Ctrl + A', action: 'Select all clips' },
+  { keys: 'Ctrl + S', action: 'Save project now' },
   { keys: 'Esc', action: 'Deselect all clips' },
   { keys: 'Delete / Backspace', action: 'Delete selected clip' },
   { keys: 'Shift + Delete', action: 'Ripple delete (close gap)' },
