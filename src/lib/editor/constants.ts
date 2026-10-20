@@ -70,6 +70,8 @@ export const DEFAULT_TRANSFORM: Transform = {
   scale: 1,
   rotation: 0,
   opacity: 1,
+  flipX: false,
+  flipY: false,
 }
 
 export const DEFAULT_FILTERS: Filters = {

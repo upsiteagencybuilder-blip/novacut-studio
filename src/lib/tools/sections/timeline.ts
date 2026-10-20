@@ -36,7 +36,7 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-position-tool', name: 'Position Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Reposition clips by dragging them across the preview canvas' },
   { id: 'timeline-opacity-slider', name: 'Opacity Slider', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Drag the opacity slider in properties, animate it with keyframes' },
   { id: 'timeline-blend-mode-dropdown', name: 'Blend Mode Dropdown', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Pick from fifteen blend modes in clip properties, engine composited' },
-  { id: 'timeline-crop-tool', name: 'Crop Tool (Alt+C)', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Crop frame edges of a clip without scaling the picture' },
+  { id: 'timeline-crop-tool', name: 'Crop Tool (Alt+C)', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Crop insets (L/R/T/B) plus Fill-frame, 1:1, 4:5, 9:16 and 16:9 presets in Properties → Crop' },
 
   // -------- Cutting & trimming --------
   { id: 'timeline-playhead', name: 'Playhead', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Drag the fuchsia handle or scrub the ruler to seek' },
@@ -48,7 +48,7 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-extract-button', name: 'Extract Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Remove the marked range and ripple everything after closed' },
   { id: 'timeline-insert-button', name: 'Insert Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Push source material into the timeline, shifting later clips' },
   { id: 'timeline-overlay-button', name: 'Overlay Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Write source material over the timeline, replacing underneath' },
-  { id: 'timeline-replace-edit-tool', name: 'Replace Edit Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Swap a timeline clip with source while keeping the duration' },
+  { id: 'timeline-replace-edit-tool', name: 'Replace Edit Tool', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Properties → Media → Source dropdown swaps the clip media while keeping position and duration' },
   { id: 'timeline-fit-to-fill-tool', name: 'Fit to Fill Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Retime a source to exactly fill the marked duration' },
   { id: 'timeline-three-point-editing', name: 'Three-Point Editing Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Perform edits from three marked points across source and record' },
   { id: 'timeline-four-point-editing', name: 'Four-Point Editing Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Fit or fill source between four marked in and out points' },
@@ -62,12 +62,15 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-match-frame', name: 'Match Frame Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Reveal the exact source frame under the playhead' },
   { id: 'timeline-reverse-match-frame', name: 'Reverse Match Frame', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Jump from the source monitor back to the timeline clip' },
   { id: 'timeline-find-panel', name: 'Find Panel', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Search the project for clips by name or metadata' },
-  { id: 'timeline-replace-clip-tool', name: 'Replace Clip Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Swap one media asset for another across the timeline' },
+  { id: 'timeline-replace-clip-tool', name: 'Replace Clip Tool', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Swap one media asset for another from clip properties — speed, reverse and crop reset clean' },
   { id: 'timeline-make-subclip', name: 'Make Subclip', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Save a marked source range as its own subclip asset' },
   { id: 'timeline-delete-ripple-delete', name: 'Delete / Ripple Delete', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Press Delete to remove clips, Shift Delete ripples the gap' },
 
   // -------- Speed & duration --------
   { id: 'timeline-speed-controls', name: 'Speed Controls (Uniform Speed / Speed Ramping)', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Speed slider and 25 presets change rate with automatic duration compensation' },
+  { id: 'timeline-reverse-playback', name: 'Reverse Playback', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Toggle a video clip to play backwards frame-by-frame; audio muted while reversed' },
+  { id: 'timeline-freeze-frame', name: 'Freeze Frame', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Toolbar snowflake captures the current frame as a 3s still and ripple-inserts it at the playhead' },
+  { id: 'timeline-fit-modes', name: 'Fit Modes (Cover / Contain / Stretch)', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Choose how each video or image fills the canvas in Properties → Transform → Fit' },
   { id: 'timeline-duration-tool', name: 'Duration Tool', section: 'timeline', group: 'Speed & duration', status: 'planned', desc: 'Set exact clip duration numerically with automatic retime' },
 
   // -------- Markers & navigation --------

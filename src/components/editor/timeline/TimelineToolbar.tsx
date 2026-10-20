@@ -21,6 +21,7 @@ import {
   Magnet,
   Maximize2,
   Scissors,
+  Snowflake,
   Trash2,
   ZoomIn,
   ZoomOut,
@@ -69,6 +70,10 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
   const canSplit = selectedIds.length
     ? project.clips.some((c) => selectedIds.includes(c.id) && currentTime > c.start && currentTime < c.start + c.duration)
     : project.clips.some((c) => currentTime > c.start + 0.08 && currentTime < c.start + c.duration - 0.08)
+  // mirror the store's insertFreezeFrame target logic — any video/image under the playhead works
+  const canFreeze = project.clips.some(
+    (c) => (c.kind === 'video' || c.kind === 'image') && currentTime >= c.start && currentTime < c.start + c.duration,
+  )
 
   const setZoom = (z: number) => useEditor.getState().setZoom(z)
 
@@ -163,6 +168,27 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">Split at playhead (S)</TooltipContent>
+      </Tooltip>
+
+      {/* freeze frame — capture the current frame as a 3s still, ripple-inserted */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={TOOL_BTN}
+            disabled={!canFreeze}
+            aria-label="Insert freeze frame at playhead"
+            onClick={async () => {
+              const ok = await useEditor.getState().insertFreezeFrame()
+              if (ok) toast.success('Freeze frame inserted ❄️ — 3s still, clips ripple right')
+              else toast('Move the playhead over a video or image clip')
+            }}
+          >
+            <Snowflake className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Freeze frame at playhead</TooltipContent>
       </Tooltip>
 
       <Tooltip>

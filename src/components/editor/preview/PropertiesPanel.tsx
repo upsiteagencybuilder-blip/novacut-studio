@@ -11,18 +11,24 @@ import {
   Bold,
   ChevronDown,
   Copy,
+  Crop,
   Diamond,
   DiamondPlus,
   Film,
+  FlipHorizontal2,
+  FlipVertical2,
   Gauge,
   Image as ImageIcon,
   Italic,
   Move,
   Palette,
   Pipette,
+  Rewind,
   RotateCcw,
+  RotateCw,
   Settings2,
   SlidersHorizontal,
+  Snowflake,
   Sparkles,
   Sticker,
   Sun,
@@ -35,6 +41,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
+import { toast } from 'sonner'
 import {
   BLEND_MODES,
   CANVAS_PRESETS,
@@ -60,6 +67,7 @@ import type {
   ChromaKey,
   Clip,
   ClipKind,
+  ClipFit,
   ColorGrade,
   EasingType,
   Filters,
@@ -868,20 +876,130 @@ function LutSection({ clip }: { clip: Clip }) {
   )
 }
 
+/* ================================================================ crop */
+
+const CROP_MAX = 0.45
+const r3 = (v: number) => Math.round(v * 1000) / 1000
+
+function CropSection({ clip }: { clip: Clip }) {
+  const project = useEditor((s) => s.project)
+  const media = useEditor((s) => s.media)
+  const updateClip = useEditor((s) => s.updateClip)
+  const asset = media.find((m) => m.id === clip.mediaId)
+
+  const crop = clip.crop ?? { x: 0, y: 0, width: 1, height: 1 }
+  const insetL = clamp(crop.x, 0, CROP_MAX)
+  const insetT = clamp(crop.y, 0, CROP_MAX)
+  const insetR = clamp(1 - (crop.x + crop.width), 0, CROP_MAX)
+  const insetB = clamp(1 - (crop.y + crop.height), 0, CROP_MAX)
+  const hasCrop = !!clip.crop
+
+  const setInsets = (next: { l: number; r: number; t: number; b: number }) => {
+    const l = clamp(next.l, 0, CROP_MAX)
+    const r = clamp(next.r, 0, Math.min(CROP_MAX, 0.9 - l))
+    const t = clamp(next.t, 0, CROP_MAX)
+    const b = clamp(next.b, 0, Math.min(CROP_MAX, 0.9 - t))
+    updateClip(clip.id, { crop: { x: r3(l), y: r3(t), width: r3(1 - l - r), height: r3(1 - t - b) } }, 'crop')
+  }
+
+  const applyRatio = (rw: number, rh: number) => {
+    const srcW = asset?.width || project.canvasWidth
+    const srcH = asset?.height || project.canvasHeight
+    const srcRatio = srcW / srcH
+    const target = rw / rh
+    let w = 1
+    let h = 1
+    if (srcRatio > target) w = target / srcRatio
+    else h = srcRatio / target
+    updateClip(clip.id, { crop: { x: r3((1 - w) / 2), y: r3((1 - h) / 2), width: r3(w), height: r3(h) } }, true)
+  }
+
+  return (
+    <Section title="Crop" icon={Crop} onReset={hasCrop ? () => updateClip(clip.id, { crop: null }, true) : undefined}>
+      <p className="text-[10px] leading-snug text-muted-foreground/60">
+        Trim frame edges without moving the picture. Presets crop to a centered aspect ratio.
+      </p>
+      <SliderRow
+        label="Left"
+        min={0}
+        max={CROP_MAX}
+        step={0.01}
+        value={insetL}
+        onChange={(v) => setInsets({ l: v, r: insetR, t: insetT, b: insetB })}
+        format={fmtPct}
+      />
+      <SliderRow
+        label="Right"
+        min={0}
+        max={CROP_MAX}
+        step={0.01}
+        value={insetR}
+        onChange={(v) => setInsets({ l: insetL, r: v, t: insetT, b: insetB })}
+        format={fmtPct}
+      />
+      <SliderRow
+        label="Top"
+        min={0}
+        max={CROP_MAX}
+        step={0.01}
+        value={insetT}
+        onChange={(v) => setInsets({ l: insetL, r: insetR, t: v, b: insetB })}
+        format={fmtPct}
+      />
+      <SliderRow
+        label="Bottom"
+        min={0}
+        max={CROP_MAX}
+        step={0.01}
+        value={insetB}
+        onChange={(v) => setInsets({ l: insetL, r: insetR, t: insetT, b: v })}
+        format={fmtPct}
+      />
+      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+        <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={() => applyRatio(project.canvasWidth, project.canvasHeight)}>
+          Fill frame
+        </Button>
+        <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={() => applyRatio(1, 1)}>
+          1:1
+        </Button>
+        <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={() => applyRatio(4, 5)}>
+          4:5
+        </Button>
+        <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={() => applyRatio(9, 16)}>
+          9:16
+        </Button>
+        <Button variant="outline" size="sm" className="h-6 px-2 text-[10px]" onClick={() => applyRatio(16, 9)}>
+          16:9
+        </Button>
+      </div>
+    </Section>
+  )
+}
+
 /* ================================================================ single clip editor */
 
 function SingleClipEditor({ clip }: { clip: Clip }) {
   const project = useEditor((s) => s.project)
+  const media = useEditor((s) => s.media)
   const updateClip = useEditor((s) => s.updateClip)
+  const replaceClipMedia = useEditor((s) => s.replaceClipMedia)
+  const insertFreezeFrame = useEditor((s) => s.insertFreezeFrame)
 
   const meta = KIND_META[clip.kind]
   const KindIcon = meta.icon
   const isVisual = clip.kind !== 'audio'
 
-  const patchTransform = (key: keyof Transform, v: number) => {
+  const patchTransform = (key: 'x' | 'y' | 'scale' | 'rotation' | 'opacity', v: number) => {
     const patch: Partial<Transform> = {}
     patch[key] = v
     updateClip(clip.id, { transform: patch }, `prop-${key}`)
+  }
+
+  const nudgeRotation = (delta: number) => {
+    let r = clip.transform.rotation + delta
+    if (r > 180) r -= 360
+    if (r < -180) r += 360
+    updateClip(clip.id, { transform: { rotation: r } }, 'rotation')
   }
 
   const patchFilter = (key: keyof Filters, v: number) => {
@@ -927,7 +1045,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
           title="Transform"
           icon={Move}
           onReset={() =>
-            updateClip(clip.id, { transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 } }, true)
+            updateClip(clip.id, { transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, flipX: false, flipY: false } }, true)
           }
         >
           <SliderRow
@@ -975,8 +1093,73 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             onChange={(v) => patchTransform('opacity', v)}
             format={fmtPct}
           />
+
+          {/* quick mirror + 90° rotate actions */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 flex-1 gap-1 px-1.5 text-[11px]"
+              onClick={() => nudgeRotation(-90)}
+              title="Rotate 90° counter-clockwise"
+            >
+              <RotateCcw className="h-3 w-3" /> −90°
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 flex-1 gap-1 px-1.5 text-[11px]"
+              onClick={() => nudgeRotation(90)}
+              title="Rotate 90° clockwise"
+            >
+              <RotateCw className="h-3 w-3" /> +90°
+            </Button>
+            <Button
+              variant={clip.transform.flipX ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 flex-1 gap-1 px-1.5 text-[11px]"
+              onClick={() => updateClip(clip.id, { transform: { flipX: !clip.transform.flipX } }, true)}
+              aria-pressed={!!clip.transform.flipX}
+              title="Mirror horizontally"
+            >
+              <FlipHorizontal2 className="h-3 w-3" /> Flip H
+            </Button>
+            <Button
+              variant={clip.transform.flipY ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 flex-1 gap-1 px-1.5 text-[11px]"
+              onClick={() => updateClip(clip.id, { transform: { flipY: !clip.transform.flipY } }, true)}
+              aria-pressed={!!clip.transform.flipY}
+              title="Mirror vertically"
+            >
+              <FlipVertical2 className="h-3 w-3" /> Flip V
+            </Button>
+          </div>
+
+          {/* fit mode — how the source fills the canvas (video / image) */}
+          {(clip.kind === 'video' || clip.kind === 'image') && (
+            <div className="flex items-center gap-2">
+              <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Fit</span>
+              <Select
+                value={clip.fit ?? 'cover'}
+                onValueChange={(v) => updateClip(clip.id, { fit: v as ClipFit }, true)}
+              >
+                <SelectTrigger className="h-7 flex-1 text-[11px]" aria-label="Fit mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cover">Cover — fill &amp; crop</SelectItem>
+                  <SelectItem value="contain">Contain — fit inside</SelectItem>
+                  <SelectItem value="stretch">Stretch — distort</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </Section>
       )}
+
+      {/* crop — video / image */}
+      {(clip.kind === 'video' || clip.kind === 'image') && <CropSection clip={clip} />}
 
       {/* animation keyframes — every clip kind */}
       <AnimationSection clip={clip} fps={project.fps} />
@@ -1013,6 +1196,74 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
               onCheckedChange={(on) => updateClip(clip.id, { muted: on }, true)}
             />
           </div>
+
+          {/* reverse playback — video only */}
+          {clip.kind === 'video' && (
+            <div className="space-y-1 rounded-lg border border-(--nc-line) bg-(--nc-panel-soft) p-2">
+              <div className="flex items-center gap-2">
+                <span className="flex flex-1 items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Rewind className="h-3 w-3" />
+                  Reverse playback
+                </span>
+                <Switch
+                  checked={clip.reverse ?? false}
+                  onCheckedChange={(on) => updateClip(clip.id, { reverse: on }, true)}
+                  aria-label="Reverse playback"
+                />
+              </div>
+              <p className="text-[10px] leading-snug text-muted-foreground/60">
+                Plays backwards frame-by-frame; audio is muted while reversed.
+              </p>
+            </div>
+          )}
+
+          {/* freeze frame — video only */}
+          {clip.kind === 'video' && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-full gap-1.5 text-[11px]"
+              onClick={async () => {
+                const ok = await insertFreezeFrame()
+                if (ok) toast.success('Freeze frame inserted ❄️ — 3s still, clips ripple right')
+                else toast('Move the playhead over a video clip first')
+              }}
+            >
+              <Snowflake className="h-3.5 w-3.5" />
+              Freeze frame at playhead
+            </Button>
+          )}
+
+          {/* replace source — swap media keeping the timeline slot */}
+          {clip.mediaId &&
+            (() => {
+              const compatible = media.filter((m) =>
+                clip.kind === 'audio' ? m.kind === 'audio' : m.kind === 'video' || m.kind === 'image' || m.kind === 'lut'
+              )
+              if (compatible.length < 1) return null
+              return (
+                <div className="flex items-center gap-2">
+                  <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Source</span>
+                  <Select
+                    value={clip.mediaId}
+                    onValueChange={(v) => {
+                      if (replaceClipMedia(clip.id, v)) toast.success('Media replaced — position & duration kept')
+                    }}
+                  >
+                    <SelectTrigger className="h-7 flex-1 text-[11px]" aria-label="Replace source media">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {compatible.map((m) => (
+                        <SelectItem key={m.id} value={m.id} className="text-[11px]">
+                          {m.kind === 'lut' ? 'LUT' : m.kind} · {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )
+            })()}
 
           {/* auto-duck — audio clips only */}
           {clip.kind === 'audio' && (

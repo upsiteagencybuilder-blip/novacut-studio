@@ -57,6 +57,21 @@ export interface Transform {
   rotation: number
   /** 0..1 */
   opacity: number
+  /** mirror horizontally (optional — older persisted projects omit it) */
+  flipX?: boolean
+  /** mirror vertically (optional — older persisted projects omit it) */
+  flipY?: boolean
+}
+
+/** How a media source fills the canvas (default "cover" = fill & crop) */
+export type ClipFit = 'cover' | 'contain' | 'stretch'
+
+/** Normalized source-rect crop (0..1 fractions of the natural media size) */
+export interface CropRect {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export interface Filters {
@@ -206,6 +221,12 @@ export interface Clip {
   /** full source length in seconds (limits trimming) — Infinity-ish for images/text */
   sourceDuration: number
   speed: number
+  /** play this video clip backwards (frame-stepped, audio muted) */
+  reverse?: boolean
+  /** how the source fills the canvas — default cover */
+  fit?: ClipFit
+  /** normalized crop rect, null/undefined = no crop */
+  crop?: CropRect | null
   /** 0..1 */
   volume: number
   muted: boolean

@@ -35,7 +35,7 @@ import {
   createTrack,
   type TextPreset,
 } from './constants'
-import { baseValueForProperty, clamp, evaluateKeyframeProperty, landingTime, projectDuration, round2, uid } from './utils'
+import { baseValueForProperty, clamp, evaluateKeyframeProperty, formatTimecode, landingTime, projectDuration, round2, uid } from './utils'
 import * as db from './db'
 
 /** Panel-friendly patch type: nested objects accept partials */
@@ -108,6 +108,10 @@ interface EditorStore {
   trimClip: (id: string, opts: { start?: number; trimStart?: number; duration?: number }, history?: boolean | string) => void
   splitClip: (id: string, time: number) => void
   splitAtPlayhead: () => void
+  /** swap a clip's media source keeping its timeline slot (position + duration) */
+  replaceClipMedia: (clipId: string, mediaId: string) => boolean
+  /** capture the current frame as a 3s still and ripple-insert it at the playhead */
+  insertFreezeFrame: () => Promise<boolean>
   deleteClip: (id: string) => void
   deleteSelected: () => void
   rippleDeleteSelected: () => void
@@ -514,6 +518,123 @@ export const useEditor = create<EditorStore>((set, get) => ({
       ? s.project.clips.filter((c) => s.selectedClipIds.includes(c.id) && t > c.start && t < c.start + c.duration)
       : s.project.clips.filter((c) => t > c.start + 0.08 && t < c.start + c.duration - 0.08)
     for (const c of targets) s.splitClip(c.id, t)
+  },
+
+  replaceClipMedia: (clipId, mediaId) => {
+    const s = get()
+    const clip = s.project.clips.find((c) => c.id === clipId)
+    const asset = s.media.find((m) => m.id === mediaId)
+    if (!clip || !asset || clip.mediaId === mediaId) return false
+    // keep the same media family: audio stays audio, visual stays visual
+    if (clip.kind === 'audio' && asset.kind !== 'audio') return false
+    if (clip.kind !== 'audio' && asset.kind === 'audio') return false
+    s.pushHistory()
+    const isImage = asset.kind === 'image' || asset.kind === 'lut'
+    const sourceDuration = isImage ? 3600 : Math.max(0.2, asset.duration)
+    // keep the slot: same start, duration clamped to the new source length
+    const duration = Math.min(clip.duration, sourceDuration)
+    const trimStart = Math.min(clip.trimStart, Math.max(0, sourceDuration - duration))
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: st.project.clips.map((c) =>
+          c.id === clipId
+            ? {
+                ...c,
+                mediaId,
+                name: asset.name,
+                kind: isImage ? 'image' : asset.kind === 'audio' ? 'audio' : 'video',
+                sourceDuration,
+                duration,
+                trimStart,
+                // source-dependent state resets — the new media starts clean
+                speed: 1,
+                reverse: false,
+                crop: null,
+              }
+            : c
+        ),
+      }),
+    }))
+    return true
+  },
+
+  insertFreezeFrame: async () => {
+    const s = get()
+    const t = s.currentTime
+    const visuals = s.project.clips.filter((c) => c.kind === 'video' || c.kind === 'image')
+    const target =
+      visuals.find((c) => s.selectedClipIds.includes(c.id) && t > c.start && t < c.start + c.duration) ??
+      visuals.find((c) => t >= c.start && t < c.start + c.duration)
+    if (!target) return false
+    const { getEngine } = await import('./engine')
+    const cap = getEngine().captureFrame()
+    if (!cap) return false
+    const blob = await cap.blob
+    if (!blob) return false
+    const asset: MediaAssetRuntime = {
+      id: uid('asset_'),
+      name: `Freeze ${formatTimecode(t, s.project.fps)}`,
+      kind: 'image',
+      mimeType: 'image/png',
+      size: blob.size,
+      duration: 0,
+      width: s.project.canvasWidth,
+      height: s.project.canvasHeight,
+      thumbnail: cap.dataUrl,
+      createdAt: Date.now(),
+      objectUrl: URL.createObjectURL(blob),
+      rawBlob: blob,
+    }
+    s.pushHistory()
+    const freezeDur = 3
+    const trackId = target.trackId
+    let clips = [...s.project.clips]
+    // split the target at the playhead when strictly inside it
+    const local = t - target.start
+    if (local > 0.08 && local < target.duration - 0.08) {
+      const leftDur = round2(local)
+      const rightDur = round2(target.duration - local)
+      const rightClip: Clip = {
+        ...JSON.parse(JSON.stringify(target)),
+        id: uid('clip_'),
+        start: round2(target.start + local),
+        duration: rightDur,
+        trimStart: round2(target.trimStart + local * target.speed),
+        fadeIn: 0,
+      }
+      clips = clips.map((c) => (c.id === target.id ? { ...c, duration: leftDur, fadeOut: 0 } : c))
+      clips.push(rightClip)
+    }
+    const stillClip = createClipFromMedia(s.project, asset, trackId, round2(t))
+    stillClip.duration = freezeDur
+    // ripple: same-track clips at/after the playhead slide right by the still's length
+    clips = clips.map((c) =>
+      c.trackId === trackId && c.start >= t - 0.001 && c.id !== stillClip.id ? { ...c, start: round2(c.start + freezeDur) } : c
+    )
+    clips.push(stillClip)
+    set((st) => ({
+      media: [asset, ...st.media],
+      mediaVersion: st.mediaVersion + 1,
+      project: withUpdatedAt({ ...st.project, clips }),
+      selectedClipIds: [stillClip.id],
+    }))
+    db.putAsset(
+      {
+        id: asset.id,
+        name: asset.name,
+        kind: asset.kind,
+        mimeType: asset.mimeType,
+        size: asset.size,
+        duration: asset.duration,
+        width: asset.width,
+        height: asset.height,
+        thumbnail: asset.thumbnail,
+        createdAt: asset.createdAt,
+      },
+      blob
+    ).catch((e) => console.error('freeze asset save failed', e))
+    return true
   },
 
   deleteClip: (id) => {

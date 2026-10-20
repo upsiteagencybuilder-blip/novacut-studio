@@ -267,6 +267,9 @@ class PreviewEngine {
     this.raf = 0
     for (const { el } of this.videos.values()) el.pause()
     for (const { el } of this.audios.values()) el.pause()
+    // reversed clips settle through async seeks — schedule a final render so
+    // the paused canvas always shows the settled reversed frame
+    this.invalidate()
   }
 
   seekTo(t: number) {
@@ -518,6 +521,11 @@ class PreviewEngine {
   }
 
   private expectedSourcePos(clip: Clip, tLocal: number): number {
+    if (clip.reverse) {
+      // play backwards: source position runs from the clip's out-point down to its in-point
+      const end = clip.trimStart + clip.duration * clip.speed
+      return end - tLocal * clip.speed
+    }
     return clip.trimStart + tLocal * clip.speed
   }
 
@@ -546,6 +554,40 @@ class PreviewEngine {
     } else {
       el.volume = vol
     }
+
+    // reversed playback is seek-driven (browsers can't play media backwards):
+    // pause the element and step currentTime; audio stays muted.
+    // Never stack seeks — issuing a new seek while one is in flight starves
+    // the decoder (readyState never recovers → black frames).
+    if (clip.reverse) {
+      if (!el.paused) el.pause()
+      el.muted = true
+      if (entry.gain) entry.gain.gain.value = 0
+      if (!el.seeking && Math.abs(el.currentTime - expected) > 0.05) {
+        try {
+          el.currentTime = expected
+          // a seek settles asynchronously — when it lands, draw the frame even
+          // while paused (the rAF loop is stopped, so nothing else repaints)
+          el.addEventListener(
+            'seeked',
+            () => {
+              if (!this.playing) {
+                try {
+                  this.renderFrame()
+                } catch {
+                  /* ignore */
+                }
+              }
+            },
+            { once: true }
+          )
+        } catch {
+          /* ignore */
+        }
+      }
+      return
+    }
+
     el.muted = vol <= 0.001 && !entry.gain
 
     if (this.playing) {
@@ -606,7 +648,8 @@ class PreviewEngine {
   }
 
   private needsPixelFx(clip: Clip): boolean {
-    return !!clip.chromaKey?.enabled || this.hasGrade(clip) || !!clip.lutId
+    // crop routes through the fx canvas too so vision fx receive cropped pixels
+    return !!clip.chromaKey?.enabled || this.hasGrade(clip) || !!clip.lutId || !!clip.crop
   }
 
   private getLut(clip: Clip, mediaMap: Map<string, MediaAssetRuntime>): LutData | null {
@@ -629,7 +672,8 @@ class PreviewEngine {
     dw: number,
     dh: number,
     clip: Clip,
-    mediaMap: Map<string, MediaAssetRuntime>
+    mediaMap: Map<string, MediaAssetRuntime>,
+    src?: { sx: number; sy: number; sw: number; sh: number }
   ): HTMLCanvasElement | null {
     if (!this.needsPixelFx(clip) || srcW <= 0 || srcH <= 0) return null
     // cap fx resolution for performance
@@ -648,7 +692,8 @@ class PreviewEngine {
     }
     const fx = this.fxCtx!
     fx.clearRect(0, 0, fw, fh)
-    fx.drawImage(source, 0, 0, fw, fh)
+    if (src) fx.drawImage(source, src.sx, src.sy, src.sw, src.sh, 0, 0, fw, fh)
+    else fx.drawImage(source, 0, 0, fw, fh)
     const img = fx.getImageData(0, 0, fw, fh)
     const changed = applyPixelEffects(img, {
       chroma: clip.chromaKey?.enabled ? clip.chromaKey : undefined,
@@ -789,6 +834,45 @@ class PreviewEngine {
     this.cb?.onAfterRender?.()
   }
 
+  /**
+   * Source-rect + destination-size geometry for a media clip, honoring its
+   * normalized crop rect and fit mode (cover / contain / stretch).
+   */
+  private mediaDrawGeometry(
+    clip: Clip,
+    vw: number,
+    vh: number,
+    W: number,
+    H: number
+  ): { sx: number; sy: number; sw: number; sh: number; dw: number; dh: number } {
+    const c = clip.crop
+    const sx = clamp(c?.x ?? 0, 0, 0.95) * vw
+    const sy = clamp(c?.y ?? 0, 0, 0.95) * vh
+    const sw = Math.max(2, clamp(c?.width ?? 1, 0.05, 1) * vw)
+    const sh = Math.max(2, clamp(c?.height ?? 1, 0.05, 1) * vh)
+    let dw: number
+    let dh: number
+    const fit = clip.fit ?? 'cover'
+    if (fit === 'stretch') {
+      dw = W
+      dh = H
+    } else {
+      const base = fit === 'contain' ? Math.min(W / sw, H / sh) : Math.max(W / sw, H / sh)
+      dw = sw * base
+      dh = sh * base
+    }
+    return { sx, sy, sw, sh, dw, dh }
+  }
+
+  /** Snapshot of the composited canvas right now (freeze-frame source) */
+  captureFrame(): { blob: Promise<Blob | null>; dataUrl: string } | null {
+    if (!this.canvas) return null
+    const dataUrl = this.canvas.toDataURL('image/jpeg', 0.72)
+    const canvas = this.canvas
+    const blob = new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+    return { blob, dataUrl }
+  }
+
   private drawClip(ctx: CanvasRenderingContext2D, clip: Clip, t: number, W: number, H: number, mediaMap: Map<string, MediaAssetRuntime>, project: Project) {
     const tLocal = t - clip.start
 
@@ -912,6 +996,13 @@ class PreviewEngine {
     ctx.translate(W / 2 + tx * W + motionX + shakeX * W, H / 2 + ty * H + motionY + shakeY * H)
     ctx.rotate(((trot + shakeRot) * Math.PI) / 180)
 
+    // media mirroring (flip) — applied to video/image only; text mirrored would be unreadable
+    if (clip.kind === 'video' || clip.kind === 'image') {
+      const fx = clip.transform.flipX ? -1 : 1
+      const fy = clip.transform.flipY ? -1 : 1
+      if (fx !== 1 || fy !== 1) ctx.scale(fx, fy)
+    }
+
     // zoomPulse scales text/sticker around their center; media kinds fold it
     // into their draw scale below (avoid double application)
     if (overlayZoom !== 1 && (clip.kind === 'text' || clip.kind === 'sticker')) {
@@ -928,16 +1019,14 @@ class PreviewEngine {
       if (img && img.naturalWidth > 0) {
         const s = tscale * motionScale * overlayZoom
         ctx.scale(s, s)
-        const base = Math.max(W / img.naturalWidth, H / img.naturalHeight)
-        const dw = img.naturalWidth * base
-        const dh = img.naturalHeight * base
-        const fxc = this.drawThroughFx(img, img.naturalWidth, img.naturalHeight, dw, dh, clip, mediaMap)
-        if (vis && this.drawVisionProcessed(ctx, fxc ?? img, dw, dh, vis, tLocal)) {
+        const g = this.mediaDrawGeometry(clip, img.naturalWidth, img.naturalHeight, W, H)
+        const fxc = this.drawThroughFx(img, img.naturalWidth, img.naturalHeight, g.dw, g.dh, clip, mediaMap, g)
+        if (vis && this.drawVisionProcessed(ctx, fxc ?? img, g.dw, g.dh, vis, tLocal)) {
           // vision post-FX replaced the plain draw (clip filters are baked into
           // the vision source; ctx.filter was reset for the composite)
-        } else if (fxc) ctx.drawImage(fxc, 0, 0, fxc.width, fxc.height, -dw / 2, -dh / 2, dw, dh)
-        else ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh)
-        this.bounds.set(clip.id, this.boundsFromTransform(clip, W, H, dw * s, dh * s, tx, ty, trot))
+        } else if (fxc) ctx.drawImage(fxc, 0, 0, fxc.width, fxc.height, -g.dw / 2, -g.dh / 2, g.dw, g.dh)
+        else ctx.drawImage(img, g.sx, g.sy, g.sw, g.sh, -g.dw / 2, -g.dh / 2, g.dw, g.dh)
+        this.bounds.set(clip.id, this.boundsFromTransform(clip, W, H, g.dw * s, g.dh * s, tx, ty, trot))
       } else {
         this.bounds.delete(clip.id)
       }
@@ -946,16 +1035,14 @@ class PreviewEngine {
       if (el && el.readyState >= 2 && el.videoWidth > 0) {
         const s = tscale * motionScale * overlayZoom
         ctx.scale(s, s)
-        const base = Math.max(W / el.videoWidth, H / el.videoHeight)
-        const dw = el.videoWidth * base
-        const dh = el.videoHeight * base
-        const fxc = this.drawThroughFx(el, el.videoWidth, el.videoHeight, dw, dh, clip, mediaMap)
-        if (vis && this.drawVisionProcessed(ctx, fxc ?? el, dw, dh, vis, tLocal)) {
+        const g = this.mediaDrawGeometry(clip, el.videoWidth, el.videoHeight, W, H)
+        const fxc = this.drawThroughFx(el, el.videoWidth, el.videoHeight, g.dw, g.dh, clip, mediaMap, g)
+        if (vis && this.drawVisionProcessed(ctx, fxc ?? el, g.dw, g.dh, vis, tLocal)) {
           // vision post-FX replaced the plain draw (clip filters are baked into
           // the vision source; ctx.filter was reset for the composite)
-        } else if (fxc) ctx.drawImage(fxc, 0, 0, fxc.width, fxc.height, -dw / 2, -dh / 2, dw, dh)
-        else ctx.drawImage(el, -dw / 2, -dh / 2, dw, dh)
-        this.bounds.set(clip.id, this.boundsFromTransform(clip, W, H, dw * s, dh * s, tx, ty, trot))
+        } else if (fxc) ctx.drawImage(fxc, 0, 0, fxc.width, fxc.height, -g.dw / 2, -g.dh / 2, g.dw, g.dh)
+        else ctx.drawImage(el, g.sx, g.sy, g.sw, g.sh, -g.dw / 2, -g.dh / 2, g.dw, g.dh)
+        this.bounds.set(clip.id, this.boundsFromTransform(clip, W, H, g.dw * s, g.dh * s, tx, ty, trot))
       } else {
         this.bounds.delete(clip.id)
       }
