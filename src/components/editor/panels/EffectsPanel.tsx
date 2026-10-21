@@ -12,7 +12,7 @@
  * browser for the currently selected clip.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   ArrowRight,
   AudioLines,
@@ -120,9 +120,59 @@ function formatDuration(seconds: number): string {
 }
 
 function cardClass(active: boolean): string {
-  return active
-    ? 'relative cursor-pointer overflow-hidden rounded-lg border border-(--nc-accent) bg-(--nc-panel) shadow-[0_0_14px_var(--nc-accent-glow-soft)] ring-1 ring-(--nc-accent) transition'
-    : 'relative cursor-pointer overflow-hidden rounded-lg border border-(--nc-line) bg-(--nc-panel) transition hover:border-fuchsia-400/60 hover:bg-(--nc-panel-strong)'
+  const base =
+    active
+      ? 'relative cursor-pointer overflow-hidden rounded-lg border border-(--nc-accent) bg-(--nc-panel) shadow-[0_0_14px_var(--nc-accent-glow-soft)] ring-1 ring-(--nc-accent) transition'
+      : 'relative cursor-pointer overflow-hidden rounded-lg border border-(--nc-line) bg-(--nc-panel) transition hover:border-fuchsia-400/60 hover:bg-(--nc-panel-strong)'
+  return `${base} outline-none focus-visible:ring-2 focus-visible:ring-(--nc-accent)`
+}
+
+/**
+ * Interactive card root as a div (role=button) — the favorite star is a real
+ * <button>, and nesting a button inside a button is invalid HTML that breaks
+ * clicks in some browsers. Enter/Space keyboard activation is preserved.
+ */
+function cardA11y(onApply: () => void) {
+  return {
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: onApply,
+    onKeyDown: (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        onApply()
+      }
+    },
+  }
+}
+
+function FavoriteStar({
+  active,
+  onToggle,
+  label,
+}: {
+  active: boolean
+  onToggle: () => void
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      title={active ? 'Remove from favorites' : 'Add to favorites'}
+      aria-label={active ? `Remove ${label} from favorites` : `Add ${label} to favorites`}
+      aria-pressed={active}
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+      className={cn(
+        'absolute left-1 top-1 z-10 flex size-5 items-center justify-center rounded-full bg-black/40 backdrop-blur-sm transition hover:scale-110 hover:bg-black/60',
+        active ? 'text-amber-300' : 'text-white/60 hover:text-white'
+      )}
+    >
+      <Star className={cn('size-3', active && 'fill-amber-300')} />
+    </button>
+  )
 }
 
 /** Shallow-compare the effect's filter patch against the clip filters */
@@ -232,9 +282,22 @@ function SectionTitle({ children }: { children: string }) {
 
 /* ---------------- effect cards ---------------- */
 
-function ColorCard({ effect, active, onApply }: { effect: ColorEffect; active: boolean; onApply: () => void }) {
+function ColorCard({
+  effect,
+  active,
+  fav,
+  onFav,
+  onApply,
+}: {
+  effect: ColorEffect
+  active: boolean
+  fav: boolean
+  onFav: () => void
+  onApply: () => void
+}) {
   return (
-    <button type="button" title={effect.name} aria-pressed={active} onClick={onApply} className={cardClass(active)}>
+    <div {...cardA11y(onApply)} title={effect.name} aria-pressed={active} className={cardClass(active)}>
+      <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <span
         className="block h-12 w-full"
         style={{ background: effect.swatch.bg, filter: effect.swatch.filter }}
@@ -243,13 +306,24 @@ function ColorCard({ effect, active, onApply }: { effect: ColorEffect; active: b
       <span className="block truncate px-1 pb-1 pt-1 text-center text-[9px] leading-tight text-muted-foreground">
         {effect.name}
       </span>
-    </button>
+    </div>
   )
 }
 
-function TransitionCard({ effect, onApply }: { effect: TransitionEffect; onApply: () => void }) {
+function TransitionCard({
+  effect,
+  fav,
+  onFav,
+  onApply,
+}: {
+  effect: TransitionEffect
+  fav: boolean
+  onFav: () => void
+  onApply: () => void
+}) {
   return (
-    <button type="button" title={effect.name} onClick={onApply} className={cardClass(false)}>
+    <div {...cardA11y(onApply)} title={effect.name} className={cardClass(false)}>
+      <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <span className="flex h-12 w-full items-center justify-center gap-1 bg-(--nc-scrim)" aria-hidden>
         <span className="h-6 w-7 rounded border border-(--nc-line) bg-(--nc-panel-strong)" />
         <ArrowRight className="size-3.5 text-fuchsia-300" />
@@ -261,13 +335,26 @@ function TransitionCard({ effect, onApply }: { effect: TransitionEffect; onApply
       <span className="block pb-1 text-center text-[8px] tabular-nums text-muted-foreground/70">
         {formatDuration(effect.duration)}
       </span>
-    </button>
+    </div>
   )
 }
 
-function TextCard({ effect, active, onApply }: { effect: TextEffect; active: boolean; onApply: () => void }) {
+function TextCard({
+  effect,
+  active,
+  fav,
+  onFav,
+  onApply,
+}: {
+  effect: TextEffect
+  active: boolean
+  fav: boolean
+  onFav: () => void
+  onApply: () => void
+}) {
   return (
-    <button type="button" title={effect.name} aria-pressed={active} onClick={onApply} className={cardClass(active)}>
+    <div {...cardA11y(onApply)} title={effect.name} aria-pressed={active} className={cardClass(active)}>
+      <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <span className="flex h-12 w-full items-center justify-center overflow-hidden bg-(--nc-scrim)" aria-hidden>
         <span className="nc-tx-preview select-none text-base leading-none" style={textPreviewStyle(effect)}>
           Aa
@@ -276,13 +363,26 @@ function TextCard({ effect, active, onApply }: { effect: TextEffect; active: boo
       <span className="block truncate px-1 pb-1 pt-1 text-center text-[9px] leading-tight text-muted-foreground">
         {effect.name}
       </span>
-    </button>
+    </div>
   )
 }
 
-function OverlayCard({ effect, active, onApply }: { effect: OverlayEffect; active: boolean; onApply: () => void }) {
+function OverlayCard({
+  effect,
+  active,
+  fav,
+  onFav,
+  onApply,
+}: {
+  effect: OverlayEffect
+  active: boolean
+  fav: boolean
+  onFav: () => void
+  onApply: () => void
+}) {
   return (
-    <button type="button" title={effect.name} aria-pressed={active} onClick={onApply} className={cardClass(active)}>
+    <div {...cardA11y(onApply)} title={effect.name} aria-pressed={active} className={cardClass(active)}>
+      <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <span className="relative block h-12 w-full" style={{ background: effect.swatch }} aria-hidden>
         <span className="absolute inset-0 flex items-center justify-center text-lg">{effect.emoji}</span>
         {active && (
@@ -294,7 +394,7 @@ function OverlayCard({ effect, active, onApply }: { effect: OverlayEffect; activ
       <span className="block truncate px-1 pb-1 pt-1 text-center text-[9px] leading-tight text-muted-foreground">
         {effect.name}
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -303,6 +403,8 @@ function AudioCard({
   playing,
   loading,
   adding,
+  fav,
+  onFav,
   onPreview,
   onAdd,
 }: {
@@ -310,11 +412,14 @@ function AudioCard({
   playing: boolean
   loading: boolean
   adding: boolean
+  fav: boolean
+  onFav: () => void
   onPreview: () => void
   onAdd: () => void
 }) {
   return (
     <div className={cardClass(false)}>
+      <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <button
         type="button"
         title={playing ? 'Stop preview' : 'Preview audio'}
@@ -354,9 +459,22 @@ function AudioCard({
 
 /* ---------------- vision / voice / motion / speed cards ---------------- */
 
-function VisionCard({ effect, active, onApply }: { effect: VisionEffect; active: boolean; onApply: () => void }) {
+function VisionCard({
+  effect,
+  active,
+  fav,
+  onFav,
+  onApply,
+}: {
+  effect: VisionEffect
+  active: boolean
+  fav: boolean
+  onFav: () => void
+  onApply: () => void
+}) {
   return (
-    <button type="button" title={effect.name} aria-pressed={active} onClick={onApply} className={cardClass(active)}>
+    <div {...cardA11y(onApply)} title={effect.name} aria-pressed={active} className={cardClass(active)}>
+      <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <span className="relative block h-12 w-full" style={{ background: effect.swatch }} aria-hidden>
         <span className="absolute inset-0 flex items-center justify-center text-lg">{effect.emoji}</span>
         {active && (
@@ -368,7 +486,7 @@ function VisionCard({ effect, active, onApply }: { effect: VisionEffect; active:
       <span className="block truncate px-1 pb-1 pt-1 text-center text-[9px] leading-tight text-muted-foreground">
         {effect.name}
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -377,6 +495,8 @@ function VoiceCard({
   playing,
   loading,
   applying,
+  fav,
+  onFav,
   onPreview,
   onApply,
 }: {
@@ -384,11 +504,14 @@ function VoiceCard({
   playing: boolean
   loading: boolean
   applying: boolean
+  fav: boolean
+  onFav: () => void
   onPreview: () => void
   onApply: () => void
 }) {
   return (
     <div className={cardClass(false)}>
+      <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <button
         type="button"
         title={playing ? 'Stop preview' : 'Preview voice effect'}
@@ -430,9 +553,22 @@ function VoiceCard({
   )
 }
 
-function MotionCard({ effect, active, onApply }: { effect: MotionEffect; active: boolean; onApply: () => void }) {
+function MotionCard({
+  effect,
+  active,
+  fav,
+  onFav,
+  onApply,
+}: {
+  effect: MotionEffect
+  active: boolean
+  fav: boolean
+  onFav: () => void
+  onApply: () => void
+}) {
   return (
-    <button type="button" title={effect.name} aria-pressed={active} onClick={onApply} className={cardClass(active)}>
+    <div {...cardA11y(onApply)} title={effect.name} aria-pressed={active} className={cardClass(active)}>
+      <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <span className="flex h-12 w-full items-center justify-center bg-(--nc-scrim) text-2xl" aria-hidden>
         {effect.emoji}
       </span>
@@ -442,13 +578,26 @@ function MotionCard({ effect, active, onApply }: { effect: MotionEffect; active:
       <span className="block truncate px-1 pb-1 text-center text-[8px] leading-tight text-muted-foreground/70">
         {motionDescription(effect)}
       </span>
-    </button>
+    </div>
   )
 }
 
-function SpeedCard({ effect, active, onApply }: { effect: SpeedEffect; active: boolean; onApply: () => void }) {
+function SpeedCard({
+  effect,
+  active,
+  fav,
+  onFav,
+  onApply,
+}: {
+  effect: SpeedEffect
+  active: boolean
+  fav: boolean
+  onFav: () => void
+  onApply: () => void
+}) {
   return (
-    <button type="button" title={effect.name} aria-pressed={active} onClick={onApply} className={cardClass(active)}>
+    <div {...cardA11y(onApply)} title={effect.name} aria-pressed={active} className={cardClass(active)}>
+      <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <span className="flex h-12 w-full items-center justify-center bg-(--nc-scrim)" aria-hidden>
         <span
           className={
@@ -466,7 +615,7 @@ function SpeedCard({ effect, active, onApply }: { effect: SpeedEffect; active: b
       <span className="block truncate px-1 pb-1 text-center text-[8px] leading-tight text-muted-foreground/70">
         {effect.hint ?? ''}
       </span>
-    </button>
+    </div>
   )
 }
 
@@ -556,6 +705,13 @@ export function EffectsPanel() {
   const visionState = clip?.vision ?? null
   const visionMatch = visionState ? getEffect(visionState.effectId) : undefined
   const activeVision = visionMatch && visionMatch.category === 'vision' ? visionMatch : null
+
+  /** The voice effect whose custom controls (pitch + mix) are on screen. */
+  const customVoiceEffect = useMemo(() => {
+    if (!customVoice) return undefined
+    const e = getEffect(customVoice.effectId)
+    return e && e.category === 'voice' ? e : undefined
+  }, [customVoice])
 
   const clearSearchFilters = useCallback(() => {
     setSearch('')
@@ -863,22 +1019,38 @@ export function EffectsPanel() {
     [voiceLoadingId, voicePreviewId, customVoice]
   )
 
-  /** Re-renders the custom-controlled preview after a slider commit. */
-  const rePreviewCustomVoice = useCallback(async () => {
-    if (!customVoice) return
-    const effect = getEffect(customVoice.effectId)
-    if (!effect || effect.category !== 'voice') return
-    try {
-      await previewVoiceEffect(effect, { pitch: customVoice.pitch, mix: customVoice.mix })
-      setVoicePreviewId(effect.id)
-      if (voiceEndTimer.current !== null) window.clearTimeout(voiceEndTimer.current)
-      voiceEndTimer.current = window.setTimeout(() => {
-        setVoicePreviewId((cur) => (cur === effect.id ? null : cur))
-      }, VOICE_PREVIEW_MS)
-    } catch {
-      // slider-commit re-previews are best-effort
-    }
-  }, [customVoice])
+  /** Re-renders the custom-controlled preview after a slider commit/reset. */
+  const rePreviewCustomVoice = useCallback(
+    async (override?: { effectId: string; pitch: number; mix: number }) => {
+      const cv = override ?? customVoice
+      if (!cv) return
+      const effect = getEffect(cv.effectId)
+      if (!effect || effect.category !== 'voice') return
+      try {
+        await previewVoiceEffect(effect, { pitch: cv.pitch, mix: cv.mix })
+        setVoicePreviewId(effect.id)
+        if (voiceEndTimer.current !== null) window.clearTimeout(voiceEndTimer.current)
+        voiceEndTimer.current = window.setTimeout(() => {
+          setVoicePreviewId((cur) => (cur === effect.id ? null : cur))
+        }, VOICE_PREVIEW_MS)
+      } catch {
+        // slider-commit re-previews are best-effort
+      }
+    },
+    [customVoice]
+  )
+
+  /** Restore the definition defaults (pitch + mix) and re-preview. */
+  const resetCustomVoice = useCallback(() => {
+    setCustomVoice((cv) => {
+      if (!cv) return cv
+      const e = getEffect(cv.effectId)
+      if (!e || e.category !== 'voice') return cv
+      const target = { effectId: cv.effectId, pitch: e.spec.pitch ?? 0, mix: e.mix }
+      void rePreviewCustomVoice(target)
+      return target
+    })
+  }, [rePreviewCustomVoice])
 
   /* ---------- voice: apply — offline DSP the source audio → new clip audio ----------
    * Audio clips: the processed render replaces the clip's audio in place.
@@ -965,6 +1137,8 @@ export function EffectsPanel() {
 
   /* ---------- card switch ---------- */
   const renderCard = (effect: Effect) => {
+    const fav = favorites.includes(effect.id)
+    const onFav = () => toggleFavorite(effect.id)
     switch (effect.category) {
       case 'color':
         return (
@@ -972,17 +1146,21 @@ export function EffectsPanel() {
             key={effect.id}
             effect={effect}
             active={clip ? colorEffectActive(clip, effect) : false}
+            fav={fav}
+            onFav={onFav}
             onApply={() => applyColor(effect)}
           />
         )
       case 'transition':
-        return <TransitionCard key={effect.id} effect={effect} onApply={() => applyTransition(effect)} />
+        return <TransitionCard key={effect.id} effect={effect} fav={fav} onFav={onFav} onApply={() => applyTransition(effect)} />
       case 'text':
         return (
           <TextCard
             key={effect.id}
             effect={effect}
             active={clip ? textEffectActive(clip, effect) : false}
+            fav={fav}
+            onFav={onFav}
             onApply={() => applyText(effect)}
           />
         )
@@ -995,6 +1173,8 @@ export function EffectsPanel() {
             playing={previewId === effect.id}
             loading={loadingId === effect.id}
             adding={addingId === effect.id}
+            fav={fav}
+            onFav={onFav}
             onPreview={() => void togglePreview(effect)}
             onAdd={() => void addToLibrary(effect)}
           />
@@ -1005,6 +1185,8 @@ export function EffectsPanel() {
             key={effect.id}
             effect={effect}
             active={clip?.overlay?.effectId === effect.id}
+            fav={fav}
+            onFav={onFav}
             onApply={() => applyOverlay(effect)}
           />
         )
@@ -1014,6 +1196,8 @@ export function EffectsPanel() {
             key={effect.id}
             effect={effect}
             active={clip?.vision?.effectId === effect.id}
+            fav={fav}
+            onFav={onFav}
             onApply={() => applyVision(effect)}
           />
         )
@@ -1025,6 +1209,8 @@ export function EffectsPanel() {
             playing={voicePreviewId === effect.id}
             loading={voiceLoadingId === effect.id}
             applying={voiceApplyingId === effect.id}
+            fav={fav}
+            onFav={onFav}
             onPreview={() => void toggleVoicePreview(effect)}
             onApply={() => void applyVoiceFx(effect)}
           />
@@ -1035,6 +1221,8 @@ export function EffectsPanel() {
             key={effect.id}
             effect={effect}
             active={clip ? motionEffectActive(clip, effect) : false}
+            fav={fav}
+            onFav={onFav}
             onApply={() => applyMotion(effect)}
           />
         )
@@ -1044,6 +1232,8 @@ export function EffectsPanel() {
             key={effect.id}
             effect={effect}
             active={clip?.speed === effect.speed}
+            fav={fav}
+            onFav={onFav}
             onApply={() => applySpeed(effect)}
           />
         )
@@ -1209,9 +1399,9 @@ export function EffectsPanel() {
         </div>
       </div>
 
-      {/* ---------- category chips ---------- */}
+      {/* ---------- category chips (All / Favorites / Recent + 10 categories) ---------- */}
       <div className="-mx-0.5 flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {CATEGORY_CHIPS.map((chip) => {
+        {chips.map((chip) => {
           const active = category === chip.id
           return (
             <button
@@ -1241,11 +1431,28 @@ export function EffectsPanel() {
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-(--nc-line) bg-(--nc-panel)">
             <SearchX className="size-5 text-fuchsia-300" />
           </span>
-          <p className="mt-3 text-sm font-medium">No effects match</p>
-          <p className="mt-1 text-xs text-muted-foreground">Try a different search or category.</p>
-          <Button variant="outline" size="sm" className="mt-3 h-8 rounded-lg text-xs" onClick={clearSearchFilters}>
-            Clear search
-          </Button>
+          <p className="mt-3 text-sm font-medium">
+            {category === 'favorites' && favorites.length === 0
+              ? 'No favorites yet'
+              : category === 'recent' && recent.length === 0
+                ? 'Nothing used yet'
+                : 'No effects match'}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {category === 'favorites' && favorites.length === 0
+              ? 'Tap the star on any effect card to pin it here.'
+              : category === 'recent' && recent.length === 0
+                ? 'Applied and rendered effects show up in Recent.'
+                : 'Try a different search or category.'}
+          </p>
+          {!(
+            (category === 'favorites' && favorites.length === 0) ||
+            (category === 'recent' && recent.length === 0)
+          ) && (
+            <Button variant="outline" size="sm" className="mt-3 h-8 rounded-lg text-xs" onClick={clearSearchFilters}>
+              Clear search
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -1341,6 +1548,100 @@ export function EffectsPanel() {
               )
             }
           />
+        </section>
+      )}
+
+      {/* ---------- voice FX custom controls (pitch + mix, re-previews on release) ---------- */}
+      {customVoice && customVoiceEffect && (
+        <section className="nc-glass space-y-2.5 rounded-lg p-3">
+          <div className="flex items-center justify-between">
+            <SectionTitle>Voice FX controls</SectionTitle>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={resetCustomVoice}
+                className="text-[10px] font-medium text-muted-foreground transition hover:text-foreground"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                aria-label="Close voice controls"
+                onClick={() => setCustomVoice(null)}
+                className="text-muted-foreground transition hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-base" aria-hidden>
+              {customVoiceEffect.emoji}
+            </span>
+            <span className="truncate text-[11px] text-foreground/90" title={customVoiceEffect.name}>
+              {customVoiceEffect.name}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-foreground/80">Pitch</span>
+              <span className="text-[10px] tabular-nums text-muted-foreground">
+                {customVoice.pitch > 0 ? `+${customVoice.pitch}` : customVoice.pitch} st
+              </span>
+            </div>
+            <Slider
+              min={-12}
+              max={12}
+              step={1}
+              value={[customVoice.pitch]}
+              aria-label="Voice pitch in semitones"
+              onValueChange={(v) =>
+                setCustomVoice((cv) =>
+                  cv && cv.effectId === customVoiceEffect.id ? { ...cv, pitch: v[0] ?? 0 } : cv
+                )
+              }
+              onValueCommit={() => void rePreviewCustomVoice()}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-foreground/80">Mix (dry / wet)</span>
+              <span className="text-[10px] tabular-nums text-muted-foreground">
+                {Math.round(customVoice.mix * 100)}%
+              </span>
+            </div>
+            <Slider
+              min={0}
+              max={1}
+              step={0.01}
+              value={[customVoice.mix]}
+              aria-label="Voice effect mix"
+              onValueChange={(v) =>
+                setCustomVoice((cv) =>
+                  cv && cv.effectId === customVoiceEffect.id ? { ...cv, mix: v[0] ?? 0 } : cv
+                )
+              }
+              onValueCommit={() => void rePreviewCustomVoice()}
+            />
+          </div>
+          <p className="text-[9px] leading-snug text-muted-foreground/70">
+            Preview re-renders when you release a slider — Apply bakes these settings into the clip.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={voiceApplyingId !== null}
+            onClick={() => void applyVoiceFx(customVoiceEffect)}
+            className="nc-gradient h-8 w-full rounded-lg text-xs text-white"
+          >
+            {voiceApplyingId !== null ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" /> Applying…
+              </>
+            ) : (
+              'Apply to selected clip'
+            )}
+          </Button>
         </section>
       )}
 

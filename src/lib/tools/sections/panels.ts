@@ -14,7 +14,7 @@ export const PANELS_TOOLS: ProTool[] = [
 
   // -------- Editing panels --------
   { id: 'panel-timeline-panel', name: 'Timeline Panel', section: 'panels', group: 'Editing panels', status: 'live', desc: 'Multi-track timeline with drag, trim handles, snapping and playhead scrubbing' },
-  { id: 'panel-effects-panel', name: 'Effects Panel', section: 'panels', group: 'Editing panels', status: 'live', desc: 'Effects browser lists 1059 effects across ten searchable categories', action: 'open-effects' },
+  { id: 'panel-effects-panel', name: 'Effects Panel', section: 'panels', group: 'Editing panels', status: 'live', desc: 'Effects browser lists 1059 effects across ten searchable categories with favorites, recents and per-effect controls', action: 'open-effects' },
   { id: 'panel-effect-controls-panel', name: 'Effect Controls Panel', section: 'panels', group: 'Editing panels', status: 'live', desc: 'Properties panel edits transforms, filters, grade, keyframes and blend modes' },
   { id: 'panel-inspector-panel', name: 'Inspector Panel', section: 'panels', group: 'Editing panels', status: 'live', desc: 'Inspector adapts its controls to the selected clip kind' },
   { id: 'panel-media-browser', name: 'Media Browser', section: 'panels', group: 'Editing panels', status: 'planned', desc: 'Browse system folders and camera cards inside the app' },
