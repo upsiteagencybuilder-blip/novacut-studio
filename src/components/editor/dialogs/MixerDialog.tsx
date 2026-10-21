@@ -1,11 +1,12 @@
 'use client'
 
 /**
- * Audio mixer — per-track faders (0..×1.5), mute switches and a live
- * master output peak meter driven by the engine analyser.
+ * Audio mixer — per-track faders (0..×1.5), mute + solo switches, live
+ * per-track level meters and a master output meter (dB scale + peak hold)
+ * driven by the engine analysers.
  */
 import { useEffect, useRef } from 'react'
-import { AudioLines, Film, Layers, SlidersVertical, Volume2, VolumeX } from 'lucide-react'
+import { AudioLines, Film, Headphones, Layers, SlidersVertical, Volume2, VolumeX } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
 import { getEngine } from '@/lib/editor/engine'
 import type { Track } from '@/lib/editor/types'
@@ -16,9 +17,11 @@ import { Slider } from '@/components/ui/slider'
 const VIOLET_GRADIENT = 'linear-gradient(90deg, #8b5cf6, #e879f9)'
 const ROSE_GRADIENT = 'linear-gradient(90deg, #f43f5e, #fb7185)'
 
-/** Live master peak meter — polls the engine analyser every animation frame. */
+/** Live master peak meter with peak-hold marker and a dB tick scale. */
 function MasterMeter() {
   const barRef = useRef<HTMLDivElement>(null)
+  const peakRef = useRef<HTMLDivElement>(null)
+  const peak = useRef(0)
 
   useEffect(() => {
     let raf = 0
@@ -36,6 +39,13 @@ function MasterMeter() {
         el.style.width = `${Math.round(Math.min(1, Math.max(0, level)) * 100)}%`
         el.style.background = level > 0.85 ? ROSE_GRADIENT : VIOLET_GRADIENT
       }
+      // falling peak-hold (drops ~7%/frame after a new peak)
+      if (level >= peak.current) peak.current = level
+      else peak.current = Math.max(level, peak.current - 0.006)
+      if (peakRef.current) {
+        peakRef.current.style.left = `${Math.round(Math.min(1, Math.max(0, peak.current)) * 100)}%`
+        peakRef.current.style.opacity = peak.current > 0.02 ? '1' : '0'
+      }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -44,6 +54,72 @@ function MasterMeter() {
       cancelAnimationFrame(raf)
     }
   }, [])
+
+  return (
+    <div>
+      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-(--nc-panel-strong)">
+        <div
+          ref={barRef}
+          className="h-full rounded-full"
+          style={{ width: '0%', background: VIOLET_GRADIENT }}
+        />
+        {/* peak-hold marker */}
+        <div
+          ref={peakRef}
+          className="absolute top-0 h-full w-0.5 bg-white/80 transition-opacity"
+          style={{ left: '0%', opacity: 0 }}
+          aria-hidden
+        />
+        {/* dB ticks: -40 / -20 / -12 / -6 dB on the linear scale */}
+        {[1, 10, 25, 50].map((pct) => (
+          <div
+            key={pct}
+            className="absolute top-0 h-full w-px bg-white/25"
+            style={{ left: `${pct}%` }}
+            aria-hidden
+          />
+        ))}
+      </div>
+      <div className="mt-0.5 flex justify-between font-mono text-[8px] leading-none text-muted-foreground/60">
+        <span>-∞</span>
+        <span className="ml-[10%]">-40</span>
+        <span className="ml-[8%]">-20</span>
+        <span className="ml-[10%]">-12</span>
+        <span className="ml-[12%]">-6</span>
+        <span>0dB</span>
+      </div>
+    </div>
+  )
+}
+
+/** Live per-track level meter — polls the engine's per-entry analysers. */
+function TrackMeter({ trackId }: { trackId: string }) {
+  const barRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let raf = 0
+    let alive = true
+    const tick = () => {
+      if (!alive) return
+      let level = 0
+      try {
+        level = getEngine().getTrackLevel(trackId)
+      } catch {
+        level = 0
+      }
+      const el = barRef.current
+      if (el) {
+        el.style.width = `${Math.round(Math.min(1, Math.max(0, level)) * 100)}%`
+        el.style.background = level > 0.85 ? ROSE_GRADIENT : VIOLET_GRADIENT
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => {
+      alive = false
+      cancelAnimationFrame(raf)
+    }
+  }, [trackId])
 
   return (
     <div className="h-1 w-full overflow-hidden rounded-full bg-(--nc-panel-strong)">
@@ -59,6 +135,7 @@ function MasterMeter() {
 function TrackFaderRow({ track }: { track: Track }) {
   const setTrackVolume = useEditor((s) => s.setTrackVolume)
   const updateTrack = useEditor((s) => s.updateTrack)
+  const setTrackSolo = useEditor((s) => s.setTrackSolo)
 
   const isAudio = track.kind === 'audio'
   const volume = track.volume ?? 1
@@ -67,50 +144,80 @@ function TrackFaderRow({ track }: { track: Track }) {
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-xl border p-2.5',
-        isAudio ? 'border-emerald-400/25 bg-emerald-500/[0.06]' : 'border-(--nc-line) bg-(--nc-panel-soft)'
+        'rounded-xl border p-2.5',
+        track.solo
+          ? 'border-amber-400/40 bg-amber-500/[0.07]'
+          : isAudio
+            ? 'border-emerald-400/25 bg-emerald-500/[0.06]'
+            : 'border-(--nc-line) bg-(--nc-panel-soft)'
       )}
     >
-      <span
-        className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-          isAudio ? 'bg-emerald-500/15' : 'bg-(--nc-panel)'
-        )}
-      >
-        <KindIcon className={cn('size-4', isAudio ? 'text-emerald-300' : 'text-fuchsia-300')} />
-      </span>
+      <div className="flex items-center gap-3">
+        <span
+          className={cn(
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+            isAudio ? 'bg-emerald-500/15' : 'bg-(--nc-panel)'
+          )}
+        >
+          <KindIcon className={cn('size-4', isAudio ? 'text-emerald-300' : 'text-fuchsia-300')} />
+        </span>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate text-xs font-medium">{track.name}</span>
-          <span className="w-12 text-right font-mono text-[10px] tabular-nums text-muted-foreground">
-            ×{volume.toFixed(2)}
-          </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs font-medium">{track.name}</span>
+            <span className="w-12 text-right font-mono text-[10px] tabular-nums text-muted-foreground">
+              ×{volume.toFixed(2)}
+            </span>
+          </div>
+          <Slider
+            min={0}
+            max={1.5}
+            step={0.01}
+            value={[volume]}
+            onValueChange={(v) => setTrackVolume(track.id, v[0] ?? 1, `mixer-${track.id}`)}
+            className="mt-1.5"
+            aria-label={`${track.name} volume`}
+          />
         </div>
-        <Slider
-          min={0}
-          max={1.5}
-          step={0.01}
-          value={[volume]}
-          onValueChange={(v) => setTrackVolume(track.id, v[0] ?? 1, `mixer-${track.id}`)}
-          className="mt-1.5"
-          aria-label={`${track.name} volume`}
-        />
+
+        {/* solo — isolate this track while everything else goes silent */}
+        <button
+          type="button"
+          title={track.solo ? 'Remove solo' : 'Solo — hear only this track'}
+          onClick={() => setTrackSolo(track.id, !track.solo)}
+          aria-pressed={!!track.solo}
+          aria-label={`${track.solo ? 'Unsolo' : 'Solo'} ${track.name}`}
+          className={cn(
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition',
+            track.solo
+              ? 'bg-amber-500/20 text-amber-300'
+              : 'bg-(--nc-panel) text-muted-foreground hover:bg-(--nc-panel-strong) hover:text-foreground'
+          )}
+        >
+          <Headphones className="size-4" />
+        </button>
+
+        <button
+          type="button"
+          title={track.muted ? 'Unmute track' : 'Mute track'}
+          onClick={() => updateTrack(track.id, { muted: !track.muted }, true)}
+          aria-label={`${track.muted ? 'Unmute' : 'Mute'} ${track.name}`}
+          className={cn(
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition',
+            track.muted
+              ? 'bg-rose-500/15 text-rose-400'
+              : 'bg-(--nc-panel) text-muted-foreground hover:bg-(--nc-panel-strong) hover:text-foreground'
+          )}
+        >
+          {track.muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+        </button>
       </div>
 
-      <button
-        type="button"
-        title={track.muted ? 'Unmute track' : 'Mute track'}
-        onClick={() => updateTrack(track.id, { muted: !track.muted }, true)}
-        className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition',
-          track.muted
-            ? 'bg-rose-500/15 text-rose-400'
-            : 'bg-(--nc-panel) text-muted-foreground hover:bg-(--nc-panel-strong) hover:text-foreground'
-        )}
-      >
-        {track.muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-      </button>
+      {/* live track output */}
+      <div className="mt-2 flex items-center gap-2">
+        <span className="w-10 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/60">Level</span>
+        <TrackMeter trackId={track.id} />
+      </div>
     </div>
   )
 }
@@ -135,7 +242,7 @@ export function MixerDialog() {
             Audio mixer
           </DialogTitle>
           <DialogDescription>
-            Balance your track faders (up to ×1.5) and watch the master output live.
+            Balance track faders, solo a track (headphones) to isolate it, and watch the live output meters.
           </DialogDescription>
         </DialogHeader>
 
@@ -180,7 +287,7 @@ export function MixerDialog() {
           <div className="space-y-1 pt-0.5">
             <MasterMeter />
             <p className="text-[10px] text-muted-foreground">
-              Output level — past the rose zone it&apos;s clipping.
+              Output level with peak hold — past the rose zone it&apos;s clipping.
             </p>
           </div>
         </div>

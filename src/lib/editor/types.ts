@@ -205,6 +205,45 @@ export interface StickerStyle {
   animation: StickerAnimation
 }
 
+/**
+ * Per-clip audio FX recipe — interpreted by the engine's WebAudio chain.
+ * All fields optional; every omitted/neutral field is bypassed so the chain
+ * only contains nodes the user actually asked for. Applied identically to
+ * preview playback and export (the export graph shares the same nodes).
+ */
+export interface ClipAudioFx {
+  /** stereo balance -1 (left) .. 1 (right) */
+  pan?: number
+  /** low-shelf gain dB -24..24 (200 Hz) */
+  eqLow?: number
+  /** mid peaking gain dB -24..24 (1200 Hz) */
+  eqMid?: number
+  /** high-shelf gain dB -24..24 (4200 Hz) */
+  eqHigh?: number
+  /** high-pass cutoff Hz 20..800 — 0 = off (cuts rumble/wind) */
+  highPass?: number
+  /** low-pass cutoff Hz 200..18000 — 0 = off (muffled/distant sound) */
+  lowPass?: number
+  /** dynamics compressor on/off */
+  compressor?: boolean
+  /** compressor intensity 0..1 — maps to threshold/ratio */
+  compAmount?: number
+  /** reverb wet mix 0..1 — 0 = off (convolver, generated impulse) */
+  reverbMix?: number
+  /** reverb room size 0.2..1 — maps to impulse length 0.4..3.2 s */
+  reverbSize?: number
+  /** delay (echo) wet mix 0..1 — 0 = off */
+  delayMix?: number
+  /** delay time seconds 0.05..0.9 */
+  delayTime?: number
+  /** delay feedback 0..0.85 */
+  delayFeedback?: number
+  /** modulation flavor — none bypasses */
+  modKind?: 'none' | 'chorus' | 'flanger' | 'phaser'
+  /** modulation amount 0..1 (depth/wet) */
+  modAmount?: number
+}
+
 export interface Clip {
   id: string
   trackId: string
@@ -252,6 +291,14 @@ export interface Clip {
   lutIntensity?: number
   /** audio clips: lower volume automatically when video audio plays */
   autoDuck?: boolean
+  /** how far the audio drops while ducking (0..0.95) — ducked gain = 1 − depth; default 0.68 */
+  duckDepth?: number
+  /**
+   * Per-clip audio FX chain (pan / EQ / filters / compressor / reverb / delay /
+   * modulation) — built as WebAudio nodes by the engine for playback AND export.
+   * null/undefined = untouched original sound.
+   */
+  audioFx?: ClipAudioFx | null
   /** mega-effects overlay (particles/grain/vignette/leaks...) drawn over this clip */
   overlay?: { effectId: string; intensity: number } | null
   /** mega-effects vision post-FX (pixelate/mirror/glow/chroma...) applied to this clip's pixels */
@@ -267,6 +314,8 @@ export interface Track {
   muted: boolean
   hidden: boolean
   locked: boolean
+  /** solo — during playback only solo tracks (and clips on them) are audible */
+  solo?: boolean
   /** track fader 0..1.5 (1 = unity) */
   volume?: number
 }

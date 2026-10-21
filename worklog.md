@@ -566,3 +566,28 @@ Stage Summary:
 - 7 files changed: types.ts, constants.ts, engine.ts, store.ts, PropertiesPanel.tsx, TimelineToolbar.tsx, tools/sections/timeline.ts.
 - Reverse implementation note: browsers cannot play <video> backwards; playback is seek-stepped (audio muted by design, surfaced in UI hint). Seek starvation fixed via !seeking guard.
 - Next: Sector 3 (Audio/Sound editing) per the serial sector plan.
+
+---
+Task ID: Sector-3
+Agent: main (orchestrator)
+Task: Sector 3 — Audio/Sound editing: per-clip audio FX chain (pan/EQ/filters/compressor/reverb/delay/modulation), track solo, per-track meters, duck depth, verify extract-audio + beat-sync, catalog honesty
+
+Work Log:
+- types.ts: new ClipAudioFx recipe (pan, eqLow/Mid/High dB, highPass/lowPass Hz, compressor+compAmount, reverbMix+reverbSize, delayMix/Time/Feedback, modKind chorus|flanger|phaser + modAmount) + clip.audioFx (null = clean) + clip.duckDepth (0..0.95) + track.solo.
+- engine.ts: stable-topology WebAudio FX chain per media element (src→pan→3-band EQ→HP→LP→compressor→modulation→dry/delay/convolver-reverb aux→sum→gain→master analyser+exportDest); lazy aux creation (delay feedback loop, convolver with deterministic cached generated IR 0.4–3.2s); modulation sub-graph rebuilt per kind (chorus 25ms/0.8Hz LFO, flanger 3ms+feedback, phaser 4×allpass cascade); signature-based param sync (JSON sig → setTargetAtTime) runs in the per-frame audio sync loops so preview AND export share the same chain; StereoPanner with gain fallback.
+- engine.ts BUGFIX (mixer meters dead): the WebAudio graph only existed during export — new ensureAudioGraph() now builds AudioContext + master analyser + routes all pooled elements on first user-gesture play(); per-entry analyser tap added; getTrackLevel(trackId) = loudest active clip RMS on a track for per-track meters.
+- engine.ts: solo honored in both audio paths (video clips in drawClip + audio-track loop) — when any track is soloed, unsoloed tracks are inaudible; duckFactor now uses clip.duckDepth (default 0.68 → gain 0.32, was hardcoded).
+- store.ts: applyClipPatch merges audioFx (object merge, null clears); new setTrackSolo(id, solo) — exclusive solo, one history step.
+- useEngineBridge.ts BUGFIX (play-at-end died instantly — long-standing): after seekTo(stale end time) the scrub-correction branch fired inside the same notify and yanked the engine back to the end; fix syncs the store clock to 0 when the engine restarts from the end before play().
+- engine.ts: window-scoped engine singleton (survives Fast Refresh module re-evals — multi-instance HMR artifact fixed) + __ncEngineInstance/__ncStore debug handles for QA.
+- PropertiesPanel: new AudioFxSection for video/audio clips — 13 one-tap presets (Dialogue Clarity, Telephone, Radio Lo-Fi, Warm Tape, Bright Air, Underwater, Stadium Reverb, Slapback Echo, Hall Echo, Chorus Thick, Jet Flanger, Pan L/R) + Pan/EQ×3/Cut Low/Cut High/Compressor+Amount/Reverb+Room/Echo+Time+Repeat/Modulate+Depth sliders with coalesced history; duck Depth slider appears under Auto-duck when enabled.
+- MixerDialog: per-track solo headphone buttons (amber active state, exclusive), live per-track LEVEL meters (engine analysers), master meter upgraded with dB tick scale (−40/−20/−12/−6/0) + falling peak-hold marker; dialog copy updated.
+- catalog sections/sound.ts honesty: 18 statuses flipped with real descriptions — live now: parametric EQ, graphic EQ, high-pass, low-pass, dynamic compressor, vocal enhancer, studio reverb, delay, chorus, flanger, phaser, pan slider, track mixer (updated), solo toggle, meters panel (updated), VU meter, ducking depth, dialogue enhancer; section header rewritten.
+- E2E (agent-browser 1440×900 + 390×844, demo project + generated WAV/MP4 fixtures): audio import + waveform ✅; Audio FX section renders with presets/controls ✅; Telephone preset → highPass 500 / lowPass 2800 / compressor on ✅; live chain AudioParam probe — pan −0.8, EQ 6/−4/3, HP 120, LP 6k, comp −24.2dB/7.6:1, delay 0.3s/0.4fb/0.27wet, convolver+IR 0.32wet, chorus LFO running — all exact ✅; audioFx persists across reload (IndexedDB) ✅; master meter level > 0 while playing and ctx 'running' after real-click play ✅; extract audio → new 6s clip on audio track + video muted + toast ✅; solo ON → video gain 0 / audio gain 1, solo OFF → video gain restored 0.9 ✅; beat detection → 19 markers, 161.5 BPM + toast ✅; duck Depth slider renders (0.68 default) ✅; export with FX → recording→done 100%, no errors ✅; mixer screenshot shows faders/solo/LEVEL rows/master dB scale ✅; mobile 390px no overflow ✅; zero console errors after clean reload, dev.log clean, eslint clean, tsc(src) clean ✅.
+- Test notes: headless AudioContext needs a REAL trusted click for user activation (eval'd play() leaves ctx suspended — artifact, not a bug); rAF-throttled headless makes engine time race in long eval chains — sample within one eval.
+- Removed public test fixtures; committed as Sector 3.
+
+Stage Summary:
+- Sector 3 COMPLETE: CapCut-grade per-clip audio FX (pan, 3-band EQ, HP/LP, compressor, convolution reverb, delay, chorus/flanger/phaser + 13 presets) live in preview AND export; mixer upgraded (solo, per-track meters, master dB scale + peak hold); auto-duck depth control; extract-audio and beat-sync verified end-to-end; 2 real bugs fixed (dead mixer meters — graph now built on play; play-at-end instant stop — store/engine clock desync).
+- 8 files changed: types.ts, engine.ts, store.ts, useEngineBridge.ts, PropertiesPanel.tsx, MixerDialog.tsx, sections/sound.ts, worklog.md.
+- Next: Sector 4 (Effects/VFX — 500–1000 library verification + per-effect custom controls) per the serial sector plan.

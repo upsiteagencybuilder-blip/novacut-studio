@@ -66,6 +66,7 @@ import type {
   BlendMode,
   ChromaKey,
   Clip,
+  ClipAudioFx,
   ClipKind,
   ClipFit,
   ColorGrade,
@@ -112,6 +113,8 @@ const fmtPx = (v: number) => `${Math.round(v)}px`
 const fmtX = (v: number) => `${Math.round(v * 100) / 100}×`
 const fmtSec = (v: number) => `${Math.round(v * 100) / 100}s`
 const fmtNum = (v: number) => String(Math.round(v * 100) / 100)
+const fmtDb = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}dB`
+const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${Math.round(v)}Hz`)
 
 /** color inputs only accept #rgb/#rrggbb — normalize anything else */
 function toHexInput(v: string): string {
@@ -881,6 +884,191 @@ function LutSection({ clip }: { clip: Clip }) {
 const CROP_MAX = 0.45
 const r3 = (v: number) => Math.round(v * 1000) / 1000
 
+/* ================================================================ audio FX */
+
+/** One-tap audio FX recipes — each is a partial ClipAudioFx patch. */
+const AUDIO_FX_PRESETS: { id: string; label: string; patch: Partial<ClipAudioFx> }[] = [
+  { id: 'clarity', label: 'Dialogue Clarity', patch: { highPass: 90, eqMid: 3, eqHigh: 2, compressor: true, compAmount: 0.45 } },
+  { id: 'telephone', label: 'Telephone', patch: { highPass: 500, lowPass: 2800, compressor: true, compAmount: 0.5 } },
+  { id: 'radio', label: 'Radio Lo-Fi', patch: { highPass: 800, lowPass: 3400, eqMid: 6 } },
+  { id: 'warm', label: 'Warm Tape', patch: { eqLow: 4, eqHigh: -3 } },
+  { id: 'bright', label: 'Bright Air', patch: { eqHigh: 5, eqMid: -2 } },
+  { id: 'underwater', label: 'Underwater', patch: { lowPass: 600, reverbMix: 0.35, reverbSize: 0.7 } },
+  { id: 'stadium', label: 'Stadium Reverb', patch: { reverbMix: 0.55, reverbSize: 0.85, eqHigh: -4 } },
+  { id: 'slapback', label: 'Slapback Echo', patch: { delayMix: 0.45, delayTime: 0.28, delayFeedback: 0.25 } },
+  { id: 'hallecho', label: 'Hall Echo', patch: { delayMix: 0.4, delayTime: 0.45, delayFeedback: 0.5, reverbMix: 0.3 } },
+  { id: 'chorus', label: 'Chorus Thick', patch: { modKind: 'chorus', modAmount: 0.6 } },
+  { id: 'flanger', label: 'Jet Flanger', patch: { modKind: 'flanger', modAmount: 0.7 } },
+  { id: 'panl', label: 'Pan Left', patch: { pan: -0.75 } },
+  { id: 'panr', label: 'Pan Right', patch: { pan: 0.75 } },
+]
+
+/**
+ * Per-clip audio FX chain — pan, 3-band EQ, high/low-pass filters, compressor,
+ * reverb, delay and modulation (chorus/flanger/phaser). The engine builds the
+ * matching WebAudio nodes for preview AND export.
+ */
+function AudioFxSection({ clip }: { clip: Clip }) {
+  const updateClip = useEditor((s) => s.updateClip)
+  const fx: Partial<ClipAudioFx> = clip.audioFx ?? {}
+
+  const patch = (p: Partial<ClipAudioFx>, history: boolean | string = 'audio-fx') =>
+    updateClip(clip.id, { audioFx: p as ClipAudioFx }, history)
+
+  const applyPreset = (p: Partial<ClipAudioFx>) => {
+    // presets start from a clean slate so toggles (e.g. compressor off) reset too
+    updateClip(clip.id, { audioFx: { ...p } as ClipAudioFx }, true)
+    toast.success(`Audio FX preset applied`)
+  }
+
+  const pan = fx.pan ?? 0
+  const hasFx = !!clip.audioFx && Object.values(clip.audioFx).some((v) => v !== undefined && v !== 0 && v !== 'none' && v !== false)
+
+  return (
+    <Section
+      title="Audio FX"
+      icon={AudioLines}
+      onReset={clip.audioFx ? () => updateClip(clip.id, { audioFx: null }, true) : undefined}
+    >
+      {!hasFx && (
+        <p className="text-[10px] leading-snug text-muted-foreground/60">
+          Pan, EQ, filters, compressor, reverb, echo and modulation for this clip&apos;s sound — heard in preview and baked into exports.
+        </p>
+      )}
+
+      {/* presets */}
+      <div className="flex flex-wrap gap-1.5">
+        {AUDIO_FX_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => applyPreset(p.patch)}
+            className="rounded-full border border-(--nc-line) bg-(--nc-panel) px-2.5 py-1 text-[10px] text-muted-foreground transition hover:border-emerald-400/50 hover:text-foreground"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* pan */}
+      <SliderRow
+        label="Pan"
+        min={-1}
+        max={1}
+        step={0.05}
+        value={pan}
+        onChange={(v) => patch({ pan: v })}
+        format={(v) => (Math.abs(v) < 0.02 ? 'Center' : v < 0 ? `L ${Math.round(-v * 100)}` : `R ${Math.round(v * 100)}`)}
+      />
+
+      {/* 3-band EQ */}
+      <SliderRow label="EQ Low" min={-24} max={24} step={1} value={fx.eqLow ?? 0} onChange={(v) => patch({ eqLow: v })} format={fmtDb} />
+      <SliderRow label="EQ Mid" min={-24} max={24} step={1} value={fx.eqMid ?? 0} onChange={(v) => patch({ eqMid: v })} format={fmtDb} />
+      <SliderRow label="EQ High" min={-24} max={24} step={1} value={fx.eqHigh ?? 0} onChange={(v) => patch({ eqHigh: v })} format={fmtDb} />
+
+      {/* filters */}
+      <SliderRow
+        label="Cut Low"
+        min={0}
+        max={800}
+        step={10}
+        value={fx.highPass ?? 0}
+        onChange={(v) => patch({ highPass: v })}
+        format={(v) => (v > 20 ? fmtHz(v) : 'Off')}
+      />
+      <SliderRow
+        label="Cut High"
+        min={0}
+        max={18000}
+        step={100}
+        value={fx.lowPass ?? 0}
+        onChange={(v) => patch({ lowPass: v })}
+        format={(v) => (v > 0 ? fmtHz(v) : 'Off')}
+      />
+
+      {/* compressor */}
+      <div className="flex items-center gap-2">
+        <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Comp</span>
+        <span className="flex-1 text-[10px] text-muted-foreground/60">even out loud/quiet parts</span>
+        <Switch checked={!!fx.compressor} onCheckedChange={(on) => patch({ compressor: on }, true)} aria-label="Compressor" />
+      </div>
+      {fx.compressor && (
+        <SliderRow
+          label="Amount"
+          min={0}
+          max={1}
+          step={0.05}
+          value={fx.compAmount ?? 0.5}
+          onChange={(v) => patch({ compAmount: v })}
+          format={fmtPct}
+        />
+      )}
+
+      {/* reverb */}
+      <SliderRow
+        label="Reverb"
+        min={0}
+        max={1}
+        step={0.05}
+        value={fx.reverbMix ?? 0}
+        onChange={(v) => patch({ reverbMix: v })}
+        format={fmtPct}
+      />
+      {(fx.reverbMix ?? 0) > 0.001 && (
+        <SliderRow
+          label="Room"
+          min={0.2}
+          max={1}
+          step={0.05}
+          value={fx.reverbSize ?? 0.6}
+          onChange={(v) => patch({ reverbSize: v })}
+          format={(v) => (v < 0.4 ? 'Room' : v < 0.7 ? 'Hall' : 'Stadium')}
+        />
+      )}
+
+      {/* delay */}
+      <SliderRow
+        label="Echo"
+        min={0}
+        max={1}
+        step={0.05}
+        value={fx.delayMix ?? 0}
+        onChange={(v) => patch({ delayMix: v })}
+        format={fmtPct}
+      />
+      {(fx.delayMix ?? 0) > 0.001 && (
+        <>
+          <SliderRow label="Time" min={0.05} max={0.9} step={0.01} value={fx.delayTime ?? 0.25} onChange={(v) => patch({ delayTime: v })} format={fmtSec} />
+          <SliderRow label="Repeat" min={0} max={0.85} step={0.05} value={fx.delayFeedback ?? 0.3} onChange={(v) => patch({ delayFeedback: v })} format={fmtPct} />
+        </>
+      )}
+
+      {/* modulation */}
+      <SelectRow
+        label="Modulate"
+        value={fx.modKind ?? 'none'}
+        onChange={(v) => patch({ modKind: v as ClipAudioFx['modKind'] }, true)}
+      >
+        <SelectItem value="none" className="text-[11px]">None</SelectItem>
+        <SelectItem value="chorus" className="text-[11px]">Chorus — thicker</SelectItem>
+        <SelectItem value="flanger" className="text-[11px]">Flanger — jet sweep</SelectItem>
+        <SelectItem value="phaser" className="text-[11px]">Phaser — swoosh</SelectItem>
+      </SelectRow>
+      {fx.modKind && fx.modKind !== 'none' && (
+        <SliderRow
+          label="Depth"
+          min={0}
+          max={1}
+          step={0.05}
+          value={fx.modAmount ?? 0.5}
+          onChange={(v) => patch({ modAmount: v })}
+          format={fmtPct}
+        />
+      )}
+    </Section>
+  )
+}
+
 function CropSection({ clip }: { clip: Clip }) {
   const project = useEditor((s) => s.project)
   const media = useEditor((s) => s.media)
@@ -1300,10 +1488,24 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
               <p className="text-[10px] leading-snug text-muted-foreground/60">
                 Music volume automatically lowers while video sound plays.
               </p>
+              {(clip.autoDuck ?? false) && (
+                <SliderRow
+                  label="Depth"
+                  min={0}
+                  max={0.95}
+                  step={0.05}
+                  value={clip.duckDepth ?? 0.68}
+                  onChange={(v) => updateClip(clip.id, { duckDepth: v }, 'duck-depth')}
+                  format={fmtPct}
+                />
+              )}
             </div>
           )}
         </Section>
       )}
+
+      {/* per-clip audio FX chain — video / audio */}
+      {(clip.kind === 'video' || clip.kind === 'audio') && <AudioFxSection clip={clip} />}
 
       {/* filters — video / image */}
       {(clip.kind === 'video' || clip.kind === 'image') && (

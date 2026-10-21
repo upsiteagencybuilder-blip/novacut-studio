@@ -146,6 +146,8 @@ interface EditorStore {
   updateTrack: (id: string, patch: Partial<Track>, history?: boolean | string) => void
   removeTrack: (id: string) => void
   setTrackVolume: (id: string, volume: number, history?: boolean | string) => void
+  /** solo a track — other tracks are silenced during playback (solo again to unsolo) */
+  setTrackSolo: (id: string, solo: boolean) => void
 
   /* ---------- versions ---------- */
   versions: VersionSnapshot[]
@@ -214,6 +216,10 @@ function applyClipPatch(project: Project, id: string, patch: ClipPatch): Project
       if (patch.sticker) next.sticker = { ...c.sticker!, ...patch.sticker }
       if (patch.chromaKey) next.chromaKey = { ...(c.chromaKey ?? { enabled: false, color: '#00b140', similarity: 0.32, smoothness: 0.12 }), ...patch.chromaKey }
       if (patch.colorGrade) next.colorGrade = { ...(c.colorGrade ?? { temperature: 0, tint: 0, shadows: 0, highlights: 0, vibrance: 1 }), ...patch.colorGrade }
+      // audio FX — object patches merge over the previous recipe; null clears
+      if (patch.audioFx !== undefined) {
+        next.audioFx = patch.audioFx === null ? null : { ...(c.audioFx ?? {}), ...patch.audioFx }
+      }
       return next
     }),
   }
@@ -953,6 +959,17 @@ export const useEditor = create<EditorStore>((set, get) => ({
     }))
   },
 
+  setTrackSolo: (id, solo) => {
+    get().pushHistory()
+    set((s) => ({
+      project: withUpdatedAt({
+        ...s.project,
+        // solo is exclusive — soloing one track clears every other solo flag
+        tracks: s.project.tracks.map((t) => ({ ...t, solo: t.id === id ? solo : false })),
+      }),
+    }))
+  },
+
   /* ================= versions ================= */
 
   versions: [],
@@ -1078,3 +1095,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
     }))
   },
 }))
+
+/* debug/testing handle — lets QA tools drive the store from the console */
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __ncStore?: typeof useEditor }).__ncStore = useEditor
+}

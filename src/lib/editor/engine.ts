@@ -30,6 +30,57 @@ interface PoolEntry {
   el: HTMLVideoElement | HTMLAudioElement
   mediaId: string
   gain?: GainNode
+  /** WebAudio tap on the element (created once per element) */
+  srcNode?: MediaElementAudioSourceNode
+  /** per-clip audio FX chain (pan/EQ/filters/comp/mod + delay/reverb aux) */
+  chain?: AudioFxChain
+  /** serialized ClipAudioFx signature the chain was last synced to */
+  fxSig?: string
+  /** owning track id (for per-track meters) */
+  trackId?: string
+  /** passive level tap for per-track meters */
+  analyser?: AnalyserNode
+  analyserData?: Uint8Array
+}
+
+/** Modulation sub-graph nodes (chorus / flanger / phaser) */
+interface ModNodes {
+  dry: GainNode
+  wet?: GainNode
+  dly?: DelayNode
+  lfo?: OscillatorNode
+  lfoGain?: GainNode
+  fb?: GainNode
+  aps?: BiquadFilterNode[]
+}
+
+/**
+ * Per-clip audio FX chain — stable topology with param-driven bypass.
+ * src → pan → eqLow → eqMid → eqHigh → hp → lp → comp → modIn → [mod] → modOut
+ * modOut → dry → sum;  modOut → delay → delayWet → sum (feedback loop);
+ * modOut → convolver → reverbWet → sum;  sum → gain (playback envelope).
+ * Neutral params make every stage transparent, so a clip without FX sounds
+ * untouched while still running through the same nodes preview AND export use.
+ */
+interface AudioFxChain {
+  pan: AudioNode
+  eqLow: BiquadFilterNode
+  eqMid: BiquadFilterNode
+  eqHigh: BiquadFilterNode
+  hp: BiquadFilterNode
+  lp: BiquadFilterNode
+  comp: DynamicsCompressorNode
+  modIn: GainNode
+  modOut: GainNode
+  dry: GainNode
+  sum: GainNode
+  mod?: ModNodes
+  modKind?: string
+  delay?: DelayNode
+  delayWet?: GainNode
+  delayFb?: GainNode
+  convolver?: ConvolverNode
+  reverbWet?: GainNode
 }
 
 /** Screen-space bounds of a drawn clip (canvas coords) for selection overlay */
@@ -138,6 +189,8 @@ class PreviewEngine {
   private masterAnalyser: AnalyserNode | null = null
   private analyserData: Uint8Array | null = null
   private renderPending = false
+  /** cached reverb impulse responses, keyed by seconds bucket */
+  private irCache = new Map<string, AudioBuffer>()
 
   /** offscreen canvas used for chroma-key / grade / LUT pixel passes */
   private fxCanvas: HTMLCanvasElement | null = null
@@ -239,6 +292,9 @@ class PreviewEngine {
     if (this.playing || !this.snapshotFn) return
     const dur = this.duration
     if (this.time >= dur - 0.02) this.time = 0
+    // build the WebAudio graph on the first user-gesture play — this powers the
+    // audio FX chains, the mixer master/track meters and export capture
+    this.ensureAudioGraph()
     this.playing = true
     this.lastFrame = performance.now()
     const tick = (now: number) => {
@@ -315,24 +371,18 @@ class PreviewEngine {
       if (!this.audioCtx) this.audioCtx = new AudioContext()
       if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
       if (!this.exportDest) this.exportDest = this.audioCtx.createMediaStreamDestination()
-      // route existing + future elements
-      const route = (entry: PoolEntry) => {
-        if (entry.gain || !this.audioCtx) return
-        try {
-          const src = this.audioCtx.createMediaElementSource(entry.el)
-          const gain = this.audioCtx.createGain()
-          src.connect(gain)
-          if (this.masterAnalyser) gain.connect(this.masterAnalyser)
-          else gain.connect(this.audioCtx.destination)
-          if (this.exportDest) gain.connect(this.exportDest)
-          entry.gain = gain
-          entry.el.volume = 1 // avoid double attenuation; gains take over
-        } catch {
-          /* element already routed */
-        }
+      // route existing + future elements through their FX chains
+      this.ensureAnalyser()
+      const project = this.snapshotFn?.().project
+      const clipOf = (clipId: string) => project?.clips.find((c) => c.id === clipId)
+      for (const [id, entry] of this.videos) {
+        const clip = clipOf(id)
+        if (clip) this.routeEntry(clip, entry)
       }
-      for (const entry of this.videos.values()) route(entry)
-      for (const entry of this.audios.values()) route(entry)
+      for (const [id, entry] of this.audios) {
+        const clip = clipOf(id)
+        if (clip) this.routeEntry(clip, entry)
+      }
       const videoStream = this.canvas.captureStream(fps)
       const audioTracks = this.exportDest.stream.getAudioTracks()
       for (const track of audioTracks) videoStream.addTrack(track)
@@ -399,6 +449,354 @@ class PreviewEngine {
     }
   }
 
+  /* -------------------------------------------------- audio FX chain */
+
+  /**
+   * Create the AudioContext on the first user-gesture play and route every
+   * pooled media element through WebAudio. This is what makes the mixer
+   * meters live and the per-clip FX chains work during normal playback
+   * (previously the graph only existed while exporting).
+   */
+  private ensureAudioGraph() {
+    try {
+      if (!this.audioCtx) this.audioCtx = new AudioContext()
+      if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
+      this.ensureAnalyser()
+      const project = this.snapshotFn?.().project
+      if (!project) return
+      const clipOf = (clipId: string) => project.clips.find((c) => c.id === clipId)
+      for (const [id, entry] of this.videos) {
+        const clip = clipOf(id)
+        if (clip) this.routeEntry(clip, entry)
+      }
+      for (const [id, entry] of this.audios) {
+        const clip = clipOf(id)
+        if (clip) this.routeEntry(clip, entry)
+      }
+    } catch {
+      /* audio graph is optional — element-volume path still works */
+    }
+  }
+
+  /**
+   * Tap a media element into WebAudio once: element source → FX chain → gain →
+   * master analyser (or destination) + export capture. Keeps a per-entry
+   * analyser tap for the mixer's per-track meters.
+   */
+  private routeEntry(clip: Clip, entry: PoolEntry) {
+    if (!this.audioCtx || entry.srcNode) return
+    try {
+      entry.trackId = clip.trackId
+      const src = this.audioCtx.createMediaElementSource(entry.el)
+      const chain = this.buildCoreChain()
+      const gain = this.audioCtx.createGain()
+      src.connect(chain.pan)
+      chain.sum.connect(gain)
+      if (this.masterAnalyser) gain.connect(this.masterAnalyser)
+      else gain.connect(this.audioCtx.destination)
+      if (this.exportDest) gain.connect(this.exportDest)
+      // passive tap for per-track meters
+      try {
+        const an = this.audioCtx.createAnalyser()
+        an.fftSize = 256
+        chain.sum.connect(an)
+        entry.analyser = an
+        entry.analyserData = new Uint8Array(an.fftSize)
+      } catch {
+        /* meter tap optional */
+      }
+      entry.srcNode = src
+      entry.chain = chain
+      entry.gain = gain
+      entry.el.volume = 1 // gains take over attenuation
+      entry.fxSig = undefined // force a param sync on the next frame
+    } catch {
+      /* element already routed or createMediaElementSource unsupported */
+    }
+  }
+
+  /** Build the always-present core chain with fully neutral (transparent) params. */
+  private buildCoreChain(): AudioFxChain {
+    const ctx = this.audioCtx!
+    const pan: AudioNode = typeof ctx.createStereoPanner === 'function' ? ctx.createStereoPanner() : ctx.createGain()
+    const eqLow = ctx.createBiquadFilter()
+    eqLow.type = 'lowshelf'
+    eqLow.frequency.value = 200
+    eqLow.gain.value = 0
+    const eqMid = ctx.createBiquadFilter()
+    eqMid.type = 'peaking'
+    eqMid.frequency.value = 1200
+    eqMid.Q.value = 0.9
+    eqMid.gain.value = 0
+    const eqHigh = ctx.createBiquadFilter()
+    eqHigh.type = 'highshelf'
+    eqHigh.frequency.value = 4200
+    eqHigh.gain.value = 0
+    const hp = ctx.createBiquadFilter()
+    hp.type = 'allpass' // transparent until the user asks for a high-pass
+    hp.frequency.value = 500
+    hp.Q.value = 0.7
+    const lp = ctx.createBiquadFilter()
+    lp.type = 'allpass'
+    lp.frequency.value = 8000
+    lp.Q.value = 0.7
+    const comp = ctx.createDynamicsCompressor()
+    comp.threshold.value = 0
+    comp.knee.value = 24
+    comp.ratio.value = 1
+    comp.attack.value = 0.01
+    comp.release.value = 0.25
+    const modIn = ctx.createGain()
+    const modOut = ctx.createGain()
+    const dry = ctx.createGain()
+    dry.gain.value = 1
+    const sum = ctx.createGain()
+    modIn.connect(modOut) // 'none' modulation — direct wire
+    modOut.connect(dry)
+    dry.connect(sum)
+    pan.connect(eqLow)
+    eqLow.connect(eqMid)
+    eqMid.connect(eqHigh)
+    eqHigh.connect(hp)
+    hp.connect(lp)
+    lp.connect(comp)
+    comp.connect(modIn)
+    return { pan, eqLow, eqMid, eqHigh, hp, lp, comp, modIn, modOut, dry, sum, modKind: 'none' }
+  }
+
+  /** (Re)wire the modulation sub-graph for the requested flavor. */
+  private rebuildMod(chain: AudioFxChain, kind: 'none' | 'chorus' | 'flanger' | 'phaser', amount: number) {
+    const ctx = this.audioCtx!
+    // tear down the previous sub-graph
+    try {
+      chain.modIn.disconnect()
+      if (chain.mod) {
+        chain.mod.dry.disconnect()
+        chain.mod.wet?.disconnect()
+        chain.mod.lfo?.stop()
+        chain.mod.lfo?.disconnect()
+        chain.mod.lfoGain?.disconnect()
+        chain.mod.fb?.disconnect()
+        chain.mod.dly?.disconnect()
+        chain.mod.aps?.forEach((ap) => ap.disconnect())
+      }
+    } catch {
+      /* best-effort teardown */
+    }
+    const dry = ctx.createGain()
+    dry.gain.value = 1
+    dry.connect(chain.modOut)
+    chain.modIn.connect(dry)
+    const mod: ModNodes = { dry }
+    const a = clamp(amount, 0, 1)
+    if (kind === 'chorus') {
+      const dly = ctx.createDelay(0.1)
+      dly.delayTime.value = 0.025
+      const lfo = ctx.createOscillator()
+      lfo.type = 'sine'
+      lfo.frequency.value = 0.8
+      const lfoGain = ctx.createGain()
+      lfoGain.gain.value = 0.008
+      lfo.connect(lfoGain)
+      lfoGain.connect(dly.delayTime)
+      lfo.start()
+      const wet = ctx.createGain()
+      wet.gain.value = 0.6 * a
+      dry.gain.value = 1 - 0.5 * a
+      chain.modIn.connect(dly)
+      dly.connect(wet)
+      wet.connect(chain.modOut)
+      Object.assign(mod, { wet, dly, lfo, lfoGain })
+    } else if (kind === 'flanger') {
+      const dly = ctx.createDelay(0.05)
+      dly.delayTime.value = 0.003
+      const lfo = ctx.createOscillator()
+      lfo.type = 'sine'
+      lfo.frequency.value = 0.35
+      const lfoGain = ctx.createGain()
+      lfoGain.gain.value = 0.0022
+      lfo.connect(lfoGain)
+      lfoGain.connect(dly.delayTime)
+      lfo.start()
+      const fb = ctx.createGain()
+      fb.gain.value = 0.55 * a
+      dly.connect(fb)
+      fb.connect(dly)
+      const wet = ctx.createGain()
+      wet.gain.value = 0.7 * a
+      dry.gain.value = 1 - 0.45 * a
+      chain.modIn.connect(dly)
+      dly.connect(wet)
+      wet.connect(chain.modOut)
+      Object.assign(mod, { wet, dly, lfo, lfoGain, fb })
+    } else if (kind === 'phaser') {
+      const aps: BiquadFilterNode[] = []
+      const bases = [300, 800, 1600, 2400]
+      let prev: AudioNode = chain.modIn
+      for (const base of bases) {
+        const ap = ctx.createBiquadFilter()
+        ap.type = 'allpass'
+        ap.frequency.value = base
+        ap.Q.value = 1
+        prev.connect(ap)
+        prev = ap
+        aps.push(ap)
+      }
+      const lfo = ctx.createOscillator()
+      lfo.type = 'sine'
+      lfo.frequency.value = 0.25
+      const lfoGain = ctx.createGain()
+      lfoGain.gain.value = 800
+      lfo.connect(lfoGain)
+      for (const ap of aps) lfoGain.connect(ap.frequency)
+      lfo.start()
+      const wet = ctx.createGain()
+      wet.gain.value = 0.55 * a
+      dry.gain.value = 1 - 0.5 * a
+      prev.connect(wet)
+      wet.connect(chain.modOut)
+      Object.assign(mod, { wet, lfo, lfoGain, aps })
+    }
+    chain.mod = mod
+    chain.modKind = kind
+  }
+
+  /** Push a clip's ClipAudioFx values into its chain nodes (called on signature change). */
+  private updateAudioChain(clip: Clip, chain: AudioFxChain) {
+    const fx = clip.audioFx ?? {}
+    const ctx = this.audioCtx
+    if (!ctx) return
+    const t = ctx.currentTime
+    const set = (param: AudioParam, v: number) => {
+      try {
+        param.setTargetAtTime(v, t, 0.015)
+      } catch {
+        param.value = v
+      }
+    }
+    set((chain.pan as StereoPannerNode).pan ?? (chain.pan as GainNode).gain, clamp(fx.pan ?? 0, -1, 1))
+    set(chain.eqLow.gain, clamp(fx.eqLow ?? 0, -24, 24))
+    set(chain.eqMid.gain, clamp(fx.eqMid ?? 0, -24, 24))
+    set(chain.eqHigh.gain, clamp(fx.eqHigh ?? 0, -24, 24))
+    // filters — swap to allpass when off (transparent, keeps the topology stable)
+    const hpOn = (fx.highPass ?? 0) > 20
+    chain.hp.type = hpOn ? 'highpass' : 'allpass'
+    if (hpOn) set(chain.hp.frequency, clamp(fx.highPass!, 20, 800))
+    const lpOn = (fx.lowPass ?? 0) > 0
+    chain.lp.type = lpOn ? 'lowpass' : 'allpass'
+    if (lpOn) set(chain.lp.frequency, clamp(fx.lowPass!, 200, 18000))
+    // compressor
+    const compOn = !!fx.compressor
+    const ca = clamp(fx.compAmount ?? 0.5, 0, 1)
+    set(chain.comp.threshold, compOn ? -(6 + 26 * ca) : 0)
+    set(chain.comp.ratio, compOn ? 2 + 8 * ca : 1)
+    // modulation
+    const kind = fx.modKind ?? 'none'
+    const amount = clamp(fx.modAmount ?? 0.5, 0, 1)
+    if (kind !== chain.modKind || kind !== 'none') this.rebuildMod(chain, kind, amount)
+    else if (chain.mod) set(chain.mod.dry.gain, 1)
+    // delay aux
+    const dMix = clamp(fx.delayMix ?? 0, 0, 1)
+    if (dMix > 0.001) {
+      if (!chain.delay) {
+        const dly = ctx.createDelay(1.2)
+        const wet = ctx.createGain()
+        const fb = ctx.createGain()
+        chain.modOut.connect(dly)
+        dly.connect(wet)
+        wet.connect(chain.sum)
+        dly.connect(fb)
+        fb.connect(dly)
+        chain.delay = dly
+        chain.delayWet = wet
+        chain.delayFb = fb
+      }
+      set(chain.delay.delayTime, clamp(fx.delayTime ?? 0.25, 0.05, 0.9))
+      set(chain.delayFb!.gain, clamp(fx.delayFeedback ?? 0.3, 0, 0.85))
+      set(chain.delayWet!.gain, dMix * 0.9)
+    } else if (chain.delayWet) {
+      set(chain.delayWet.gain, 0)
+    }
+    // reverb aux (convolver created lazily, IR generated + cached)
+    const rMix = clamp(fx.reverbMix ?? 0, 0, 1)
+    if (rMix > 0.001) {
+      if (!chain.convolver) {
+        const size = clamp(fx.reverbSize ?? 0.6, 0.2, 1)
+        const conv = ctx.createConvolver()
+        conv.buffer = this.getImpulse(0.4 + 2.8 * size)
+        const wet = ctx.createGain()
+        chain.modOut.connect(conv)
+        conv.connect(wet)
+        wet.connect(chain.sum)
+        chain.convolver = conv
+        chain.reverbWet = wet
+      }
+      set(chain.reverbWet!.gain, rMix * 0.8)
+    } else if (chain.reverbWet) {
+      set(chain.reverbWet.gain, 0)
+    }
+  }
+
+  /** Deterministic noise-decay impulse response, cached per 0.1s bucket. */
+  private getImpulse(seconds: number): AudioBuffer {
+    const ctx = this.audioCtx!
+    const sec = Math.round(seconds * 10) / 10
+    const cached = this.irCache.get(String(sec))
+    if (cached) return cached
+    const rate = ctx.sampleRate
+    const len = Math.max(1, Math.floor(rate * sec))
+    const buf = ctx.createBuffer(2, len, rate)
+    for (let c = 0; c < 2; c++) {
+      const data = buf.getChannelData(c)
+      // simple LCG noise — deterministic, plenty for a reverb tail
+      let seed = 0x2f6e2b1 + c * 7919
+      for (let i = 0; i < len; i++) {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+        const t = i / len
+        data[i] = ((seed / 0xffffffff) * 2 - 1) * Math.pow(1 - t, 2.4) * (1 - t * 0.2)
+      }
+    }
+    this.irCache.set(String(sec), buf)
+    return buf
+  }
+
+  /**
+   * Keep a clip's FX chain in sync before its element is synced each frame:
+   * routes the element if the graph just came up, then re-applies params when
+   * the serialized audioFx signature changed.
+   */
+  private ensureAudioChain(clip: Clip, entry: PoolEntry) {
+    if (!this.audioCtx) return
+    if (!entry.srcNode) this.routeEntry(clip, entry)
+    if (!entry.chain) return
+    entry.trackId = clip.trackId
+    const sig = JSON.stringify(clip.audioFx ?? null)
+    if (entry.fxSig !== sig) {
+      entry.fxSig = sig
+      this.updateAudioChain(clip, entry.chain)
+    }
+  }
+
+  /** Loudest active clip level on a track (0..1) for the mixer's track meters. */
+  getTrackLevel(trackId: string): number {
+    if (!this.analyserData) return 0
+    let level = 0
+    const pools = [this.videos, this.audios]
+    for (const pool of pools) {
+      for (const entry of pool.values()) {
+        if (entry.trackId !== trackId || !entry.analyser || !entry.analyserData) continue
+        entry.analyser.getByteTimeDomainData(entry.analyserData as Uint8Array<ArrayBuffer>)
+        let sum = 0
+        for (let i = 0; i < entry.analyserData.length; i++) {
+          const v = (entry.analyserData[i] - 128) / 128
+          sum += v * v
+        }
+        level = Math.max(level, Math.min(1, Math.sqrt(sum / entry.analyserData.length) * 2.2))
+      }
+    }
+    return level
+  }
+
   /* -------------------------------------------------- pools */
 
   private getOrCreateVideo(clip: Clip, mediaId: string, url: string): HTMLVideoElement | null {
@@ -422,18 +820,7 @@ class PreviewEngine {
     if (this.audioCtx) {
       this.ensureAnalyser()
       const entry = this.videos.get(clip.id)!
-      try {
-        const src = this.audioCtx.createMediaElementSource(el)
-        const gain = this.audioCtx.createGain()
-        src.connect(gain)
-        if (this.masterAnalyser) gain.connect(this.masterAnalyser)
-        else gain.connect(this.audioCtx.destination)
-        if (this.exportDest) gain.connect(this.exportDest)
-        entry.gain = gain
-        el.volume = 1
-      } catch {
-        /* ignore */
-      }
+      this.routeEntry(clip, entry)
     }
     return el
   }
@@ -456,18 +843,7 @@ class PreviewEngine {
     if (this.audioCtx) {
       this.ensureAnalyser()
       const entry = this.audios.get(clip.id)!
-      try {
-        const src = this.audioCtx.createMediaElementSource(el)
-        const gain = this.audioCtx.createGain()
-        src.connect(gain)
-        if (this.masterAnalyser) gain.connect(this.masterAnalyser)
-        else gain.connect(this.audioCtx.destination)
-        if (this.exportDest) gain.connect(this.exportDest)
-        entry.gain = gain
-        el.volume = 1
-      } catch {
-        /* ignore */
-      }
+      this.routeEntry(clip, entry)
     }
     return el
   }
@@ -536,7 +912,10 @@ class PreviewEngine {
       if (other.kind !== 'video' || other.muted || other.volume <= 0.02) continue
       if (t >= other.start && t < other.start + other.duration) {
         const otherTrack = project.tracks.find((tr) => tr.id === other.trackId)
-        if (otherTrack && !otherTrack.muted) return 0.32
+        if (otherTrack && !otherTrack.muted) {
+          // duck depth = how far the audio drops (0..0.95); default 0.68 → gain 0.32
+          return 1 - clamp(clip.duckDepth ?? 0.68, 0, 0.95)
+        }
       }
     }
     return 1
@@ -814,6 +1193,7 @@ class PreviewEngine {
     }
 
     // audio-only clips: keep their elements in sync even though nothing is drawn
+    const anySolo = project.tracks.some((tr) => tr.solo)
     for (const track of tracks) {
       if (track.kind !== 'audio') continue
       const trackVolume = track.volume ?? 1
@@ -825,8 +1205,12 @@ class PreviewEngine {
         const entry = this.audios.get(clip.id)
         const el = entry && entry.mediaId === clip.mediaId ? entry.el : this.getOrCreateAudio(clip, clip.mediaId, asset.objectUrl)
         if (el) {
+          const routed = this.audios.get(clip.id)!
+          this.ensureAudioChain(clip, routed)
+          // solo — when any track is soloed, unsoloed tracks go silent
+          const audible = !track.muted && (!anySolo || !!track.solo)
           const duck = this.duckFactor(project, clip, t)
-          this.syncAudio(clip, t - clip.start, { el, mediaId: clip.mediaId, gain: this.audios.get(clip.id)?.gain }, !track.muted, trackVolume * duck)
+          this.syncAudio(clip, t - clip.start, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, trackVolume * duck)
         }
       }
     }
@@ -948,7 +1332,14 @@ class PreviewEngine {
         const track = project.tracks.find((tr) => tr.id === clip.trackId)
         const entry = this.videos.get(clip.id)
         const el = entry && entry.mediaId === clip.mediaId ? (entry.el as HTMLVideoElement) : this.getOrCreateVideo(clip, clip.mediaId, asset.objectUrl)
-        if (el) this.syncVideo(clip, tLocal, { el, mediaId: clip.mediaId, gain: this.videos.get(clip.id)?.gain }, !track?.muted, track?.volume ?? 1)
+        if (el) {
+          const routed = this.videos.get(clip.id)!
+          this.ensureAudioChain(clip, routed)
+          // solo — when any track is soloed, unsoloed tracks go silent
+          const anySolo = project.tracks.some((tr) => tr.solo)
+          const audible = !!track && !track.muted && (!anySolo || !!track.solo)
+          this.syncVideo(clip, tLocal, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, track?.volume ?? 1)
+        }
       }
     }
 
@@ -1386,6 +1777,18 @@ class PreviewEngine {
 let engineInstance: PreviewEngine | null = null
 
 export function getEngine(): PreviewEngine {
+  // window-scoped singleton — survives Fast Refresh module re-evals so the
+  // bridge, panels and debug handles always share the SAME engine instance
+  if (typeof window !== 'undefined') {
+    const w = window as unknown as { __ncEngineInstance?: PreviewEngine }
+    if (!w.__ncEngineInstance) {
+      const inst = new PreviewEngine()
+      inst.initAdaptiveQuality()
+      w.__ncEngineInstance = inst
+    }
+    engineInstance = w.__ncEngineInstance
+    return engineInstance
+  }
   if (!engineInstance) {
     engineInstance = new PreviewEngine()
     engineInstance.initAdaptiveQuality()

@@ -53,7 +53,15 @@ export function useEngineBridge(canvasRef: React.RefObject<HTMLCanvasElement | n
       if (state.isPlaying !== prev.isPlaying) {
         if (state.isPlaying) {
           const engine2 = getEngine()
-          engine2.seekTo(useEditor.getState().currentTime)
+          const st2 = useEditor.getState()
+          engine2.seekTo(st2.currentTime)
+          // restarting from the end: the engine rewinds its clock to 0 — keep
+          // the store clock in sync too, or the scrub-correction below fires
+          // immediately after and yanks the playhead back to the end (play
+          // then died instantly — a long-standing bug)
+          if (st2.currentTime >= projectDuration(st2.project) - 0.05) {
+            useEditor.setState({ currentTime: 0 })
+          }
           engine2.play()
         } else {
           getEngine().pause()
