@@ -433,7 +433,7 @@ export function AudioPanel() {
           <div className="rounded-lg border border-dashed border-(--nc-line-strong) p-4 text-center">
             <Music className="mx-auto size-5 text-muted-foreground" />
             <p className="mt-1.5 text-xs text-muted-foreground">
-              No audio yet — import music or extract from your videos later.
+              No audio yet — import music, record a voiceover, or extract audio from a video clip.
             </p>
           </div>
         )}

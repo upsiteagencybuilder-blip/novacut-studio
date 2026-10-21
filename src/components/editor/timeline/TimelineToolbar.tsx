@@ -7,6 +7,7 @@
  */
 import { useState } from 'react'
 import {
+  AudioLines,
   AudioWaveform,
   Bookmark,
   ChevronDown,
@@ -73,6 +74,10 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
   // mirror the store's insertFreezeFrame target logic — any video/image under the playhead works
   const canFreeze = project.clips.some(
     (c) => (c.kind === 'video' || c.kind === 'image') && currentTime >= c.start && currentTime < c.start + c.duration,
+  )
+  // mirror the store's extractAudioFromVideo target logic — selected video OR video under the playhead
+  const canExtract = project.clips.some(
+    (c) => c.kind === 'video' && (selectedIds.includes(c.id) || (currentTime >= c.start && currentTime < c.start + c.duration)),
   )
 
   const setZoom = (z: number) => useEditor.getState().setZoom(z)
@@ -189,6 +194,28 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">Freeze frame at playhead</TooltipContent>
+      </Tooltip>
+
+      {/* extract audio — detach the video soundtrack into an editable audio clip */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={TOOL_BTN}
+            disabled={!canExtract}
+            aria-label="Extract audio from video clip"
+            onClick={async () => {
+              const res = await useEditor.getState().extractAudioFromVideo()
+              if (res === 'ok') toast.success('Audio extracted — new clip on the audio track, video sound muted')
+              else if (res === 'no-audio') toast.error('This video has no audio track to extract')
+              else toast('Select a video clip or move the playhead over one')
+            }}
+          >
+            <AudioLines className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Extract audio from video</TooltipContent>
       </Tooltip>
 
       <Tooltip>
@@ -469,7 +496,13 @@ async function detectBeatsFromSelection(setDetecting: (v: boolean) => void): Pro
       toast('No clear beats found in this clip')
       return
     }
-    st.setBeatMarkers(res.times, res.bpm)
+    // beats are detected in SOURCE time — map them to TIMELINE time so the
+    // ruler guides and snap targets land exactly where the beats are audible:
+    // timeline = clip.start + (sourceT - inPoint) / speed (in-point beats dropped)
+    const shifted = res.times
+      .map((t) => clip.start + (t - clip.trimStart) / (clip.speed || 1))
+      .filter((t) => t >= 0)
+    st.setBeatMarkers(shifted, res.bpm)
     toast.success(
       `${res.bpm !== null ? `${Math.round(res.bpm)} BPM · ` : ''}${res.times.length} beat markers added`,
     )

@@ -984,6 +984,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
   const updateClip = useEditor((s) => s.updateClip)
   const replaceClipMedia = useEditor((s) => s.replaceClipMedia)
   const insertFreezeFrame = useEditor((s) => s.insertFreezeFrame)
+  const extractAudioFromVideo = useEditor((s) => s.extractAudioFromVideo)
 
   const meta = KIND_META[clip.kind]
   const KindIcon = meta.icon
@@ -1231,6 +1232,24 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             >
               <Snowflake className="h-3.5 w-3.5" />
               Freeze frame at playhead
+            </Button>
+          )}
+
+          {/* extract audio — detach the soundtrack into an editable audio clip */}
+          {clip.kind === 'video' && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-full gap-1.5 text-[11px]"
+              onClick={async () => {
+                const res = await extractAudioFromVideo()
+                if (res === 'ok') toast.success('Audio extracted — editable clip on the audio track, video sound muted')
+                else if (res === 'no-audio') toast.error('This video has no audio track to extract')
+                else toast('Could not extract audio from this clip')
+              }}
+            >
+              <AudioLines className="h-3.5 w-3.5" />
+              Extract audio to track
             </Button>
           )}
 

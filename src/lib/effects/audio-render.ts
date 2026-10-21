@@ -1007,7 +1007,10 @@ async function renderToBuffer(effect: SoundFxEffect | MusicEffect, sampleRate: 4
  */
 export function encodeWav16BitStereo(buffer: AudioBuffer, gain: number): Blob {
   const frames = buffer.length
-  const channels = Math.min(2, buffer.numberOfChannels)
+  // always encode a STEREO wav — the writer emits an L/R pair per frame, so the
+  // byte count must assume 2 channels even when the source buffer is mono
+  // (mono sources are duplicated to both sides below)
+  const channels = 2
   const dataBytes = frames * channels * 2
   const out = new ArrayBuffer(44 + dataBytes)
   const view = new DataView(out)
@@ -1028,7 +1031,7 @@ export function encodeWav16BitStereo(buffer: AudioBuffer, gain: number): Blob {
   writeString(36, 'data')
   view.setUint32(40, dataBytes, true)
   const ch0 = buffer.getChannelData(0)
-  const ch1 = channels > 1 ? buffer.getChannelData(1) : ch0
+  const ch1 = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : ch0
   let offset = 44
   for (let i = 0; i < frames; i++) {
     const l = clamp(ch0[i] * gain, -1, 1)

@@ -50,6 +50,7 @@ export const SOUND_TOOLS: ProTool[] = [
   // -------- Mixing & routing --------
   { id: 'sound-gain-control-slider', name: 'Gain Control Slider', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Volume slider per clip plus master volume in the audio panel' },
   { id: 'sound-volume-keyframe-tool', name: 'Volume Keyframe Tool', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Keyframe volume like any property, easing applies between keys' },
+  { id: 'sound-audio-fades', name: 'Audio Fade In / Out', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Per-clip gain ramps drawn as fade wedges on the timeline', action: 'open-effects' },
   { id: 'sound-pan-slider', name: 'Pan Slider (Left/Right)', section: 'sound', group: 'Mixing & routing', status: 'planned', desc: 'Balance a clip across the stereo field' },
   { id: 'sound-surround-panner', name: 'Surround Panner (5.1/7.1)', section: 'sound', group: 'Mixing & routing', status: 'planned', desc: 'Position sounds around multichannel speaker layouts' },
   { id: 'sound-audio-track-mixer', name: 'Audio Track Mixer', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Mixer dialog faders, mute switches and a live master meter', action: 'open-mixer' },
@@ -72,6 +73,7 @@ export const SOUND_TOOLS: ProTool[] = [
   { id: 'sound-audio-sync-tool', name: 'Audio Sync Tool (Waveform Matching)', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Align clips by matching their waveforms automatically' },
   { id: 'sound-ltc-timecode-reader', name: 'LTC Timecode Reader', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Decode linear timecode from an audio track' },
   { id: 'sound-audio-ducking-controls', name: 'Audio Ducking Controls', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Auto-duck toggle in clip properties ducks music under dialogue' },
+  { id: 'sound-extract-audio', name: 'Extract Audio (Detach)', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Detach the video soundtrack into an editable audio clip in one click' },
   { id: 'sound-essential-sound-panel', name: 'Essential Sound Panel', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Tag-based sound workflow stays roadmap, voice FX cover enhancement' },
   { id: 'sound-dialogue-enhancer', name: 'Dialogue Enhancer', section: 'sound', group: 'Sync & post', status: 'beta', desc: 'Voice FX enhancer presets brighten and clean dialogue clips' },
   { id: 'sound-music-ducking-threshold', name: 'Music Ducking Threshold', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Set sensitivity, attack and release for auto ducking' },

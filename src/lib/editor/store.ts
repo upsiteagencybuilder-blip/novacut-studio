@@ -112,6 +112,8 @@ interface EditorStore {
   replaceClipMedia: (clipId: string, mediaId: string) => boolean
   /** capture the current frame as a 3s still and ripple-insert it at the playhead */
   insertFreezeFrame: () => Promise<boolean>
+  /** detach a video clip's soundtrack into an editable audio clip on the audio track ('no-video' = no target, 'no-audio' = silent source) */
+  extractAudioFromVideo: () => Promise<'ok' | 'no-video' | 'no-audio' | 'failed'>
   deleteClip: (id: string) => void
   deleteSelected: () => void
   rippleDeleteSelected: () => void
@@ -635,6 +637,66 @@ export const useEditor = create<EditorStore>((set, get) => ({
       blob
     ).catch((e) => console.error('freeze asset save failed', e))
     return true
+  },
+
+  extractAudioFromVideo: async () => {
+    const s = get()
+    const t = s.currentTime
+    const videos = s.project.clips.filter((c) => c.kind === 'video')
+    const target =
+      videos.find((c) => s.selectedClipIds.includes(c.id)) ??
+      videos.find((c) => t >= c.start && t < c.start + c.duration)
+    if (!target) return 'no-video'
+    const source = s.media.find((m) => m.id === target.mediaId)
+    if (!source) return 'no-video'
+    try {
+      // decode the embedded audio track straight from the source blob
+      const { decodeSource } = await import('../effects/voice')
+      const { encodeWav16BitStereo } = await import('../effects/audio-render')
+      const buffer = await decodeSource(source.rawBlob)
+      if (!buffer.length) return 'no-audio'
+      // slice exactly the clip's trimmed source window (respects speed)
+      const sr = buffer.sampleRate
+      const from = Math.min(Math.max(0, buffer.length - 1), Math.max(0, Math.round(target.trimStart * sr)))
+      const len = Math.max(1, Math.min(buffer.length - from, Math.round(target.duration * target.speed * sr)))
+      let ctx: BaseAudioContext
+      try {
+        ctx = new OfflineAudioContext(1, 2, sr)
+      } catch {
+        ctx = new AudioContext()
+      }
+      const win = ctx.createBuffer(Math.min(2, buffer.numberOfChannels), len, sr)
+      for (let c = 0; c < win.numberOfChannels; c++) {
+        win.copyToChannel(buffer.getChannelData(c).subarray(from, from + len), c)
+      }
+      const wav = encodeWav16BitStereo(win, 1)
+      const { importFiles } = await import('./importer')
+      const assets = await importFiles([new File([wav], `audio-${target.id}.wav`, { type: 'audio/wav' })])
+      if (assets.length === 0 || !assets[0]) return 'failed'
+      const audioAsset = assets[0]
+      get().addMediaAsset(audioAsset)
+      // find or create an unlocked audio track
+      const st = get()
+      let audioTrack =
+        st.project.tracks.find((tr) => tr.kind === 'audio' && !tr.locked) ??
+        st.project.tracks.find((tr) => tr.kind === 'audio')
+      if (!audioTrack) {
+        get().addTrack('audio')
+        audioTrack = get().project.tracks.find((tr) => tr.kind === 'audio')
+      }
+      if (!audioTrack) return 'failed'
+      const audioClip = createClipFromMedia(get().project, audioAsset, audioTrack.id, round2(target.start))
+      audioClip.name = `Audio · ${target.name}`
+      // addClip pushes the history snapshot; the mute patch below has no history
+      // flag, so ONE undo reverts the extracted clip + the video mute together
+      get().addClip(audioClip)
+      get().updateClip(target.id, { volume: 0, muted: true })
+      return 'ok'
+    } catch (e) {
+      // decodeAudioData rejects on video files that carry no audio track
+      console.error('extractAudioFromVideo failed', e)
+      return 'no-audio'
+    }
   },
 
   deleteClip: (id) => {
