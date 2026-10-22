@@ -23,7 +23,7 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-pen-tool', name: 'Pen Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Draw or adjust keyframe and mask points directly on clips' },
   { id: 'timeline-hand-tool', name: 'Hand Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Pan the timeline view by dragging with the mouse' },
   { id: 'timeline-zoom-tool', name: 'Zoom Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Magnify a timeline region by clicking or dragging a range' },
-  { id: 'timeline-text-tool', name: 'Text Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Click the program monitor to place text directly on canvas' },
+  { id: 'timeline-text-tool', name: 'Text Tool', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Double-click the preview canvas to place a text clip exactly there' },
   { id: 'timeline-type-tool', name: 'Type Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Create point text by typing straight onto the preview' },
   { id: 'timeline-vertical-type-tool', name: 'Vertical Type Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Type vertically stacked text for CJK and side captions' },
   { id: 'timeline-rectangle-tool', name: 'Rectangle Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Drag on the preview to draw a rectangle shape layer' },

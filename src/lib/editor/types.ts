@@ -116,6 +116,9 @@ export type TextAnimation =
   | 'shakeLoop'
   | 'neonFlicker'
   | 'glitchLoop'
+  // title behaviors — scroll across the WHOLE clip duration (end credits / ticker)
+  | 'roll'
+  | 'crawl'
 export type StickerAnimation = 'none' | 'pop' | 'float' | 'spin' | 'pulse'
 
 /** Properties that can be keyframed */
@@ -197,11 +200,21 @@ export interface TextStyle {
   shadow: boolean
   shadowColor: string
   shadowBlur: number
+  /** drop-shadow distance px — default 2 (older persisted projects omit it) */
+  shadowDistance?: number
+  /** drop-shadow angle degrees, 90 = straight down — default 90 */
+  shadowAngle?: number
   letterSpacing: number
   lineHeight: number
   animation: TextAnimation
   /** seconds */
   animationDuration: number
+  /** uppercase display without editing the source content */
+  textTransform?: 'none' | 'uppercase'
+  /** draw an underline beneath the text */
+  underline?: boolean
+  /** draw a line through the middle of the text */
+  strike?: boolean
 }
 
 export interface StickerStyle {

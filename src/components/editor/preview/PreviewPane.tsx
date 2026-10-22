@@ -16,6 +16,7 @@ import { useEditor } from '@/lib/editor/store'
 import { estimateClipRect, getEngine, type ClipBounds } from '@/lib/editor/engine'
 import { CANVAS_PRESETS } from '@/lib/editor/constants'
 import { clamp, formatTimecode, projectDuration } from '@/lib/editor/utils'
+import { toast } from 'sonner'
 import { useEngineBridge } from '@/hooks/useEngineBridge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -51,6 +52,7 @@ export function PreviewPane() {
   const setMasterVolume = useEditor((s) => s.setMasterVolume)
   const toggleMasterMuted = useEditor((s) => s.toggleMasterMuted)
   const setCanvasSize = useEditor((s) => s.setCanvasSize)
+  const addTextClip = useEditor((s) => s.addTextClip)
 
   const rootRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -166,6 +168,18 @@ export function PreviewPane() {
     if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
   }
 
+  /** double-click the canvas → drop a text clip exactly there (text tool) */
+  const handleStageDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const box = wrapperRef.current?.getBoundingClientRect()
+    if (!box || box.width < 2 || box.height < 2) return
+    // ignore double-clicks that start on the selection overlay handles
+    if ((e.target as HTMLElement).closest('[data-nc-selection]')) return
+    const x = Math.round((clamp(((e.clientX - box.left) / box.width) * 2 - 1, -1, 1)) * 1000) / 1000
+    const y = Math.round((clamp(((e.clientY - box.top) / box.height) * 2 - 1, -1, 1)) * 1000) / 1000
+    addTextClip(undefined, { x, y })
+    toast('Text placed — style it in Properties')
+  }
+
   /* -------- transport -------- */
   const presetId =
     CANVAS_PRESETS.find((p) => p.width === canvasWidth && p.height === canvasHeight)?.id ?? '16:9'
@@ -191,11 +205,13 @@ export function PreviewPane() {
             ref={wrapperRef}
             className="nc-stage relative overflow-hidden rounded-lg"
             style={{ width: fit.w || undefined, height: fit.h || undefined }}
+            onDoubleClick={handleStageDoubleClick}
           >
             <canvas ref={canvasRef} className="block h-full w-full" />
 
             {bounds && (
               <div
+                data-nc-selection
                 className="absolute touch-none rounded-[2px] border-2 border-fuchsia-400"
                 style={{
                   left: `${((bounds.x - bounds.w / 2) / canvasWidth) * 100}%`,

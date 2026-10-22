@@ -1678,6 +1678,8 @@ class PreviewEngine {
     if (supportsLetterSpacing) ctxAny.letterSpacing = `${style.letterSpacing}px`
 
     let content = style.content || ' '
+    // uppercase display without touching the source content
+    if (style.textTransform === 'uppercase') content = content.toUpperCase()
     // text entry animations — the legacy six keep their exact original math
     let animAlpha = 1
     let animX = 0
@@ -1801,6 +1803,14 @@ class PreviewEngine {
     for (const line of lines) maxW = Math.max(maxW, ctx.measureText(line).width)
     maxW = Math.max(maxW, style.fontSize * 0.5)
 
+    // roll / crawl — full-clip title scrolls sized off the wrapped text block
+    if (style.animation === 'roll' || style.animation === 'crawl') {
+      const span = style.animation === 'roll' ? totalH + H : maxW + W
+      const pr = clamp(tLocal / Math.max(0.2, clip.duration), 0, 1)
+      if (style.animation === 'roll') animY = (span / 2) * (1 - 2 * pr)
+      else animX = (span / 2) * (1 - 2 * pr)
+    }
+
     ctx.globalAlpha *= animAlpha
     if (animRot) ctx.rotate((animRot * Math.PI) / 180)
     if (animX || animY) ctx.translate(animX, animY)
@@ -1840,7 +1850,11 @@ class PreviewEngine {
     if (style.shadow) {
       ctx.shadowColor = style.shadowColor
       ctx.shadowBlur = style.shadowBlur
-      ctx.shadowOffsetY = 2
+      // distance/angle shadow placement (legacy default: 2px straight down)
+      const dist = style.shadowDistance ?? 2
+      const ang = ((style.shadowAngle ?? 90) * Math.PI) / 180
+      ctx.shadowOffsetX = Math.round(Math.cos(ang) * dist * 100) / 100
+      ctx.shadowOffsetY = Math.round(Math.sin(ang) * dist * 100) / 100
     }
     if (neonGlow !== null) {
       // neon glow: color-matched shadow pulsing with the deterministic flicker
@@ -1872,6 +1886,34 @@ class PreviewEngine {
       }
     }
     paintLines(0)
+
+    // underline / strikethrough — drawn per line, mirroring paintLines anchors
+    if (style.underline || style.strike) {
+      const lw = Math.max(1, style.fontSize * 0.055)
+      ctx.save()
+      ctx.shadowBlur = 0
+      ctx.shadowOffsetX = 0
+      ctx.shadowOffsetY = 0
+      ctx.fillStyle = style.color
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        if (!line) continue
+        const y = -totalH / 2 + lineH * (i + 0.5)
+        const w = ctx.measureText(line).width
+        const x0 = supportsLetterSpacing
+          ? style.align === 'center'
+            ? -w / 2
+            : -maxW / 2
+          : style.align === 'left'
+            ? -maxW / 2
+            : style.align === 'right'
+              ? maxW / 2 - w
+              : -w / 2
+        if (style.underline) ctx.fillRect(x0, y + style.fontSize * 0.42, w, lw)
+        if (style.strike) ctx.fillRect(x0, y - lw / 2, w, lw)
+      }
+      ctx.restore()
+    }
 
     // glitchLoop: during a deterministic window, redraw thin horizontal slices
     // with an rgb split (two colored passes offset ±dx)

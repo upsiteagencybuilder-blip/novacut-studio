@@ -95,7 +95,10 @@ export function TextPanel() {
       {/* tip */}
       <div className="nc-glass flex gap-2 rounded-lg p-3 text-[11px] text-muted-foreground">
         <Lightbulb className="size-3.5 shrink-0 text-yellow-500" />
-        <p>Select a text clip on the timeline to customize font, colors, animations and more in the Properties panel.</p>
+        <p>
+          Tip: double-click anywhere on the preview canvas to drop text exactly there. Select a text
+          clip to customize font, colors, animations and more in Properties.
+        </p>
       </div>
     </div>
   )

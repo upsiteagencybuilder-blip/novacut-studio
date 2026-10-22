@@ -10,6 +10,7 @@ import {
   AudioLines,
   Blend,
   Bold,
+  CaseUpper,
   ChevronDown,
   Copy,
   Crop,
@@ -32,10 +33,12 @@ import {
   Snowflake,
   Sparkles,
   Sticker,
+  Strikethrough,
   Sun,
   Timer,
   Trash2,
   Type,
+  Underline,
   VolumeX,
   Wand2,
   X,
@@ -61,7 +64,7 @@ import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
@@ -93,13 +96,60 @@ const KIND_META: Record<ClipKind, { label: string; icon: LucideIcon }> = {
   sticker: { label: 'Sticker', icon: Sticker },
 }
 
-const TEXT_ANIMATIONS: { value: TextAnimation; label: string }[] = [
-  { value: 'none', label: 'None' },
-  { value: 'fadeIn', label: 'Fade In' },
-  { value: 'slideUp', label: 'Slide Up' },
-  { value: 'pop', label: 'Pop' },
-  { value: 'typewriter', label: 'Typewriter' },
-  { value: 'wipe', label: 'Wipe' },
+const TEXT_ANIMATION_GROUPS: { label: string; items: { value: TextAnimation; label: string }[] }[] = [
+  {
+    label: 'Basic',
+    items: [
+      { value: 'none', label: 'None' },
+      { value: 'fadeIn', label: 'Fade In' },
+      { value: 'slideUp', label: 'Slide Up' },
+      { value: 'pop', label: 'Pop' },
+      { value: 'typewriter', label: 'Typewriter' },
+      { value: 'wipe', label: 'Wipe' },
+    ],
+  },
+  {
+    label: 'Slides',
+    items: [
+      { value: 'slideLeft', label: 'Slide Left' },
+      { value: 'slideRight', label: 'Slide Right' },
+      { value: 'slideDown', label: 'Slide Down' },
+    ],
+  },
+  {
+    label: 'Pop & Spin',
+    items: [
+      { value: 'bounceIn', label: 'Bounce In' },
+      { value: 'elastic', label: 'Elastic' },
+      { value: 'flipX', label: 'Flip X' },
+      { value: 'rotateIn', label: 'Rotate In' },
+      { value: 'swing', label: 'Swing' },
+    ],
+  },
+  {
+    label: 'Cinematic',
+    items: [
+      { value: 'zoomBlur', label: 'Zoom Blur' },
+      { value: 'trackingIn', label: 'Tracking In' },
+      { value: 'blurIn', label: 'Blur In' },
+    ],
+  },
+  {
+    label: 'Title scrolls',
+    items: [
+      { value: 'roll', label: 'Roll (end credits)' },
+      { value: 'crawl', label: 'Crawl (news ticker)' },
+    ],
+  },
+  {
+    label: 'Loops',
+    items: [
+      { value: 'waveLoop', label: 'Wave Loop' },
+      { value: 'shakeLoop', label: 'Shake Loop' },
+      { value: 'neonFlicker', label: 'Neon Flicker' },
+      { value: 'glitchLoop', label: 'Glitch Loop' },
+    ],
+  },
 ]
 
 const STICKER_ANIMATIONS: { value: StickerAnimation; label: string }[] = [
@@ -186,6 +236,33 @@ function toHexInput(v: string): string {
     return `#${r}${r}${g}${g}${b}${b}`
   }
   return '#000000'
+}
+
+/** parse hex/rgb/rgba css colors into channels (alpha defaults to 1) */
+function parseColorChannels(v: string): { r: number; g: number; b: number; a: number } {
+  const s = v.trim()
+  const hex = /^#([0-9a-f]{3,8})$/i.exec(s)
+  if (hex) {
+    let h = hex[1]
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('')
+    const r = parseInt(h.slice(0, 2), 16)
+    const g = parseInt(h.slice(2, 4), 16)
+    const b = parseInt(h.slice(4, 6), 16)
+    const a = h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1
+    return { r, g, b, a }
+  }
+  const m = /^rgba?\(([^)]+)\)$/i.exec(s)
+  if (m) {
+    const parts = m[1].split(',').map((p) => parseFloat(p.trim()))
+    return { r: parts[0] || 0, g: parts[1] || 0, b: parts[2] || 0, a: parts[3] === undefined ? 1 : parts[3] }
+  }
+  return { r: 0, g: 0, b: 0, a: 0.55 }
+}
+
+/** rebuild an rgba() string keeping the original rgb channels at a new alpha */
+function recolorWithAlpha(hex: string, alpha: number): string {
+  const c = parseColorChannels(hex)
+  return `rgba(${c.r},${c.g},${c.b},${Math.round(alpha * 100) / 100})`
 }
 
 /* ================================================================ shared row helpers */
@@ -402,13 +479,26 @@ function TextSection({ clip }: { clip: Clip }) {
         format={fmtPx}
       />
 
-      {/* bold / italic / align */}
-      <div className="flex items-center gap-1.5">
+      {/* bold / italic / caps / underline / strike / align */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <ToggleButton title="Bold" active={style.bold} onClick={() => patch({ bold: !style.bold }, true)}>
           <Bold className="h-3.5 w-3.5" />
         </ToggleButton>
         <ToggleButton title="Italic" active={style.italic} onClick={() => patch({ italic: !style.italic }, true)}>
           <Italic className="h-3.5 w-3.5" />
+        </ToggleButton>
+        <ToggleButton
+          title="Uppercase"
+          active={style.textTransform === 'uppercase'}
+          onClick={() => patch({ textTransform: style.textTransform === 'uppercase' ? 'none' : 'uppercase' }, true)}
+        >
+          <CaseUpper className="h-3.5 w-3.5" />
+        </ToggleButton>
+        <ToggleButton title="Underline" active={!!style.underline} onClick={() => patch({ underline: !style.underline }, true)}>
+          <Underline className="h-3.5 w-3.5" />
+        </ToggleButton>
+        <ToggleButton title="Strikethrough" active={!!style.strike} onClick={() => patch({ strike: !style.strike }, true)}>
+          <Strikethrough className="h-3.5 w-3.5" />
         </ToggleButton>
         <div className="ml-auto flex items-center gap-0.5 rounded-lg border border-(--nc-line) p-0.5">
           {(['left', 'center', 'right'] as const).map((a) => (
@@ -465,15 +555,59 @@ function TextSection({ clip }: { clip: Clip }) {
         />
       </div>
       {style.shadow && (
-        <SliderRow
-          label="Blur"
-          min={0}
-          max={60}
-          step={1}
-          value={style.shadowBlur}
-          onChange={(v) => patch({ shadowBlur: v }, 'txt-shadow')}
-          format={fmtPx}
-        />
+        <>
+          <SliderRow
+            label="Blur"
+            min={0}
+            max={60}
+            step={1}
+            value={style.shadowBlur}
+            onChange={(v) => patch({ shadowBlur: v }, 'txt-shadow')}
+            format={fmtPx}
+          />
+          <div className="flex gap-3">
+            <ColorField
+              label="Shadow color"
+              value={style.shadowColor}
+              onChange={(hex) => {
+                const cur = parseColorChannels(style.shadowColor)
+                patch({ shadowColor: recolorWithAlpha(hex, cur.a) }, 'txt-shadow-color')
+              }}
+            />
+            <div className="min-w-0 flex-1">
+              <SliderRow
+                label="Shadow opacity"
+                min={0}
+                max={1}
+                step={0.05}
+                value={parseColorChannels(style.shadowColor).a}
+                onChange={(v) => {
+                  const cur = parseColorChannels(style.shadowColor)
+                  patch({ shadowColor: `rgba(${cur.r},${cur.g},${cur.b},${Math.round(v * 100) / 100})` }, 'txt-shadow-alpha')
+                }}
+                format={fmtPct}
+              />
+            </div>
+          </div>
+          <SliderRow
+            label="Distance"
+            min={0}
+            max={40}
+            step={1}
+            value={style.shadowDistance ?? 2}
+            onChange={(v) => patch({ shadowDistance: v }, 'txt-shadow-dist')}
+            format={fmtPx}
+          />
+          <SliderRow
+            label="Angle"
+            min={0}
+            max={360}
+            step={5}
+            value={style.shadowAngle ?? 90}
+            onChange={(v) => patch({ shadowAngle: v }, 'txt-shadow-ang')}
+            format={fmtDeg}
+          />
+        </>
       )}
 
       {/* background plate */}
@@ -528,10 +662,17 @@ function TextSection({ clip }: { clip: Clip }) {
         value={style.animation}
         onChange={(v) => patch({ animation: v as TextAnimation }, true)}
       >
-        {TEXT_ANIMATIONS.map((a) => (
-          <SelectItem key={a.value} value={a.value} className="text-xs">
-            {a.label}
-          </SelectItem>
+        {TEXT_ANIMATION_GROUPS.map((group) => (
+          <SelectGroup key={group.label}>
+            <SelectLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              {group.label}
+            </SelectLabel>
+            {group.items.map((a) => (
+              <SelectItem key={a.value} value={a.value} className="text-xs">
+                {a.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
         ))}
       </SelectRow>
       <SliderRow

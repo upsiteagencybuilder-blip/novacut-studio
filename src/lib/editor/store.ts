@@ -101,7 +101,7 @@ interface EditorStore {
   /* ---------- clips ---------- */
   addClip: (clip: Clip, opts?: { select?: boolean }) => void
   addClipFromMediaId: (mediaId: string) => void
-  addTextClip: (preset?: TextPreset) => void
+  addTextClip: (preset?: TextPreset, at?: { x: number; y: number }) => void
   addStickerClip: (emoji: string) => void
   updateClip: (id: string, patch: ClipPatch, history?: boolean | string) => void
   /** strip a transition between two adjacent clips (fades + wipe mask + iris keys), one undo step */
@@ -465,9 +465,13 @@ export const useEditor = create<EditorStore>((set, get) => ({
     s.addClip(clip)
   },
 
-  addTextClip: (preset) => {
+  addTextClip: (preset, at) => {
     const s = get()
-    const clip = createTextClip(s.project, preset, undefined, round2(s.currentTime))
+    // `at` places the clip at a canvas position (fraction offset from center)
+    const merged: TextPreset | undefined = at
+      ? { ...preset, transform: { ...(preset?.transform ?? {}), x: at.x, y: at.y } }
+      : preset
+    const clip = createTextClip(s.project, merged, undefined, round2(s.currentTime))
     s.addClip(clip)
   },
 
