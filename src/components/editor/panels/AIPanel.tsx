@@ -1,21 +1,29 @@
 'use client'
 
 /**
- * AI panel — the "AI Magic" suite:
- *  1. Auto Captions     — on-device WAV extraction → server ASR → caption clips
- *  2. Silence Cut       — fully on-device silence detection + ripple rough-cut
- *  3. AI Image (B-Roll) — text-to-image, imported straight into the library
- *  4. AI Voiceover      — text-to-speech (auto-chunked for long scripts)
+ * AI panel — the "AI Magic" suite, grouped into three sub-tabs:
+ *
+ *  Assistant  — AI Copilot (natural-language editing via /api/ai/copilot) and
+ *               the Script Writer (hooks / scripts / captions from a topic)
+ *  Video      — Auto Captions (speech-to-text + transcript translation),
+ *               Silence Cut (on-device) and AI Audio Enhance (one-tap cleanup)
+ *  Create     — AI Image (text-to-image B-roll) and AI Voiceover (TTS)
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AudioLines,
+  Bot,
   Captions,
+  Clapperboard,
+  FileText,
   Image as ImageIcon,
+  Languages,
   Loader2,
   Mic,
+  RotateCcw,
   Scissors,
+  Send,
   ShieldCheck,
   Sparkles,
   Wand2,
@@ -30,9 +38,11 @@ import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 import { analyzeClipSilence, base64ToBlob, exportAudioSegmentWav, fileToBase64, imageBase64ToFile, requireOnline, sniffImageMime } from '@/lib/editor/ai'
 import type { SilenceAnalysis } from '@/lib/editor/ai'
+import { applyCopilotActions, buildCopilotContext } from '@/lib/editor/copilot'
 import { importFiles } from '@/lib/editor/importer'
 import { useEditor } from '@/lib/editor/store'
 import { round2 } from '@/lib/editor/utils'
+import type { AiSubTab } from '@/lib/editor/types'
 import type { CaptionSegment, Clip, MediaAssetRuntime, TextStyle } from '@/lib/editor/types'
 
 /* ================= shared bits ================= */
@@ -88,6 +98,39 @@ function NoteRow({ icon: Icon, children }: { icon: LucideIcon; children: React.R
     <div className="flex items-start gap-1.5 text-[10px] leading-relaxed text-muted-foreground">
       <Icon className="mt-0.5 size-3 shrink-0 text-fuchsia-300/80" />
       <p>{children}</p>
+    </div>
+  )
+}
+
+/* ================= tab bar ================= */
+
+const AI_TABS: { id: AiSubTab; label: string; icon: LucideIcon }[] = [
+  { id: 'assistant', label: 'Assistant', icon: Bot },
+  { id: 'video', label: 'Video', icon: Clapperboard },
+  { id: 'create', label: 'Create', icon: Wand2 },
+]
+
+function AiTabBar({ tab, onChange }: { tab: AiSubTab; onChange: (t: AiSubTab) => void }) {
+  return (
+    <div role="tablist" aria-label="AI panel sections" className="grid grid-cols-3 gap-1.5 rounded-xl border border-(--nc-line) bg-(--nc-panel) p-1.5">
+      {AI_TABS.map((t) => {
+        const active = tab === t.id
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(t.id)}
+            className={`flex h-8 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold transition ${
+              active ? 'nc-gradient text-white shadow-[0_0_14px_var(--nc-accent-glow-soft)]' : 'text-muted-foreground hover:bg-(--nc-panel-strong) hover:text-foreground'
+            }`}
+          >
+            <t.icon className="size-3.5" />
+            {t.label}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -152,6 +195,18 @@ const CAPTION_STYLE_PRESETS: CaptionStylePreset[] = [
     },
   },
 ]
+
+const CAPTION_LANGS = [
+  { id: 'off', label: 'Original — no translation' },
+  { id: 'Bangla', label: 'Translate → বাংলা (Bangla)' },
+  { id: 'English', label: 'Translate → English' },
+  { id: 'Hindi', label: 'Translate → Hindi' },
+  { id: 'Urdu', label: 'Translate → Urdu' },
+  { id: 'Spanish', label: 'Translate → Spanish' },
+  { id: 'Arabic', label: 'Translate → Arabic' },
+]
+
+const SCRIPT_LANGS = ['Bangla', 'English', 'Hindi', 'Urdu', 'Spanish', 'Arabic']
 
 /** Split a raw transcript into caption-sized chunks (sentence-aware, min ~2 words) */
 function splitTranscriptChunks(text: string): string[] {
@@ -291,9 +346,378 @@ function splitTextForTts(text: string, maxLen = 900): string[] {
   return chunks
 }
 
+/* ================= copilot ================= */
+
+interface CopilotMsg {
+  role: 'user' | 'ai'
+  text: string
+  applied?: string[]
+  skipped?: string[]
+}
+
+const COPILOT_WELCOME =
+  'Hi! I can edit the timeline for you — try “add a bold title NovaCut at the start” or “put the Cyberpunk look on all clips”. Bangla চলে!'
+
+const COPILOT_QUICK_PROMPTS = [
+  'Add a bold title "NovaCut" at the start',
+  'Put the Cyberpunk look on all clips',
+  'Add kenBurns motion to the selected clip and a crossfade',
+  'Add a 💥 sticker and set speed 1.5 on the selected clip',
+]
+
+function CopilotCard() {
+  const [msgs, setMsgs] = useState<CopilotMsg[]>([{ role: 'ai', text: COPILOT_WELCOME }])
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const chatRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const el = chatRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [msgs, busy])
+
+  const send = useCallback(
+    async (raw?: string) => {
+      const command = (raw ?? input).trim()
+      if (!command || busy) return
+      setInput('')
+      setBusy(true)
+      setMsgs((m) => [...m, { role: 'user', text: command }])
+      try {
+        const res = await fetch('/api/ai/copilot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command, context: buildCopilotContext(useEditor.getState()) }),
+        })
+        const data = (await res.json().catch(() => null)) as
+          | { actions?: unknown[]; note?: string; error?: string }
+          | null
+        if (!res.ok) throw new Error(data?.error ?? `Copilot failed (${res.status})`)
+        const actions = Array.isArray(data?.actions) ? data!.actions! : []
+        let applied: string[] = []
+        let skipped: string[] = []
+        if (actions.length > 0) {
+          const receipt = applyCopilotActions(actions)
+          applied = receipt.applied
+          skipped = receipt.skipped
+        }
+        const note = (data?.note ?? '').trim()
+        setMsgs((m) => [
+          ...m,
+          {
+            role: 'ai',
+            text: note || (actions.length ? 'Done!' : 'I could not map that to an edit — try rephrasing.'),
+            applied: applied.length ? applied : undefined,
+            skipped: skipped.length ? skipped : undefined,
+          },
+        ])
+        if (applied.length > 0) toast.success(`${applied.length} edit${applied.length === 1 ? '' : 's'} applied`)
+        else if (skipped.length > 0) toast(`Nothing applied — ${skipped.length} step${skipped.length === 1 ? '' : 's'} skipped`)
+      } catch (e) {
+        setMsgs((m) => [...m, { role: 'ai', text: e instanceof Error ? e.message : 'Copilot failed' }])
+      } finally {
+        setBusy(false)
+      }
+    },
+    [input, busy]
+  )
+
+  return (
+    <FeatureCard icon={Bot} title="AI Copilot" subtitle="Type an edit — the copilot does it">
+      <div
+        ref={chatRef}
+        className="max-h-72 space-y-2.5 overflow-y-auto rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2.5"
+        aria-live="polite"
+      >
+        {msgs.map((m, i) => (
+          <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
+            <div
+              className={`max-w-[92%] rounded-xl px-2.5 py-1.5 ${
+                m.role === 'user'
+                  ? 'nc-gradient text-white'
+                  : 'border border-(--nc-line) bg-(--nc-panel) text-foreground'
+              }`}
+            >
+              <p className="whitespace-pre-wrap text-[11px] leading-relaxed">{m.text}</p>
+              {m.applied && m.applied.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {m.applied.map((x, j) => (
+                    <span
+                      key={`a${j}`}
+                      className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-medium text-emerald-300"
+                    >
+                      ✓ {x}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {m.skipped && m.skipped.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {m.skipped.map((x, j) => (
+                    <span
+                      key={`s${j}`}
+                      className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[9px] font-medium text-amber-300"
+                      title="Skipped — the copilot only applies edits it can verify"
+                    >
+                      ⚠ {x}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        {busy && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-1.5 rounded-xl border border-(--nc-line) bg-(--nc-panel) px-2.5 py-1.5 text-[11px] text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
+              Planning edits…
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-1.5">
+        {COPILOT_QUICK_PROMPTS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            disabled={busy}
+            onClick={() => void send(p)}
+            className="rounded-lg border border-(--nc-line) bg-(--nc-panel) px-2 py-1.5 text-left text-[10px] leading-snug text-muted-foreground transition hover:border-fuchsia-400/50 hover:text-foreground disabled:opacity-50"
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
+      <form
+        className="flex items-center gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void send()
+        }}
+      >
+        <Input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="e.g. add a title + crossfade…"
+          maxLength={600}
+          disabled={busy}
+          className="h-9 flex-1 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+          aria-label="Describe the edit for the AI copilot"
+        />
+        <Button
+          type="submit"
+          size="icon"
+          disabled={busy || !input.trim()}
+          aria-label="Send to AI copilot"
+          className="nc-gradient nc-glow-hover size-9 shrink-0 rounded-lg text-white"
+        >
+          <Send className="size-3.5" />
+        </Button>
+      </form>
+      <NoteRow icon={ShieldCheck}>Plans are validated against your project — unknown edits are skipped, never guessed.</NoteRow>
+    </FeatureCard>
+  )
+}
+
+/* ================= script writer ================= */
+
+const SCRIPT_KINDS = [
+  { id: 'script', label: 'Voiceover script' },
+  { id: 'hooks', label: '8 hook ideas' },
+  { id: 'captions', label: '6 caption ideas' },
+] as const
+
+function ScriptWriterCard() {
+  const [topic, setTopic] = useState('')
+  const [kind, setKind] = useState<'script' | 'hooks' | 'captions'>('script')
+  const [language, setLanguage] = useState('Bangla')
+  const [busy, setBusy] = useState(false)
+  const [output, setOutput] = useState('')
+
+  const generate = useCallback(async () => {
+    const t = topic.trim()
+    if (!t) {
+      toast.error('Write a topic first')
+      return
+    }
+    if (busy) return
+    requireOnline()
+    setBusy(true)
+    try {
+      const res = await fetch('/api/ai/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'script', topic: t, kind, language }),
+      })
+      const data = (await res.json().catch(() => null)) as { text?: string; error?: string } | null
+      if (!res.ok || !data?.text) throw new Error(data?.error ?? `Script generation failed (${res.status})`)
+      setOutput(data.text)
+      toast.success('Script ready')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Script generation failed')
+    } finally {
+      setBusy(false)
+    }
+  }, [topic, kind, language, busy])
+
+  const useInVoiceover = useCallback(() => {
+    if (!output.trim()) return
+    // hand the script to the voiceover card via the panel-level event bridge
+    useEditor.getState().setAiSubTab('create')
+    window.dispatchEvent(new CustomEvent('nc-ai-voiceover-script', { detail: output.slice(0, 1000) }))
+    toast('Script sent to AI Voiceover')
+  }, [output])
+
+  return (
+    <FeatureCard icon={FileText} title="Script Writer" subtitle="Hooks, scripts & captions from a topic">
+      <Input
+        value={topic}
+        onChange={(e) => setTopic(e.target.value)}
+        placeholder="Topic — e.g. monsoon tea stall vibes, Dhaka street food"
+        maxLength={200}
+        className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+        aria-label="Script topic"
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <FieldLabel>Type</FieldLabel>
+          <Select value={kind} onValueChange={(v) => setKind(v as typeof kind)}>
+            <SelectTrigger className="h-9 w-full text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCRIPT_KINDS.map((k) => (
+                <SelectItem key={k.id} value={k.id} className="text-xs">
+                  {k.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <FieldLabel>Language</FieldLabel>
+          <Select value={language} onValueChange={setLanguage}>
+            <SelectTrigger className="h-9 w-full text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SCRIPT_LANGS.map((l) => (
+                <SelectItem key={l} value={l} className="text-xs">
+                  {l}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <Button
+        type="button"
+        disabled={busy}
+        onClick={() => void generate()}
+        className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
+      >
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+        {busy ? 'Writing…' : 'Generate'}
+      </Button>
+      {output && (
+        <div className="space-y-1.5">
+          <FieldLabel>Output</FieldLabel>
+          <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2.5 font-mono text-[10px] leading-relaxed text-foreground/80">
+            {output}
+          </pre>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={useInVoiceover}
+            className="h-9 w-full rounded-lg border-(--nc-line-strong) bg-(--nc-panel) text-xs font-semibold hover:bg-(--nc-panel-strong) hover:text-foreground"
+          >
+            <Mic className="size-3.5" />
+            Use in AI Voiceover
+          </Button>
+        </div>
+      )}
+    </FeatureCard>
+  )
+}
+
+/* ================= audio enhance ================= */
+
+/** One-tap speech cleanup recipe — merged into the clip's FX chain. */
+const ENHANCE_FX = {
+  highPass: 110,
+  lowPass: 14000,
+  eqLow: -6,
+  eqMid: 2.5,
+  eqHigh: 2,
+  compressor: true,
+  compAmount: 0.35,
+} as const
+
+function AudioEnhanceCard({ clip, isAvClip }: { clip: Clip | null; isAvClip: boolean }) {
+  const updateClip = useEditor((s) => s.updateClip)
+  const enhanced = !!clip?.audioFx && !!clip.audioFx.compressor && (clip.audioFx.highPass ?? 0) >= 100
+
+  return (
+    <FeatureCard icon={AudioLines} title="AI Audio Enhance" subtitle="One-tap speech cleanup for the selected clip">
+      {clip && isAvClip ? (
+        <>
+          <ClipChip clip={clip} />
+          <div className="flex items-center justify-between rounded-lg border border-(--nc-line) bg-(--nc-scrim) px-2.5 py-2 text-[11px]">
+            <span className="text-muted-foreground">Current state</span>
+            <span className={`font-semibold ${enhanced ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+              {enhanced ? 'Enhanced' : 'Original'}
+            </span>
+          </div>
+          <Button
+            type="button"
+            disabled={enhanced}
+            onClick={() => {
+              updateClip(clip.id, { audioFx: { ...ENHANCE_FX } }, 'ai-audio-enhance')
+              toast.success('Speech cleanup applied — tweak the values in Properties → Audio FX')
+            }}
+            className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+          >
+            <Zap className="size-3.5" />
+            Enhance speech
+          </Button>
+          {enhanced && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                updateClip(clip.id, { audioFx: null }, 'ai-audio-enhance-reset')
+                toast('Audio FX reset to original')
+              }}
+              className="h-9 w-full rounded-lg border-(--nc-line-strong) bg-(--nc-panel) text-xs font-semibold hover:bg-(--nc-panel-strong) hover:text-foreground"
+            >
+              <RotateCcw className="size-3.5" />
+              Reset to original
+            </Button>
+          )}
+          <NoteRow icon={AudioLines}>
+            De-rumble (110 Hz high-pass) + de-hiss (14 kHz low-pass) + presence EQ + gentle compression — fully tweakable afterwards.
+          </NoteRow>
+        </>
+      ) : (
+        <NoClipHint>
+          {clip
+            ? 'The selected clip has no audio — pick a video or audio clip to enhance its sound.'
+            : 'Select a video or audio clip on the timeline to clean up its sound.'}
+        </NoClipHint>
+      )}
+    </FeatureCard>
+  )
+}
+
 /* ================= the panel ================= */
 
 export function AIPanel() {
+  const tab = useEditor((s) => s.aiSubTab)
+  const setTab = useEditor((s) => s.setAiSubTab)
+
   const selectedClip = useEditor((s) => {
     const id = s.selectedClipIds[0]
     return id ? (s.project.clips.find((c) => c.id === id) ?? null) : null
@@ -311,9 +735,11 @@ export function AIPanel() {
 
   /* ---------- auto captions ---------- */
   const [captionStyleId, setCaptionStyleId] = useState('classic')
+  const [captionLang, setCaptionLang] = useState('off')
   const [captionBusy, setCaptionBusy] = useState(false)
   const [captionPhase, setCaptionPhase] = useState('')
   const [transcript, setTranscript] = useState<string | null>(null)
+  const [translatedTranscript, setTranslatedTranscript] = useState<string | null>(null)
 
   const handleGenerateCaptions = useCallback(async () => {
     if (!selectedClip || !clipMedia || captionBusy) return
@@ -336,7 +762,31 @@ export function AIPanel() {
         throw new Error(data?.error ?? `Transcription failed (${res.status})`)
       }
 
-      const chunks = splitTranscriptChunks(data.text)
+      const original = data.text
+      let finalText = original
+      let translated: string | null = null
+
+      if (captionLang !== 'off') {
+        setCaptionPhase(`Translating to ${captionLang}…`)
+        try {
+          const tRes = await fetch('/api/ai/assistant', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'translate', text: original.slice(0, 4000), language: captionLang }),
+          })
+          const tData = (await tRes.json().catch(() => null)) as { text?: string; error?: string } | null
+          if (tRes.ok && tData?.text) {
+            translated = tData.text
+            finalText = tData.text
+          } else {
+            toast('Translation failed — building captions from the original transcript')
+          }
+        } catch {
+          toast('Translation failed — building captions from the original transcript')
+        }
+      }
+
+      const chunks = splitTranscriptChunks(finalText)
       if (!chunks.length) throw new Error('The transcript came back empty — try a clip with clear speech')
 
       setCaptionPhase(`Building ${chunks.length} caption clips…`)
@@ -351,15 +801,18 @@ export function AIPanel() {
         .project.clips.filter((c) => !beforeIds.has(c.id) && c.kind === 'text')
       for (const c of created) updateClip(c.id, { textStyle: preset.patch })
 
-      setTranscript(data.text)
-      toast.success(`${count} caption clip${count === 1 ? '' : 's'} added to the timeline`)
+      setTranscript(original)
+      setTranslatedTranscript(translated)
+      toast.success(
+        `${count} caption clip${count === 1 ? '' : 's'} added${translated ? ` (translated to ${captionLang})` : ''}`
+      )
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Caption generation failed')
     } finally {
       setCaptionPhase('')
       setCaptionBusy(false)
     }
-  }, [selectedClip, clipMedia, captionBusy, captionStyleId, addCaptionClips, updateClip])
+  }, [selectedClip, clipMedia, captionBusy, captionStyleId, captionLang, addCaptionClips, updateClip])
 
   /* ---------- silence cut ---------- */
   const [threshold, setThreshold] = useState(0.06)
@@ -536,6 +989,16 @@ export function AIPanel() {
   const [voiceBusy, setVoiceBusy] = useState(false)
   const [voicePhase, setVoicePhase] = useState('')
 
+  // Script Writer → Voiceover handoff (same panel, different sub-tab)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (typeof detail === 'string' && detail.trim()) setVoiceText(detail.slice(0, 1000))
+    }
+    window.addEventListener('nc-ai-voiceover-script', handler)
+    return () => window.removeEventListener('nc-ai-voiceover-script', handler)
+  }, [])
+
   const handleGenerateVoiceover = useCallback(async () => {
     if (voiceBusy) return
     const text = voiceText.trim()
@@ -585,239 +1048,285 @@ export function AIPanel() {
 
   return (
     <div className="nc-fade-up space-y-3">
-      {/* ---------- 1 · auto captions ---------- */}
-      <FeatureCard icon={Captions} title="Auto Captions" subtitle="Speech-to-text captions for the selected clip">
-        {hasAudioSource && selectedClip ? (
-          <>
-            <ClipChip clip={selectedClip} />
+      <AiTabBar tab={tab} onChange={setTab} />
+
+      {tab === 'assistant' && (
+        <>
+          <CopilotCard />
+          <ScriptWriterCard />
+        </>
+      )}
+
+      {tab === 'video' && (
+        <>
+          {/* ---------- 1 · auto captions ---------- */}
+          <FeatureCard icon={Captions} title="Auto Captions" subtitle="Speech-to-text captions for the selected clip">
+            {hasAudioSource && selectedClip ? (
+              <>
+                <ClipChip clip={selectedClip} />
+                <div className="space-y-1.5">
+                  <FieldLabel>Caption style</FieldLabel>
+                  <Select value={captionStyleId} onValueChange={setCaptionStyleId}>
+                    <SelectTrigger className="h-9 w-full text-xs">
+                      <SelectValue placeholder="Pick a style" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CAPTION_STYLE_PRESETS.map((p) => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs">
+                          {p.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Languages className="size-3 text-muted-foreground" aria-hidden />
+                    <FieldLabel>Transcript language</FieldLabel>
+                  </div>
+                  <Select value={captionLang} onValueChange={setCaptionLang}>
+                    <SelectTrigger className="h-9 w-full text-xs">
+                      <SelectValue placeholder="No translation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CAPTION_LANGS.map((l) => (
+                        <SelectItem key={l.id} value={l.id} className="text-xs">
+                          {l.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  disabled={captionBusy}
+                  onClick={() => void handleGenerateCaptions()}
+                  className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
+                >
+                  {captionBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                  {captionBusy ? captionPhase : 'Generate captions'}
+                </Button>
+                {translatedTranscript && (
+                  <div className="space-y-1">
+                    <FieldLabel>Translated ({captionLang})</FieldLabel>
+                    <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2.5 font-mono text-[10px] leading-relaxed text-foreground/80">
+                      {translatedTranscript}
+                    </pre>
+                  </div>
+                )}
+                {transcript && (
+                  <div className="space-y-1">
+                    <FieldLabel>Original transcript</FieldLabel>
+                    <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2.5 font-mono text-[10px] leading-relaxed text-foreground/80">
+                      {transcript}
+                    </pre>
+                  </div>
+                )}
+                <NoteRow icon={ShieldCheck}>Audio is converted on your device, then transcribed by AI.</NoteRow>
+              </>
+            ) : (
+              <NoClipHint>
+                {selectedClip
+                  ? 'The selected clip has no readable audio track — pick a video or audio clip.'
+                  : 'Select a video or audio clip on the timeline to generate captions for it.'}
+              </NoClipHint>
+            )}
+          </FeatureCard>
+
+          {/* ---------- 2 · silence cut ---------- */}
+          <FeatureCard icon={Scissors} title="Silence Cut" subtitle="Rough cut — remove silent gaps in one pass">
+            {hasAudioSource && selectedClip ? (
+              <>
+                <ClipChip clip={selectedClip} />
+                <div className="space-y-2.5">
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <FieldLabel>Background level</FieldLabel>
+                      <span className="text-[10px] tabular-nums text-muted-foreground">{threshold.toFixed(2)}</span>
+                    </div>
+                    <Slider
+                      min={0.02}
+                      max={0.3}
+                      step={0.01}
+                      value={[threshold]}
+                      onValueChange={(v) => setThreshold(v[0] ?? 0.06)}
+                      className="mt-1.5"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <FieldLabel>Min silence</FieldLabel>
+                      <span className="text-[10px] tabular-nums text-muted-foreground">{minSilence.toFixed(1)}s</span>
+                    </div>
+                    <Slider
+                      min={0.3}
+                      max={2}
+                      step={0.1}
+                      value={[minSilence]}
+                      onValueChange={(v) => setMinSilence(v[0] ?? 0.6)}
+                      className="mt-1.5"
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={analyzing || removing}
+                  onClick={() => void handleAnalyze()}
+                  className="h-9 w-full rounded-lg border-(--nc-line-strong) bg-(--nc-panel) text-xs font-semibold hover:bg-(--nc-panel-strong) hover:text-foreground"
+                >
+                  {analyzing ? <Loader2 className="size-3.5 animate-spin" /> : <AudioLines className="size-3.5" />}
+                  {analyzing ? 'Analyzing audio…' : 'Analyze'}
+                </Button>
+                {analysis && (
+                  <div className="space-y-2.5 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-3">
+                    <SilenceMap analysis={analysis} duration={selectedClip.duration} />
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-muted-foreground">Silence found</span>
+                      <span className="font-semibold text-foreground">
+                        {round2(analysis.totalSilence)}s · {silenceRanges.length} gap{silenceRanges.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      disabled={removing || silenceRanges.length === 0}
+                      onClick={() => void handleRemoveSilences()}
+                      className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
+                    >
+                      {removing ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
+                      {removing ? 'Cutting…' : 'Remove silences'}
+                    </Button>
+                  </div>
+                )}
+                <NoteRow icon={ShieldCheck}>Analysis runs fully on your device — audio never leaves the browser.</NoteRow>
+              </>
+            ) : (
+              <NoClipHint>
+                {selectedClip
+                  ? 'The selected clip has no readable audio track — pick a video or audio clip.'
+                  : 'Select a video or audio clip on the timeline to scan it for silence.'}
+              </NoClipHint>
+            )}
+          </FeatureCard>
+
+          {/* ---------- 3 · audio enhance ---------- */}
+          <AudioEnhanceCard clip={selectedClip} isAvClip={isAvClip} />
+        </>
+      )}
+
+      {tab === 'create' && (
+        <>
+          {/* ---------- 4 · ai image ---------- */}
+          <FeatureCard icon={ImageIcon} title="AI Image" subtitle="Generate B-roll visuals from a prompt">
+            <Input
+              value={imagePrompt}
+              onChange={(e) => setImagePrompt(e.target.value)}
+              placeholder="e.g. neon city skyline at dusk, cinematic"
+              className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+              maxLength={300}
+            />
             <div className="space-y-1.5">
-              <FieldLabel>Caption style</FieldLabel>
-              <Select value={captionStyleId} onValueChange={setCaptionStyleId}>
+              <FieldLabel>Size</FieldLabel>
+              <Select value={imageSize} onValueChange={setImageSize}>
                 <SelectTrigger className="h-9 w-full text-xs">
-                  <SelectValue placeholder="Pick a style" />
+                  <SelectValue placeholder="Pick a size" />
                 </SelectTrigger>
                 <SelectContent>
-                  {CAPTION_STYLE_PRESETS.map((p) => (
-                    <SelectItem key={p.id} value={p.id} className="text-xs">
-                      {p.label}
+                  {IMAGE_SIZE_OPTIONS.map((o) => (
+                    <SelectItem key={o.id} value={o.id} className="text-xs">
+                      {o.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+            {imageBusy ? (
+              <div className="nc-shimmer relative flex h-28 w-full items-center justify-center overflow-hidden rounded-lg border border-(--nc-line) bg-(--nc-panel)">
+                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Painting pixels…
+                </span>
+              </div>
+            ) : (
+              imagePreview && (
+                <img
+                  src={imagePreview}
+                  alt="Latest AI generated image preview"
+                  className="h-28 w-full rounded-lg border border-(--nc-line) object-cover"
+                />
+              )
+            )}
             <Button
               type="button"
-              disabled={captionBusy}
-              onClick={() => void handleGenerateCaptions()}
+              disabled={imageBusy}
+              onClick={() => void handleGenerateImage()}
               className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
             >
-              {captionBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-              {captionBusy ? captionPhase : 'Generate captions'}
+              {imageBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
+              {imageBusy ? 'Generating…' : 'Generate image'}
             </Button>
-            {transcript && (
-              <div className="space-y-1">
-                <FieldLabel>Transcript</FieldLabel>
-                <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2.5 font-mono text-[10px] leading-relaxed text-foreground/80">
-                  {transcript}
-                </pre>
-              </div>
-            )}
-            <NoteRow icon={ShieldCheck}>Audio is converted on your device, then transcribed by AI.</NoteRow>
-          </>
-        ) : (
-          <NoClipHint>
-            {selectedClip
-              ? 'The selected clip has no readable audio track — pick a video or audio clip.'
-              : 'Select a video or audio clip on the timeline to generate captions for it.'}
-          </NoClipHint>
-        )}
-      </FeatureCard>
+            <NoteRow icon={Sparkles}>Generated images are royalty-free — yours to use.</NoteRow>
+          </FeatureCard>
 
-      {/* ---------- 2 · silence cut ---------- */}
-      <FeatureCard icon={Scissors} title="Silence Cut" subtitle="Rough cut — remove silent gaps in one pass">
-        {hasAudioSource && selectedClip ? (
-          <>
-            <ClipChip clip={selectedClip} />
-            <div className="space-y-2.5">
-              <div>
-                <div className="flex items-center justify-between">
-                  <FieldLabel>Background level</FieldLabel>
-                  <span className="text-[10px] tabular-nums text-muted-foreground">{threshold.toFixed(2)}</span>
-                </div>
-                <Slider
-                  min={0.02}
-                  max={0.3}
-                  step={0.01}
-                  value={[threshold]}
-                  onValueChange={(v) => setThreshold(v[0] ?? 0.06)}
-                  className="mt-1.5"
-                />
+          {/* ---------- 5 · ai voiceover ---------- */}
+          <FeatureCard icon={Mic} title="AI Voiceover" subtitle="Turn a script into narrated audio">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <FieldLabel>Script</FieldLabel>
+                <span className={`text-[10px] tabular-nums ${voiceText.length > 900 ? 'text-orange-400' : 'text-muted-foreground'}`}>
+                  {voiceText.length}/1000
+                </span>
               </div>
-              <div>
-                <div className="flex items-center justify-between">
-                  <FieldLabel>Min silence</FieldLabel>
-                  <span className="text-[10px] tabular-nums text-muted-foreground">{minSilence.toFixed(1)}s</span>
-                </div>
-                <Slider
-                  min={0.3}
-                  max={2}
-                  step={0.1}
-                  value={[minSilence]}
-                  onValueChange={(v) => setMinSilence(v[0] ?? 0.6)}
-                  className="mt-1.5"
-                />
+              <Textarea
+                value={voiceText}
+                onChange={(e) => setVoiceText(e.target.value.slice(0, 1000))}
+                placeholder="Write what the narrator should say…"
+                rows={3}
+                className="resize-none border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel>Voice</FieldLabel>
+              <Select value={voice} onValueChange={setVoice}>
+                <SelectTrigger className="h-9 w-full text-xs">
+                  <SelectValue placeholder="Pick a voice" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VOICE_OPTIONS.map((v) => (
+                    <SelectItem key={v.id} value={v.id} className="text-xs">
+                      {v.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <FieldLabel>Speed</FieldLabel>
+                <span className="text-[10px] tabular-nums text-muted-foreground">{voiceSpeed.toFixed(2)}×</span>
               </div>
+              <Slider
+                min={0.5}
+                max={2}
+                step={0.05}
+                value={[voiceSpeed]}
+                onValueChange={(v) => setVoiceSpeed(v[0] ?? 1)}
+                className="mt-1.5"
+              />
             </div>
             <Button
               type="button"
-              variant="outline"
-              disabled={analyzing || removing}
-              onClick={() => void handleAnalyze()}
-              className="h-9 w-full rounded-lg border-(--nc-line-strong) bg-(--nc-panel) text-xs font-semibold hover:bg-(--nc-panel-strong) hover:text-foreground"
+              disabled={voiceBusy}
+              onClick={() => void handleGenerateVoiceover()}
+              className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
             >
-              {analyzing ? <Loader2 className="size-3.5 animate-spin" /> : <AudioLines className="size-3.5" />}
-              {analyzing ? 'Analyzing audio…' : 'Analyze'}
+              {voiceBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Mic className="size-3.5" />}
+              {voiceBusy ? voicePhase : 'Generate voiceover'}
             </Button>
-            {analysis && (
-              <div className="space-y-2.5 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-3">
-                <SilenceMap analysis={analysis} duration={selectedClip.duration} />
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground">Silence found</span>
-                  <span className="font-semibold text-foreground">
-                    {round2(analysis.totalSilence)}s · {silenceRanges.length} gap{silenceRanges.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  disabled={removing || silenceRanges.length === 0}
-                  onClick={() => void handleRemoveSilences()}
-                  className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
-                >
-                  {removing ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-                  {removing ? 'Cutting…' : 'Remove silences'}
-                </Button>
-              </div>
-            )}
-            <NoteRow icon={ShieldCheck}>Analysis runs fully on your device — audio never leaves the browser.</NoteRow>
-          </>
-        ) : (
-          <NoClipHint>
-            {selectedClip
-              ? 'The selected clip has no readable audio track — pick a video or audio clip.'
-              : 'Select a video or audio clip on the timeline to scan it for silence.'}
-          </NoClipHint>
-        )}
-      </FeatureCard>
-
-      {/* ---------- 3 · ai image ---------- */}
-      <FeatureCard icon={ImageIcon} title="AI Image" subtitle="Generate B-roll visuals from a prompt">
-        <Input
-          value={imagePrompt}
-          onChange={(e) => setImagePrompt(e.target.value)}
-          placeholder="e.g. neon city skyline at dusk, cinematic"
-          className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
-          maxLength={300}
-        />
-        <div className="space-y-1.5">
-          <FieldLabel>Size</FieldLabel>
-          <Select value={imageSize} onValueChange={setImageSize}>
-            <SelectTrigger className="h-9 w-full text-xs">
-              <SelectValue placeholder="Pick a size" />
-            </SelectTrigger>
-            <SelectContent>
-              {IMAGE_SIZE_OPTIONS.map((o) => (
-                <SelectItem key={o.id} value={o.id} className="text-xs">
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {imageBusy ? (
-          <div className="nc-shimmer relative flex h-28 w-full items-center justify-center overflow-hidden rounded-lg border border-(--nc-line) bg-(--nc-panel)">
-            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Loader2 className="size-3.5 animate-spin" />
-              Painting pixels…
-            </span>
-          </div>
-        ) : (
-          imagePreview && (
-            <img
-              src={imagePreview}
-              alt="Latest AI generated image preview"
-              className="h-28 w-full rounded-lg border border-(--nc-line) object-cover"
-            />
-          )
-        )}
-        <Button
-          type="button"
-          disabled={imageBusy}
-          onClick={() => void handleGenerateImage()}
-          className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
-        >
-          {imageBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
-          {imageBusy ? 'Generating…' : 'Generate image'}
-        </Button>
-        <NoteRow icon={Sparkles}>Generated images are royalty-free — yours to use.</NoteRow>
-      </FeatureCard>
-
-      {/* ---------- 4 · ai voiceover ---------- */}
-      <FeatureCard icon={Mic} title="AI Voiceover" subtitle="Turn a script into narrated audio">
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <FieldLabel>Script</FieldLabel>
-            <span className={`text-[10px] tabular-nums ${voiceText.length > 900 ? 'text-orange-400' : 'text-muted-foreground'}`}>
-              {voiceText.length}/1000
-            </span>
-          </div>
-          <Textarea
-            value={voiceText}
-            onChange={(e) => setVoiceText(e.target.value.slice(0, 1000))}
-            placeholder="Write what the narrator should say…"
-            rows={3}
-            className="resize-none border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <FieldLabel>Voice</FieldLabel>
-          <Select value={voice} onValueChange={setVoice}>
-            <SelectTrigger className="h-9 w-full text-xs">
-              <SelectValue placeholder="Pick a voice" />
-            </SelectTrigger>
-            <SelectContent>
-              {VOICE_OPTIONS.map((v) => (
-                <SelectItem key={v.id} value={v.id} className="text-xs">
-                  {v.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <div className="flex items-center justify-between">
-            <FieldLabel>Speed</FieldLabel>
-            <span className="text-[10px] tabular-nums text-muted-foreground">{voiceSpeed.toFixed(2)}×</span>
-          </div>
-          <Slider
-            min={0.5}
-            max={2}
-            step={0.05}
-            value={[voiceSpeed]}
-            onValueChange={(v) => setVoiceSpeed(v[0] ?? 1)}
-            className="mt-1.5"
-          />
-        </div>
-        <Button
-          type="button"
-          disabled={voiceBusy}
-          onClick={() => void handleGenerateVoiceover()}
-          className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
-        >
-          {voiceBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Mic className="size-3.5" />}
-          {voiceBusy ? voicePhase : 'Generate voiceover'}
-        </Button>
-        <NoteRow icon={Mic}>Scripts over 900 characters are synthesized in sequential parts.</NoteRow>
-      </FeatureCard>
+            <NoteRow icon={Mic}>Scripts over 900 characters are synthesized in sequential parts.</NoteRow>
+          </FeatureCard>
+        </>
+      )}
     </div>
   )
 }

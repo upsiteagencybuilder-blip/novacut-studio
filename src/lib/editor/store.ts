@@ -17,6 +17,7 @@ import type {
   KeyframeProperty,
   MediaAssetRuntime,
   PanelTab,
+  AiSubTab,
   DialogName,
   Project,
   StickerStyle,
@@ -176,6 +177,9 @@ interface EditorStore {
   clearBeatMarkers: () => void
   toggleShowBeatMarkers: () => void
   setPanelTab: (tab: PanelTab) => void
+  /** which card group is open inside the AI panel (deep-link target) */
+  aiSubTab: AiSubTab
+  setAiSubTab: (tab: AiSubTab) => void
   openDialog: (d: DialogName) => void
 
   /* ---------- export ---------- */
@@ -257,6 +261,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
   beatBpm: null,
   showBeatMarkers: true,
   panelTab: 'media',
+  aiSubTab: 'assistant',
   activeDialog: null,
   exportState: { phase: 'idle', progress: 0 },
   autosave: 'idle',
@@ -1100,6 +1105,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
   clearBeatMarkers: () => set({ beatMarkers: [], beatBpm: null }),
   toggleShowBeatMarkers: () => set((s) => ({ showBeatMarkers: !s.showBeatMarkers })),
   setPanelTab: (tab) => set({ panelTab: tab }),
+  setAiSubTab: (tab) => set({ aiSubTab: tab }),
   openDialog: (d) => set({ activeDialog: d }),
 
   /* ================= export ================= */

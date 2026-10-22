@@ -15,6 +15,7 @@ import {
   Type,
   SmilePlus,
   FolderOpen,
+  Sparkles,
 } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
 import { projectDuration, clamp } from '@/lib/editor/utils'
@@ -248,6 +249,7 @@ const MOBILE_TABS = [
   { id: 'stickers', label: 'Stickers', icon: SmilePlus },
   { id: 'effects', label: 'Effects', icon: WandSparkles },
   { id: 'audio', label: 'Audio', icon: Music },
+  { id: 'ai', label: 'AI', icon: Sparkles },
   { id: 'pro', label: 'Pro', icon: Briefcase },
 ] as const
 

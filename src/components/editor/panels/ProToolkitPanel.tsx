@@ -61,8 +61,20 @@ const STATUS_FILTERS: { id: Exclude<StatusFilter, 'all'>; label: string }[] = [
 
 /* ---------------- deep-link actions ---------------- */
 
+/** AI catalog tools land on the sub-tab that actually hosts their controls */
+const AI_SUBTAB_BY_TOOL: Record<string, 'assistant' | 'video' | 'create'> = {
+  'ai-copilot-editing': 'assistant',
+  'ai-text-to-video': 'create',
+  'ai-silence-detection': 'video',
+  'ai-audio-denoise': 'video',
+  'ai-speech-to-text': 'video',
+  'ai-caption-translate': 'video',
+  'ai-text-to-speech': 'create',
+}
+
 function useToolAction() {
   const setPanelTab = useEditor((s) => s.setPanelTab)
+  const setAiSubTab = useEditor((s) => s.setAiSubTab)
   const openDialog = useEditor((s) => s.openDialog)
   return useMemo(() => {
     /** effects-panel deep-link with a category preselected (mount-race safe) */
@@ -82,14 +94,17 @@ function useToolAction() {
       }
       window.dispatchEvent(new CustomEvent('nc-props-section', { detail: section }))
     }
-    const map: Record<ToolAction, () => void> = {
+    const map: Record<ToolAction, (tool: ProTool) => void> = {
       'open-media': () => setPanelTab('media'),
       'open-text': () => setPanelTab('text'),
       'open-stickers': () => setPanelTab('stickers'),
       'open-effects': () => setPanelTab('effects'),
       'open-effects-color': () => openEffectsCategory('color'),
       'open-audio': () => setPanelTab('audio'),
-      'open-ai': () => setPanelTab('ai'),
+      'open-ai': (tool) => {
+        setAiSubTab(AI_SUBTAB_BY_TOOL[tool.id] ?? 'assistant')
+        setPanelTab('ai')
+      },
       'open-mixer': () => openDialog('mixer'),
       'open-export': () => {
         useEditor.getState().pause()
@@ -106,12 +121,19 @@ function useToolAction() {
       'open-properties-animation': () => openPropsSection('animation'),
     }
     return map
-  }, [setPanelTab, openDialog])
+  }, [setPanelTab, setAiSubTab, openDialog])
 }
 
 /* ---------------- tool card ---------------- */
 
-function ToolCard({ tool, onOpen }: { tool: ProTool; onOpen: Record<ToolAction, () => void>; showSection?: boolean }) {
+function ToolCard({
+  tool,
+  onOpen,
+}: {
+  tool: ProTool
+  onOpen: Record<ToolAction, (tool: ProTool) => void>
+  showSection?: boolean
+}) {
   const meta = STATUS_META[tool.status]
   const actionable = tool.status === 'live' && tool.action
 
@@ -138,7 +160,7 @@ function ToolCard({ tool, onOpen }: { tool: ProTool; onOpen: Record<ToolAction, 
     return (
       <button
         type="button"
-        onClick={() => onOpen[tool.action as ToolAction]()}
+        onClick={() => onOpen[tool.action as ToolAction](tool)}
         title={`${tool.name} — open in NovaCut`}
         className="nc-glass block w-full rounded-lg p-2.5 text-left transition hover:border-emerald-400/40 hover:bg-(--nc-panel-strong) focus-visible:outline-2 focus-visible:outline-emerald-400/60 active:scale-[0.98]"
       >

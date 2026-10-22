@@ -413,4 +413,5 @@ export interface ExportState {
 }
 
 export type PanelTab = 'media' | 'text' | 'stickers' | 'effects' | 'audio' | 'ai' | 'pro'
+export type AiSubTab = 'assistant' | 'video' | 'create'
 export type DialogName = 'export' | 'projects' | 'shortcuts' | 'mixer' | 'versions' | 'theme' | null

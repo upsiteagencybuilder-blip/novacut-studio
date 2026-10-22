@@ -729,3 +729,26 @@ Stage Summary:
 - Sector 9 COMPLETE: motion is now tunable and discoverable — 11 Ken Burns-family presets with a live intensity slider, After-Effects-style diamond keyframing directly on Transform sliders (with the value-capture bug fixed), Animation deep-link, and honest catalog coverage. Motion effects library grew to 47.
 - 10 files changed: editor/types.ts, engine.ts, store.ts, constants.ts, PropertiesPanel.tsx, EffectsPanel.tsx, ProToolkitPanel.tsx, effects/motion.ts, tools/sections/timeline.ts, tools/types.ts.
 - Next: Sector 10 (AI tools UI) per the serial sector plan.
+
+---
+Task ID: 10
+Agent: main orchestrator (Z.ai Code)
+Task: Sector 10 — AI Tools UI (user command)
+
+Work Log:
+- Surveyed AI suite: catalog ai.ts (18 tools, 5 live), AIPanel (4 cards), 3 backend routes (tts/transcribe/image via z-ai-web-dev-sdk)
+- NEW /api/ai/copilot — LLM chat turns natural-language commands (Bangla or English) into strict-JSON action plans; system prompt embeds live registries (22 color-look families, 10 motion values, 38 sticker shape ids); tolerant JSON extraction (fence/prose-proof); plan is only GENERATED server-side
+- NEW src/lib/editor/copilot.ts — client executor: 13 whitelisted actions (addTitle with at/size/color/bold, addSticker emoji|shape, applyLook family+variant with fuzzy family matching, setMotion, setMotionIntensity, crossfade with playhead-anchored adjacent-pair pick, setSpeed with duration compensation, setVolume, addMarker, splitAtPlayhead, deleteSelected, setBackgroundColor, renameProject); every action re-validated against live project state — hallucinated ids become ⚠ skipped receipts, never applied; per-action try/catch; clamps everywhere
+- NEW /api/ai/assistant — mode "script" (voiceover script / 8 hook ideas / 6 caption ideas in 6 languages incl. Bangla) + mode "translate" (subtitle-grade transcript translation)
+- AIPanel rewritten with 3 sub-tabs (Assistant / Video / Create) backed by new store field aiSubTab; Assistant = AI Copilot chat (bubbles, ✓green/⚠amber receipt chips, 4 quick prompts, thinking indicator) + Script Writer (→ "Use in AI Voiceover" event-bridge handoff fills the voiceover card and jumps tabs); Video = Auto Captions (+ transcript-translate select Bangla/English/Hindi/Urdu/Spanish/Arabic with graceful fallback to original, both transcripts shown) + Silence Cut + NEW AI Audio Enhance (one-tap 110Hz HP + 14kHz LP + presence EQ + compressor recipe merged into clip audioFx, Reset to original, visible in Properties Audio FX); Create = AI Image + AI Voiceover
+- ProToolkitPanel "open-ai" now routes per-tool: copilot→assistant, STT/denoise/silence/translate→video, TTS/text-to-video→create
+- Catalog honesty: ai-copilot-editing, ai-text-to-video, ai-audio-denoise flipped live + NEW ai-caption-translate (live) — AI section now 10/19 live+beta; true-ML items (cutout, tracking, stabilizer, vocal remover) stay honestly planned
+- BUG FOUND + FIXED: mobile bottom bar (EditorShell MOBILE_TABS) had NO AI entry — mobile users could not reach the AI suite at all; added AI (Sparkles) tab
+- E2E receipts (agent-browser, 1280×800 + 390×844): EN command "Add a bold title NovaCut at the start and put the Cyberpunk look on all clips" → ✓ Title "NovaCut" added (start=0, textStyle verified) + ✓ Look Cyberpunk · Soft → 6 clips (filters+colorGrade verified in store AND visible in preview canvas); BN command "শুরুতে একটা ডায়মন্ড স্টিকার যোগ করো এবং প্রজেক্টের নাম দাও 'বৃষ্টির চা'" → diamond sticker (shape+family verified), project renamed, Bangla reply note; Script Writer produced real Bangla script with [b-roll hints]; handoff switched to Create tab with script in textarea; translate API returned "শুভ সকাল, নোভাকাটে আপনাকে স্বাগতম..."; Audio Enhance apply → audioFx recipe in store + "Enhanced" state, Reset → null; deep-links verified; 7 translate options render; page errors + console clean; lint + tsc clean; dev.log clean (copilot API 200)
+
+Stage Summary:
+- Sector 10 complete — AI suite is now a 3-tab hub: Assistant (Copilot + Script Writer), Video (Captions+Translate, Silence, Enhance), Create (Image, Voiceover)
+- Copilot is prompt-driven editing with hard client-side validation (safe against hallucinated plans); fully bilingual
+- Mobile parity fixed (AI tab in bottom bar)
+- Key artifacts: api/ai/copilot/route.ts, api/ai/assistant/route.ts, lib/editor/copilot.ts, AIPanel.tsx rewrite, EditorShell mobile AI tab, store aiSubTab, catalog flips
+- Next: Sector 12 (Export) per serial plan
