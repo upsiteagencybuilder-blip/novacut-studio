@@ -201,6 +201,13 @@ class PreviewEngine {
   private visionCtx: CanvasRenderingContext2D | null = null
   private lutCache = new Map<string, LutData | null>()
 
+  /** Drop cached LUT lookups (call when LUT assets are deleted or re-imported). */
+  invalidateLutCache(id?: string) {
+    if (id) this.lutCache.delete(id)
+    else this.lutCache.clear()
+    this.invalidate()
+  }
+
   /* adaptive render quality */
   private renderScale = 1
   private renderQuality: RenderQuality = 'high'
@@ -1078,8 +1085,9 @@ class PreviewEngine {
     src?: { sx: number; sy: number; sw: number; sh: number }
   ): HTMLCanvasElement | null {
     if (!this.needsPixelFx(clip) || srcW <= 0 || srcH <= 0) return null
-    // cap fx resolution for performance
-    const maxDim = 1600
+    // cap fx resolution for performance; exports render at full quality so the
+    // grade / LUT / chroma pass is never sub-resolution in the recorded file
+    const maxDim = this.exportScaleOverride !== null ? 3840 : 1600
     const fxScale = Math.min(1, maxDim / Math.max(dw, dh))
     const fw = Math.max(2, Math.round(dw * fxScale))
     const fh = Math.max(2, Math.round(dh * fxScale))

@@ -3,7 +3,7 @@
 /**
  * Pro Toolkit — the full professional post-production catalog inside NovaCut.
  *
- * 661 industry tools, panels and roles (Premiere / Resolve / After Effects /
+ * Every industry tool, panel and role (Premiere / Resolve / After Effects /
  * Filmora taxonomy) mapped to what ships today:
  *   live    → taps deep-link straight into the shipped feature
  *   beta    → partially covered by a shipped equivalent
@@ -13,6 +13,7 @@
 
 import { useMemo, useState } from 'react'
 import { ArrowUpRight, Search, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
 import {
   PRO_CATALOG,
@@ -64,11 +65,29 @@ function useToolAction() {
   const setPanelTab = useEditor((s) => s.setPanelTab)
   const openDialog = useEditor((s) => s.openDialog)
   return useMemo(() => {
+    /** effects-panel deep-link with a category preselected (mount-race safe) */
+    const openEffectsCategory = (category: string) => {
+      const w = window as unknown as { __ncEffectsCategoryRequest?: string }
+      w.__ncEffectsCategoryRequest = category
+      setPanelTab('effects')
+      window.dispatchEvent(new CustomEvent('nc-effects-category', { detail: category }))
+    }
+    /** properties-panel deep-link — expands + scrolls to the requested section */
+    const openPropsSection = (section: string) => {
+      const w = window as unknown as { __ncPropsSectionRequest?: string; __ncPropsSectionTries?: number }
+      w.__ncPropsSectionRequest = section
+      w.__ncPropsSectionTries = 0
+      if (!useEditor.getState().selectedClipIds.length) {
+        toast('Select a clip first — then tap this tool to jump to its controls')
+      }
+      window.dispatchEvent(new CustomEvent('nc-props-section', { detail: section }))
+    }
     const map: Record<ToolAction, () => void> = {
       'open-media': () => setPanelTab('media'),
       'open-text': () => setPanelTab('text'),
       'open-stickers': () => setPanelTab('stickers'),
       'open-effects': () => setPanelTab('effects'),
+      'open-effects-color': () => openEffectsCategory('color'),
       'open-audio': () => setPanelTab('audio'),
       'open-ai': () => setPanelTab('ai'),
       'open-mixer': () => openDialog('mixer'),
@@ -80,6 +99,10 @@ function useToolAction() {
       'open-projects': () => openDialog('projects'),
       'open-versions': () => openDialog('versions'),
       'open-shortcuts': () => openDialog('shortcuts'),
+      'open-properties-filters': () => openPropsSection('filters'),
+      'open-properties-grade': () => openPropsSection('grade'),
+      'open-properties-lut': () => openPropsSection('lut'),
+      'open-properties-scopes': () => openPropsSection('scopes'),
     }
     return map
   }, [setPanelTab, openDialog])

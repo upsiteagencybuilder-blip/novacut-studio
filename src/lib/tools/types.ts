@@ -22,6 +22,7 @@ export type ToolAction =
   | 'open-text'
   | 'open-stickers'
   | 'open-effects'
+  | 'open-effects-color'
   | 'open-audio'
   | 'open-ai'
   | 'open-mixer'
@@ -30,6 +31,10 @@ export type ToolAction =
   | 'open-projects'
   | 'open-versions'
   | 'open-shortcuts'
+  | 'open-properties-filters'
+  | 'open-properties-grade'
+  | 'open-properties-lut'
+  | 'open-properties-scopes'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

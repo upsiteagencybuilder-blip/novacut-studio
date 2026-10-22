@@ -634,6 +634,30 @@
   backdrop-filter: blur(calc(var(--nc-blur) + 4px));
 }
 
+/* properties panel section deep-link flash — briefly highlights the targeted section */
+.nc-section-flash {
+  animation: nc-section-flash 1.6s ease-out;
+}
+@keyframes nc-section-flash {
+  0%,
+  30% {
+    border-color: var(--nc-accent);
+    box-shadow:
+      0 0 0 1px var(--nc-accent-glow),
+      0 0 18px var(--nc-accent-glow);
+  }
+  100% {
+    border-color: var(--nc-line);
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nc-section-flash {
+    animation: none;
+    border-color: var(--nc-accent);
+  }
+}
+
 /* animated aurora backdrop — 4 styles driven by data-nc-backdrop */
 .nc-aurora {
   position: fixed;

@@ -773,6 +773,18 @@ export function EffectsPanel() {
         toast('Select a clip first')
         return
       }
+      // pixel grade (temperature / shadows / vibrance) only renders on media
+      // clips — audio gets nothing, text & sticker get the CSS-filter layer
+      if (clip.kind === 'audio') {
+        toast.error('Color presets do not apply to audio clips')
+        return
+      }
+      if (clip.kind === 'text' || clip.kind === 'sticker') {
+        updateClip(clip.id, { filters: { ...DEFAULT_FILTERS, ...effect.filters } }, true)
+        noteUsed(effect.id)
+        toast(`Color · ${effect.name} (filters layer only on ${clip.kind})`)
+        return
+      }
       updateClip(
         clip.id,
         {

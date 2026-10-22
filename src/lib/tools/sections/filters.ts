@@ -53,7 +53,7 @@ export const FILTERS_TOOLS: ProTool[] = [
   { id: 'filter-leave-color', name: 'Leave Color Filter', section: 'filters', group: 'Color effects', status: 'planned', desc: 'Desaturate everything except one chosen color' },
   { id: 'filter-change-color-tool', name: 'Change Color Tool', section: 'filters', group: 'Color effects', status: 'planned', desc: 'Hue-shift a sampled color range on the canvas' },
   { id: 'filter-invert-effect', name: 'Invert Effect', section: 'filters', group: 'Color effects', status: 'live', desc: 'Invert slider flips colors to negative in properties' },
-  { id: 'filter-lut-library', name: 'LUT (Look-Up Tables) Library', section: 'filters', group: 'Color effects', status: 'beta', desc: '220 preset looks plus .cube LUT import stand in for LUT packs' },
+  { id: 'filter-lut-library', name: 'LUT (Look-Up Tables) Library', section: 'filters', group: 'Color effects', status: 'live', desc: 'Color category holds 220 one-tap looks; import .cube LUTs from Media', action: 'open-effects-color' },
 
   // -------- Overlay packs --------
   { id: 'filter-filters-library', name: 'Filters Library', section: 'filters', group: 'Overlay packs', status: 'live', desc: 'Effects browser collects every effect category with search', action: 'open-effects' },

@@ -311,6 +311,28 @@ export function EditorShell() {
     }
   }, [ready])
 
+  // properties section deep-links (Pro Toolkit color tools): on mobile the
+  // props sheet must open first — re-dispatch while the request is still
+  // unconsumed (sections consume the flag on mount). Bounded retries keep
+  // this a loop-free handoff when no matching section exists (no selection).
+  useEffect(() => {
+    if (isDesktop) return
+    const onSection = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (!detail) return
+      setMobileSheet('props')
+      window.setTimeout(() => {
+        const w = window as unknown as { __ncPropsSectionRequest?: string; __ncPropsSectionTries?: number }
+        if (w.__ncPropsSectionRequest === detail && (w.__ncPropsSectionTries ?? 0) < 2) {
+          w.__ncPropsSectionTries = (w.__ncPropsSectionTries ?? 0) + 1
+          window.dispatchEvent(new CustomEvent('nc-props-section', { detail }))
+        }
+      }, 200)
+    }
+    window.addEventListener('nc-props-section', onSection)
+    return () => window.removeEventListener('nc-props-section', onSection)
+  }, [isDesktop])
+
   if (!ready) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">

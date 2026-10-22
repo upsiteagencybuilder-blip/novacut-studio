@@ -85,10 +85,59 @@ export function buildFilterString(f: Filters): string {
   return parts.length ? parts.join(' ') : 'none'
 }
 
-/** CSS filter string (same data) for DOM previews */
-export function cssFilterString(f: Filters): string {
-  const s = buildFilterString(f)
-  return s === 'none' ? 'none' : s
+/* ---------------- filter / grade normalization ---------------- */
+
+/** Clamped ranges of the Filters contract (mirrors the sliders + preset generator). */
+const FILTER_RANGE_TABLE = {
+  brightness: [0, 2],
+  contrast: [0, 2],
+  saturation: [0, 2],
+  hue: [-180, 180],
+  blur: [0, 20],
+  sepia: [0, 1],
+  grayscale: [0, 1],
+  invert: [0, 1],
+} as const
+
+/** Clamped ranges of the ColorGrade contract. */
+const GRADE_RANGE_TABLE = {
+  temperature: [-1, 1],
+  tint: [-1, 1],
+  shadows: [-1, 1],
+  highlights: [-1, 1],
+  vibrance: [0, 2],
+} as const
+
+/**
+ * Coerce persisted/patched filter data into the strict Filters contract —
+ * repairs hand-edited or legacy JSON (missing keys, out-of-range values, NaN).
+ */
+export function normalizeFilters(input: unknown): Filters {
+  const src = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>
+  const out = {} as Record<keyof Filters, number>
+  for (const key of Object.keys(FILTER_RANGE_TABLE) as (keyof Filters)[]) {
+    const [min, max] = FILTER_RANGE_TABLE[key]
+    const v = Number(src[key])
+    const neutral = key === 'brightness' || key === 'contrast' || key === 'saturation' ? 1 : 0
+    out[key] = Number.isFinite(v) ? clamp(v, min, max) : neutral
+  }
+  return out
+}
+
+/**
+ * Coerce persisted/patched color-grade data into the strict ColorGrade
+ * contract (missing keys, out-of-range values, NaN).
+ */
+export function normalizeColorGrade(input: unknown): ColorGrade {
+  const src = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>
+  const out = {} as Record<keyof ColorGrade, number>
+  for (const key of Object.keys(GRADE_RANGE_TABLE) as (keyof ColorGrade)[]) {
+    const [min, max] = GRADE_RANGE_TABLE[key]
+    const v = Number(src[key])
+    const neutral = key === 'vibrance' ? 1 : 0
+    out[key] = Number.isFinite(v) ? clamp(v, min, max) : neutral
+  }
+  return out
 }
 
 export function easeInOut(p: number): number {

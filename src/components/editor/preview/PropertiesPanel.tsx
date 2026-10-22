@@ -1,8 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
+  Activity,
   AlignCenter,
   AlignLeft,
   AlignRight,
@@ -41,6 +42,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
+import { getEngine } from '@/lib/editor/engine'
 import { transitionPairsForTrack } from '@/lib/editor/transitionBridge'
 import { toast } from 'sonner'
 import {
@@ -52,7 +54,7 @@ import {
   EASING_OPTIONS,
   TEXT_FONTS,
 } from '@/lib/editor/constants'
-import { clamp, formatTimecode, KEYFRAME_PROPERTIES } from '@/lib/editor/utils'
+import { clamp, computeHistogram, formatTimecode, KEYFRAME_PROPERTIES } from '@/lib/editor/utils'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -116,6 +118,63 @@ const fmtSec = (v: number) => `${Math.round(v * 100) / 100}s`
 const fmtNum = (v: number) => String(Math.round(v * 100) / 100)
 const fmtDb = (v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}dB`
 const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${Math.round(v)}Hz`)
+
+/* ================================================================ section deep-links */
+
+/**
+ * Deep-link target ids shared with the Pro Toolkit catalog actions
+ * (open-properties-*). Requested via the `nc-props-section` event or the
+ * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
+ */
+export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes'
+
+/**
+ * Focus a section on a properties deep-link: expands (via callback), scrolls
+ * into view and flashes a highlight ring. Returns a ref to attach to the
+ * section element.
+ */
+function usePropsSectionFocus(sectionId: PropsSectionId | undefined, onTarget?: () => void) {
+  const ref = useRef<HTMLElement | null>(null)
+  const cbRef = useRef(onTarget)
+  useEffect(() => {
+    cbRef.current = onTarget
+  })
+
+  useEffect(() => {
+    if (!sectionId) return
+    let flashTimer: number | undefined
+    const focus = () => {
+      cbRef.current?.()
+      window.setTimeout(() => {
+        const el = ref.current
+        if (!el) return
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        el.classList.remove('nc-section-flash')
+        // restart the animation even when the same section is targeted twice
+        void el.offsetWidth
+        el.classList.add('nc-section-flash')
+        window.clearTimeout(flashTimer)
+        flashTimer = window.setTimeout(() => el.classList.remove('nc-section-flash'), 1700)
+      }, 60)
+    }
+    const onEvt = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === sectionId) focus()
+    }
+    window.addEventListener('nc-props-section', onEvt)
+    // mount race: the request fired before this panel (mobile sheet) mounted
+    const w = window as unknown as { __ncPropsSectionRequest?: string }
+    if (w.__ncPropsSectionRequest === sectionId) {
+      w.__ncPropsSectionRequest = undefined
+      focus()
+    }
+    return () => {
+      window.removeEventListener('nc-props-section', onEvt)
+      window.clearTimeout(flashTimer)
+    }
+  }, [sectionId])
+
+  return ref
+}
 
 /** color inputs only accept #rgb/#rrggbb — normalize anything else */
 function toHexInput(v: string): string {
@@ -246,15 +305,19 @@ function Section({
   title,
   icon: Icon,
   onReset,
+  sectionId,
   children,
 }: {
   title: string
   icon: LucideIcon
   onReset?: () => void
+  /** deep-link target for Pro Toolkit `open-properties-*` actions */
+  sectionId?: PropsSectionId
   children: ReactNode
 }) {
+  const ref = usePropsSectionFocus(sectionId)
   return (
-    <section className="space-y-3 rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
+    <section ref={ref} className="space-y-3 rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
       <div className="flex items-center gap-1.5">
         <Icon className="h-[13px] w-[13px] text-muted-foreground" />
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
@@ -529,6 +592,7 @@ function CollapsibleSection({
   onOpenChange,
   onReset,
   hint,
+  sectionId,
   children,
 }: {
   title: string
@@ -537,11 +601,14 @@ function CollapsibleSection({
   onOpenChange: (open: boolean) => void
   onReset?: () => void
   hint?: string
+  /** deep-link target for Pro Toolkit `open-properties-*` actions */
+  sectionId?: PropsSectionId
   children: ReactNode
 }) {
+  const ref = usePropsSectionFocus(sectionId, () => onOpenChange(true))
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <section className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft)">
+      <section ref={ref} className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft)">
         <div className="flex items-center gap-1.5 px-3 py-2.5">
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
             <Icon className="h-[13px] w-[13px] shrink-0 text-muted-foreground" />
@@ -785,6 +852,7 @@ function GradeSection({ clip }: { clip: Clip }) {
       icon={Palette}
       open={open}
       onOpenChange={setOpen}
+      sectionId="grade"
       onReset={isDefault ? undefined : () => updateClip(clip.id, { colorGrade: { ...DEFAULT_COLOR_GRADE } }, true)}
     >
       <SliderRow
@@ -842,7 +910,7 @@ function LutSection({ clip }: { clip: Clip }) {
   const [open, setOpen] = useState(false)
   const luts = useMemo(() => media.filter((m) => m.kind === 'lut'), [media])
   return (
-    <CollapsibleSection title="LUT" icon={Sparkles} open={open} onOpenChange={setOpen}>
+    <CollapsibleSection title="LUT" icon={Sparkles} open={open} onOpenChange={setOpen} sectionId="lut">
       {luts.length === 0 ? (
         <p className="text-[10px] leading-snug text-muted-foreground/60">
           No LUTs yet — import a .cube file from the Media panel.
@@ -876,6 +944,98 @@ function LutSection({ clip }: { clip: Clip }) {
           )}
         </>
       )}
+    </CollapsibleSection>
+  )
+}
+
+/* ================================================================ scopes */
+
+/**
+ * Scopes — live RGB histogram of the playhead frame. Samples the preview
+ * canvas through the engine (post-composite pixels: filters, grade, LUT and
+ * chroma all included) and redraws throttled while the playhead moves.
+ */
+function ScopesSection() {
+  const [open, setOpen] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const currentTime = useEditor((s) => s.currentTime)
+  const lastDrawRef = useRef(0)
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const pixels = getEngine().sampleFrame(128)
+    if (!pixels) return
+    const hist = computeHistogram(pixels)
+    const w = canvas.width
+    const h = canvas.height
+    ctx.clearRect(0, 0, w, h)
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'
+    ctx.fillRect(0, 0, w, h)
+    // quarter grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'
+    ctx.lineWidth = 1
+    for (let gx = 1; gx < 4; gx++) {
+      ctx.beginPath()
+      ctx.moveTo((gx / 4) * w, 0)
+      ctx.lineTo((gx / 4) * w, h)
+      ctx.stroke()
+    }
+    let max = 1
+    for (const ch of [hist.r, hist.g, hist.b]) for (const v of ch) if (v > max) max = v
+    ctx.globalCompositeOperation = 'screen'
+    const channels: [number[], string][] = [
+      [hist.r, '#fb7185'],
+      [hist.g, '#4ade80'],
+      [hist.b, '#38bdf8'],
+    ]
+    for (const [data, color] of channels) {
+      ctx.beginPath()
+      ctx.moveTo(0, h)
+      for (let x = 0; x < 256; x++) {
+        ctx.lineTo((x / 255) * w, h - (data[x] / max) * (h - 2))
+      }
+      ctx.lineTo(w, h)
+      ctx.closePath()
+      ctx.globalAlpha = 0.72
+      ctx.fillStyle = color
+      ctx.fill()
+    }
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.globalAlpha = 1
+  }, [])
+
+  // redraw when the frame changes — throttled so playback stays smooth
+  useEffect(() => {
+    if (!open) return
+    const now = performance.now()
+    if (now - lastDrawRef.current < 160) return
+    lastDrawRef.current = now
+    draw()
+  }, [open, currentTime, draw])
+
+  return (
+    <CollapsibleSection
+      title="Scopes"
+      icon={Activity}
+      open={open}
+      onOpenChange={setOpen}
+      sectionId="scopes"
+      hint="Read the tonal balance before grading — spikes at the edges mean crushed blacks or blown highlights."
+    >
+      <canvas
+        ref={canvasRef}
+        width={256}
+        height={72}
+        aria-label="RGB histogram of the playhead frame"
+        role="img"
+        className="w-full rounded-lg border border-(--nc-line)"
+      />
+      <p className="text-[10px] leading-snug text-muted-foreground/60">
+        Red · green · blue histogram of the composite frame — updates with the playhead.
+      </p>
     </CollapsibleSection>
   )
 }
@@ -1508,11 +1668,12 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
       {/* per-clip audio FX chain — video / audio */}
       {(clip.kind === 'video' || clip.kind === 'audio') && <AudioFxSection clip={clip} />}
 
-      {/* filters — video / image */}
-      {(clip.kind === 'video' || clip.kind === 'image') && (
+      {/* filters — CSS layer renders on every visual clip kind */}
+      {clip.kind !== 'audio' && (
         <Section
           title="Filters"
           icon={Wand2}
+          sectionId="filters"
           onReset={() => updateClip(clip.id, { filters: { ...DEFAULT_FILTERS } }, true)}
         >
           <SliderRow
@@ -1596,6 +1757,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
           <GradeSection clip={clip} />
           <LutSection clip={clip} />
           <ChromaSection clip={clip} />
+          <ScopesSection />
         </>
       )}
 

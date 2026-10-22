@@ -35,7 +35,7 @@ import {
   createTrack,
   type TextPreset,
 } from './constants'
-import { baseValueForProperty, clamp, evaluateKeyframeProperty, formatTimecode, landingTime, projectDuration, round2, uid } from './utils'
+import { baseValueForProperty, clamp, evaluateKeyframeProperty, formatTimecode, landingTime, normalizeColorGrade, normalizeFilters, projectDuration, round2, uid } from './utils'
 import * as db from './db'
 
 /** Panel-friendly patch type: nested objects accept partials */
@@ -203,6 +203,19 @@ function withUpdatedAt(p: Project): Project {
   return { ...p, updatedAt: Date.now() }
 }
 
+/** Repair persisted color data into the strict Filters/ColorGrade contracts. */
+function normalizeProjectColor(p: Project): Project {
+  return {
+    ...p,
+    clips: p.clips.map((c) => {
+      const filters = normalizeFilters(c.filters)
+      const grade = c.colorGrade ? normalizeColorGrade(c.colorGrade) : c.colorGrade
+      if (filters === c.filters && grade === c.colorGrade) return c
+      return { ...c, filters, colorGrade: grade }
+    }),
+  }
+}
+
 function applyClipPatch(project: Project, id: string, patch: ClipPatch): Project {
   return {
     ...project,
@@ -213,11 +226,11 @@ function applyClipPatch(project: Project, id: string, patch: ClipPatch): Project
         ...(patch as Partial<Clip>),
       }
       if (patch.transform) next.transform = { ...c.transform, ...patch.transform }
-      if (patch.filters) next.filters = { ...c.filters, ...patch.filters }
+      if (patch.filters) next.filters = normalizeFilters({ ...c.filters, ...patch.filters })
       if (patch.textStyle) next.textStyle = { ...c.textStyle!, ...patch.textStyle }
       if (patch.sticker) next.sticker = { ...c.sticker!, ...patch.sticker }
       if (patch.chromaKey) next.chromaKey = { ...(c.chromaKey ?? { enabled: false, color: '#00b140', similarity: 0.32, smoothness: 0.12 }), ...patch.chromaKey }
-      if (patch.colorGrade) next.colorGrade = { ...(c.colorGrade ?? { temperature: 0, tint: 0, shadows: 0, highlights: 0, vibrance: 1 }), ...patch.colorGrade }
+      if (patch.colorGrade) next.colorGrade = normalizeColorGrade({ ...(c.colorGrade ?? { temperature: 0, tint: 0, shadows: 0, highlights: 0, vibrance: 1 }), ...patch.colorGrade })
       // audio FX — object patches merge over the previous recipe; null clears
       if (patch.audioFx !== undefined) {
         next.audioFx = patch.audioFx === null ? null : { ...(c.audioFx ?? {}), ...patch.audioFx }
@@ -270,6 +283,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
       if (lastId) project = projects.find((p) => p.id === lastId)
       if (!project && projects.length) project = projects.sort((a, b) => b.updatedAt - a.updatedAt)[0]
       if (!project) project = createDefaultProject()
+      project = normalizeProjectColor(project)
       suppressSave = true
       // land on a frame that actually shows content (never greet with a black canvas)
       const land = landingTime(project)
@@ -419,6 +433,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
       project: withUpdatedAt({ ...st.project, clips: st.project.clips.filter((c) => c.mediaId !== id) }),
       selectedClipIds: st.selectedClipIds.filter((cid) => !st.project.clips.some((c) => c.id === cid && c.mediaId === id)),
     }))
+    // a deleted LUT asset must not serve stale pixels from the engine cache
+    if (asset?.kind === 'lut') {
+      const { getEngine } = await import('./engine')
+      getEngine().invalidateLutCache(id)
+    }
     await db.deleteAsset(id).catch(() => undefined)
   },
 

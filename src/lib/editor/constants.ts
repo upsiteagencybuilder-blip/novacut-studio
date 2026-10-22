@@ -407,32 +407,6 @@ export const DEFAULT_STICKER: StickerStyle = {
   animation: 'pop',
 }
 
-/* ---------------- Filter presets ---------------- */
-
-export interface FilterPreset {
-  id: string
-  name: string
-  /** CSS preview for the UI chip */
-  css: string
-  patch: Partial<Filters>
-}
-
-export const FILTER_PRESETS: FilterPreset[] = [
-  { id: 'original', name: 'Original', css: 'none', patch: {} },
-  { id: 'vivid', name: 'Vivid', css: 'saturate(1.4) contrast(1.12)', patch: { saturation: 1.4, contrast: 1.12 } },
-  { id: 'punch', name: 'Punch', css: 'contrast(1.35) saturate(1.25)', patch: { contrast: 1.35, saturation: 1.25 } },
-  { id: 'noir', name: 'Noir', css: 'grayscale(1) contrast(1.4) brightness(0.92)', patch: { grayscale: 1, contrast: 1.4, brightness: 0.92 } },
-  { id: 'silver', name: 'Silver', css: 'grayscale(1) brightness(1.08) contrast(0.95)', patch: { grayscale: 1, brightness: 1.08, contrast: 0.95 } },
-  { id: 'vintage', name: 'Vintage', css: 'sepia(0.45) saturate(0.85) contrast(0.95) brightness(1.05)', patch: { sepia: 0.45, saturation: 0.85, contrast: 0.95, brightness: 1.05 } },
-  { id: 'warm', name: 'Warm Sun', css: 'sepia(0.28) saturate(1.25) hue-rotate(-8deg)', patch: { sepia: 0.28, saturation: 1.25, hue: -8 } },
-  { id: 'cold', name: 'Cold Moon', css: 'saturate(0.85) brightness(1.05) hue-rotate(12deg) contrast(1.08)', patch: { saturation: 0.85, brightness: 1.05, hue: 12, contrast: 1.08 } },
-  { id: 'dreamy', name: 'Dreamy', css: 'blur(1.2px) brightness(1.1) saturate(1.18)', patch: { blur: 1.2, brightness: 1.1, saturation: 1.18 } },
-  { id: 'faded', name: 'Faded', css: 'contrast(0.82) brightness(1.12) saturate(0.8)', patch: { contrast: 0.82, brightness: 1.12, saturation: 0.8 } },
-  { id: 'cinema', name: 'Cinematic', css: 'contrast(1.22) saturate(0.92) brightness(0.96) sepia(0.12)', patch: { contrast: 1.22, saturation: 0.92, brightness: 0.96, sepia: 0.12 } },
-  { id: 'sunset', name: 'Sunset', css: 'sepia(0.3) saturate(1.3) hue-rotate(-18deg) brightness(1.04)', patch: { sepia: 0.3, saturation: 1.3, hue: -18, brightness: 1.04 } },
-  { id: 'invert', name: 'Invert', css: 'invert(1)', patch: { invert: 1 } },
-]
-
 /* ---------------- Motion presets ---------------- */
 
 export const MOTION_PRESETS: { id: Clip['motion']; name: string; icon: string }[] = [
