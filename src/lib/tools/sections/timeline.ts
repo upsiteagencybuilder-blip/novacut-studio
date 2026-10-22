@@ -71,6 +71,8 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-reverse-playback', name: 'Reverse Playback', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Toggle a video clip to play backwards frame-by-frame; audio muted while reversed' },
   { id: 'timeline-freeze-frame', name: 'Freeze Frame', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Toolbar snowflake captures the current frame as a 3s still and ripple-inserts it at the playhead' },
   { id: 'timeline-fit-modes', name: 'Fit Modes (Cover / Contain / Stretch)', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Choose how each video or image fills the canvas in Properties → Transform → Fit' },
+  { id: 'timeline-ken-burns-presets', name: 'Ken Burns Motion Presets', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Eleven auto-motion presets — zooms, pans, rotate, pulse, zoom-spin, Ken Burns drift — with an intensity slider', action: 'open-effects' },
+  { id: 'timeline-keyframe-animation', name: 'Keyframe Animation', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Animate position, scale, rotation, opacity and volume with easing — diamond keys right on Transform sliders', action: 'open-properties-animation' },
   { id: 'timeline-duration-tool', name: 'Duration Tool', section: 'timeline', group: 'Speed & duration', status: 'planned', desc: 'Set exact clip duration numerically with automatic retime' },
 
   // -------- Markers & navigation --------

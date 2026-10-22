@@ -707,3 +707,25 @@ Stage Summary:
 - Sector 8 COMPLETE: Stickers grew from 96 emoji clips to a 134-item stickers hub (96 emojis + 38 procedural) with recolorable vector shapes, social elements and vlog callouts; one shared renderer powers panel thumbnails, preview AND export; 3 catalog tools flipped live with receipts.
 - 9 files: +sticker-render.ts (new), types.ts, constants.ts, store.ts, engine.ts, StickerPanel.tsx, PropertiesPanel.tsx, ClipBlock.tsx, tools/sections/libraries.ts.
 - Next: Sector 9 (Motion) per the serial sector plan.
+
+---
+Task ID: 9
+Agent: Z.ai Code (main)
+Task: Sector 9 — Motion: complete the motion system (Ken Burns presets, intensity control, one-click transform keyframes, deep-links, catalog honesty), E2E desktop+mobile
+
+Work Log:
+- SURVEY: keyframes system already engine-complete (x/y/scale/rotation/opacity/volume + 5 easings, Animation section). Gaps found: ① motionIntensity had NO UI (stuck at defaults), ② only 7 motion presets, ③ no keyframing affordance on the Transform sliders users actually touch, ④ zero catalog entries for Ken Burns/keyframes, ⑤ animation section had no deep-link.
+- NEW ENGINE PRESETS (deterministic, tLocal-only): rotate (continuous spin, mi×180° across clip), pulse (breathing sine ±8%), zoomRotate (zoomIn + eased 30° roll), kenBurns (eased zoom ×0.6 + diagonal glide) — motionRot wired into the ctx.rotate composition. MOTION_PRESETS 7→11.
+- INTENSITY SLIDER: EffectsPanel Motion (Ken Burns) section now shows Intensity 5–100% whenever motion ≠ none (was impossible to tune before).
+- ONE-CLICK KEYFRAME DIAMONDS: Transform X/Y/Scale/Rotate/Opacity rows gained diamond toggles (amber-filled when a key sits at the playhead, dim-outline when the property has keys elsewhere) — add/remove at playhead with toasts; legend line teaches the gesture; SliderRow gained an accessory slot.
+- BUG FIXED (value capture): addKeyframeAtPlayhead used the INTERPOLATED animated value when keys existed — a user-set slider value was silently discarded (repro: key@t2.3=1, set scale 1.5 @t0.4, key → got v=1 not 1.5). Now always captures baseValueForProperty (what the sliders show). E2E-verified: keys {t0.4→1.5, t2.3→0.8} + pixel diff 85 across the span; toggle-off also verified.
+- DEEP-LINK: PropsSectionId += 'animation'; AnimationSection sectionId wired (expand+scroll+flash); ProToolkitPanel action 'open-properties-animation'; ToolAction union extended.
+- CATALOG honesty: added timeline-ken-burns-presets (live, open-effects) + timeline-keyframe-animation (live, open-properties-animation) under Speed & duration.
+- REGISTRY: new Spin & Breathe family (7 effects) showcasing rotate/pulse/zoomRotate/kenBurns — motion effects 40→47, effects total 1139→1146 (install banner auto-updated).
+- E2E (agent-browser, demo, desktop 1280×800 + mobile 390×844): 11 preset chips render; Ken Burns applied via chip; Intensity slider keyboard-driven 0.4→0.8 ✓; canvas frame diff 291 across the clip (motion renders) ✓; keyframe diamonds add/remove with correct values ✓; deep-link scrolls+expands Animation section ✓; EXPORT 100% → decoded exported bytes at t0.6 vs t1.8 diff 151 (motion in the file) ✓; mobile: props sheet shows 5 diamonds, real tap adds a key ✓; zero console errors, eslint + tsc(src) clean.
+- NOTE (dev-only): editing store.ts triggers Fast Refresh re-eval of the zustand module → a fresh "Untitled Project" store replaces the loaded one until the next page load; autosave then persists that empty project in the sandbox profile. Dev artifact only (production never hot-reloads) — seen while iterating; worth remembering when testing after store edits.
+
+Stage Summary:
+- Sector 9 COMPLETE: motion is now tunable and discoverable — 11 Ken Burns-family presets with a live intensity slider, After-Effects-style diamond keyframing directly on Transform sliders (with the value-capture bug fixed), Animation deep-link, and honest catalog coverage. Motion effects library grew to 47.
+- 10 files changed: editor/types.ts, engine.ts, store.ts, constants.ts, PropertiesPanel.tsx, EffectsPanel.tsx, ProToolkitPanel.tsx, effects/motion.ts, tools/sections/timeline.ts, tools/types.ts.
+- Next: Sector 10 (AI tools UI) per the serial sector plan.

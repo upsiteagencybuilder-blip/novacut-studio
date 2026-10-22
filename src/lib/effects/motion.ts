@@ -1,13 +1,15 @@
 /**
- * NovaCut Studio — Motion presets (40 definitions)
+ * NovaCut Studio — Motion presets (47 definitions)
  *
- * 4 families × 10 camera-move presets:
+ * 5 families of camera-move presets:
  *   Ken Burns In  — engine `zoomIn` across 10 intensity steps (0.1..0.95)
  *   Cinema Pans   — engine panLeft/Right/Up/Down at 2-3 intensities
  *   Orbit & Spin  — `none` motion + transform keyframes (rotation breathe,
  *                   x/y arcs via a mid anchor at 0.5)
  *   Punch & Pop   — beat-drop scale pops via keyframes, or strong zoomIn +
  *                   a rotation kick
+ *   Spin & Breathe — engine `rotate` / `pulse` / `zoomRotate` / `kenBurns`
+ *                   presets (Sector 9) at showcase intensities
  *
  * Keyframe value semantics (see MotionEffect in './types'):
  *   `at` is a FRACTION of clip duration (0 | 0.5 | 1), x/y are -1..1 canvas
@@ -163,11 +165,29 @@ function buildPunchPop(): MotionEffect[] {
   ]
 }
 
-/* ---------------- assembly (4 × 10 = 40) ---------------- */
+/* ---------------- Spin & Breathe (7) — engine rotate/pulse/zoomRotate/kenBurns ----------------
+ * Showcases the Sector-9 engine presets: continuous spins, breathing pulses,
+ * zoom-and-roll combos and the classic Ken Burns diagonal drift.
+ */
+
+function buildSpinBreathe(): MotionEffect[] {
+  return [
+    mk('spin-breathe', 'Spin & Breathe', 'Spin & Breathe · Gentle Spin', '🔄', 'rotate', 0.2, undefined, ['rotate', 'subtle']),
+    mk('spin-breathe', 'Spin & Breathe', 'Spin & Breathe · Classic Spin', '🔄', 'rotate', 0.5, undefined, ['rotate', 'medium']),
+    mk('spin-breathe', 'Spin & Breathe', 'Spin & Breathe · Whirl', '🔄', 'rotate', 0.9, undefined, ['rotate', 'extreme']),
+    mk('spin-breathe', 'Spin & Breathe', 'Spin & Breathe · Breathe', '💓', 'pulse', 0.5, undefined, ['pulse', 'medium']),
+    mk('spin-breathe', 'Spin & Breathe', 'Spin & Breathe · Heartbeat', '💓', 'pulse', 0.9, undefined, ['pulse', 'strong']),
+    mk('spin-breathe', 'Spin & Breathe', 'Spin & Breathe · Zoom Roll', '🌀', 'zoomRotate', 0.5, undefined, ['zoom-spin', 'medium']),
+    mk('spin-breathe', 'Spin & Breathe', 'Spin & Breathe · Documentary Drift', '🎞', 'kenBurns', 0.5, undefined, ['ken-burns', 'drift', 'classic']),
+  ]
+}
+
+/* ---------------- assembly (4 × 10 + 7 = 47) ---------------- */
 
 export const MOTION_EFFECTS: MotionEffect[] = [
   ...buildKenBurns(),
   ...buildPans(),
   ...buildOrbitSpin(),
   ...buildPunchPop(),
+  ...buildSpinBreathe(),
 ]

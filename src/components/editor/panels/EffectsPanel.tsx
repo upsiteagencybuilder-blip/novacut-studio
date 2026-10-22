@@ -211,6 +211,10 @@ const MOTION_HINTS: Record<MotionType, string> = {
   panRight: 'Pan right',
   panUp: 'Pan up',
   panDown: 'Pan down',
+  rotate: 'Slow spin',
+  pulse: 'Breathing scale',
+  zoomRotate: 'Zoom + roll',
+  kenBurns: 'Drift + zoom',
 }
 
 function motionDescription(effect: MotionEffect): string {
@@ -1354,6 +1358,27 @@ export function EffectsPanel() {
                 )
               })}
             </div>
+            {clip.motion !== 'none' && (
+              <div className="space-y-1.5 pt-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-foreground/80">Intensity</span>
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                    {Math.round(clip.motionIntensity * 100)}%
+                  </span>
+                </div>
+                <Slider
+                  min={0.05}
+                  max={1}
+                  step={0.05}
+                  value={[clip.motionIntensity]}
+                  onValueChange={(v) => updateClip(clip.id, { motionIntensity: v[0] ?? 0.35 }, 'motion-intensity')}
+                  aria-label="Motion intensity"
+                />
+                <p className="text-[10px] leading-snug text-muted-foreground/60">
+                  How strong the move reads — subtle for documentary drift, strong for punchy social clips.
+                </p>
+              </div>
+            )}
           </section>
         )}
 

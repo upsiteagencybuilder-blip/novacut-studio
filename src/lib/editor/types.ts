@@ -85,7 +85,18 @@ export interface Filters {
   invert: number // 0..1
 }
 
-export type MotionType = 'none' | 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight' | 'panUp' | 'panDown'
+export type MotionType =
+  | 'none'
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'panLeft'
+  | 'panRight'
+  | 'panUp'
+  | 'panDown'
+  | 'rotate'
+  | 'pulse'
+  | 'zoomRotate'
+  | 'kenBurns'
 
 /**
  * Extended text animation set (v3 mega-effects).

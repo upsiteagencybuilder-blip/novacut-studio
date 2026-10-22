@@ -1456,12 +1456,14 @@ class PreviewEngine {
       this.applyWipeMask(ctx, clip.wipe, clamp(iris, 0, 1), W, H)
     }
 
-    // motion (Ken Burns)
+    // motion (Ken Burns family) — all presets are deterministic functions of
+    // tLocal so preview and export render identical frames
     const q = clip.duration > 0 ? clamp(tLocal / clip.duration, 0, 1) : 0
     const mi = clip.motionIntensity
     let motionScale = 1
     let motionX = 0
     let motionY = 0
+    let motionRot = 0
     if (clip.motion !== 'none') {
       const e = easeInOut(q)
       switch (clip.motion) {
@@ -1487,11 +1489,30 @@ class PreviewEngine {
           motionScale = 1 + mi * 0.2
           motionY = -mi * H * 0.1 * (0.5 - e) * 2
           break
+        case 'rotate':
+          // slow continuous spin across the clip — up to 180° at full intensity
+          motionRot = mi * 180 * q
+          break
+        case 'pulse':
+          // breathing scale — gentle sine, ~±8% at full intensity
+          motionScale = 1 + Math.sin(tLocal * 3) * 0.08 * mi
+          break
+        case 'zoomRotate':
+          // zoomIn paired with a eased 30° roll
+          motionScale = 1 + mi * e
+          motionRot = mi * 30 * e
+          break
+        case 'kenBurns':
+          // classic documentary drift: eased zoom-in plus a diagonal glide
+          motionScale = 1 + mi * 0.6 * e
+          motionX = mi * W * 0.06 * (0.5 - e) * 2
+          motionY = mi * H * 0.04 * (0.5 - e) * 2
+          break
       }
     }
 
     ctx.translate(W / 2 + tx * W + motionX + shakeX * W, H / 2 + ty * H + motionY + shakeY * H)
-    ctx.rotate(((trot + shakeRot) * Math.PI) / 180)
+    ctx.rotate(((trot + shakeRot + motionRot) * Math.PI) / 180)
 
     // media mirroring (flip) — applied to video/image only; text mirrored would be unreadable
     if (clip.kind === 'video' || clip.kind === 'image') {

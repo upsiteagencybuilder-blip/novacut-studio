@@ -36,7 +36,7 @@ import {
   type StickerRequest,
   type TextPreset,
 } from './constants'
-import { baseValueForProperty, clamp, evaluateKeyframeProperty, formatTimecode, landingTime, normalizeColorGrade, normalizeFilters, projectDuration, round2, uid } from './utils'
+import { baseValueForProperty, clamp, formatTimecode, landingTime, normalizeColorGrade, normalizeFilters, projectDuration, round2, uid } from './utils'
 import * as db from './db'
 
 /** Panel-friendly patch type: nested objects accept partials */
@@ -811,8 +811,10 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const tLocal = round2(clamp(s.currentTime - clip.start, 0, clip.duration))
     const existing = (clip.keyframes ?? []).find((k) => k.property === property && Math.abs(k.time - tLocal) < 0.05)
     if (existing) return
-    // value: if keys exist, use interpolated value at playhead; else base value
-    const value = evaluateKeyframeProperty(clip, property, tLocal) ?? baseValueForProperty(clip, property)
+    // value: the property's CURRENT base value (what the user just set via the
+    // sliders). Interpolating existing keys here would silently ignore the edit
+    // the user made right before pressing the diamond.
+    const value = baseValueForProperty(clip, property)
     const kf: Keyframe = { id: uid('kf_'), property, time: tLocal, value, easing: 'easeInOut' }
     get().pushHistory()
     set((st) => ({

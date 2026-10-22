@@ -103,6 +103,7 @@ function useToolAction() {
       'open-properties-grade': () => openPropsSection('grade'),
       'open-properties-lut': () => openPropsSection('lut'),
       'open-properties-scopes': () => openPropsSection('scopes'),
+      'open-properties-animation': () => openPropsSection('animation'),
     }
     return map
   }, [setPanelTab, openDialog])

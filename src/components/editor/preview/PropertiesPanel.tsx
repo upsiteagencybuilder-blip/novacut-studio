@@ -79,6 +79,7 @@ import type {
   EasingType,
   Filters,
   Keyframe,
+  KeyframeProperty,
   StickerAnimation,
   StickerStyle,
   TextAnimation,
@@ -176,7 +177,7 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes'
+export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
@@ -275,6 +276,7 @@ function SliderRow({
   value,
   onChange,
   format,
+  accessory,
 }: {
   label: string
   min: number
@@ -283,6 +285,8 @@ function SliderRow({
   value: number
   onChange: (v: number) => void
   format?: (v: number) => string
+  /** optional right-side control (e.g. keyframe diamond) */
+  accessory?: ReactNode
 }) {
   // clamp only what the thumb shows — the real value may exceed the range (e.g. corner-drag scale)
   const safe = Math.min(Math.max(value, min), max)
@@ -297,6 +301,7 @@ function SliderRow({
         value={[safe]}
         onValueChange={(v) => onChange(v[0] ?? min)}
       />
+      {accessory}
       <span className="w-10 shrink-0 text-right font-mono text-[10px] tabular-nums text-foreground/70">
         {format ? format(value) : fmtNum(value)}
       </span>
@@ -923,6 +928,7 @@ function AnimationSection({ clip, fps }: { clip: Clip; fps: number }) {
       icon={SlidersHorizontal}
       open={open}
       onOpenChange={setOpenOverride}
+      sectionId="animation"
       hint="Move the playhead and add keys — values animate between keys with your chosen easing."
     >
       {props.map((p) => (
@@ -1495,6 +1501,9 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
   const replaceClipMedia = useEditor((s) => s.replaceClipMedia)
   const insertFreezeFrame = useEditor((s) => s.insertFreezeFrame)
   const extractAudioFromVideo = useEditor((s) => s.extractAudioFromVideo)
+  const currentTime = useEditor((s) => s.currentTime)
+  const addKeyframeAtPlayhead = useEditor((s) => s.addKeyframeAtPlayhead)
+  const removeKeyframe = useEditor((s) => s.removeKeyframe)
 
   const meta = KIND_META[clip.kind]
   const KindIcon = meta.icon
@@ -1504,6 +1513,43 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
     const patch: Partial<Transform> = {}
     patch[key] = v
     updateClip(clip.id, { transform: patch }, `prop-${key}`)
+  }
+
+  /* --- one-click keyframing from the Transform sliders (Sector 9) --- */
+  const keyAtPlayhead = (prop: KeyframeProperty): Keyframe | undefined => {
+    const eps = 0.5 / (project.fps || 30) + 0.001
+    return (clip.keyframes ?? []).find((k) => k.property === prop && Math.abs(k.time - currentTime) <= eps)
+  }
+
+  const toggleKeyframe = (prop: KeyframeProperty) => {
+    const existing = keyAtPlayhead(prop)
+    if (existing) {
+      removeKeyframe(clip.id, existing.id)
+      toast('Keyframe removed')
+    } else {
+      addKeyframeAtPlayhead(clip.id, prop)
+      toast.success(`Keyframed ${KEYFRAME_PROPERTIES.find((p) => p.id === prop)?.label ?? prop} at playhead`)
+    }
+  }
+
+  const kfDiamond = (prop: KeyframeProperty) => {
+    const kf = keyAtPlayhead(prop)
+    const anyKeys = (clip.keyframes ?? []).some((k) => k.property === prop)
+    return (
+      <button
+        type="button"
+        title={kf ? 'Remove keyframe at playhead' : anyKeys ? 'Add keyframe at playhead' : 'Keyframe this property at the playhead'}
+        aria-label={kf ? `Remove ${prop} keyframe at playhead` : `Add ${prop} keyframe at playhead`}
+        aria-pressed={!!kf}
+        onClick={() => toggleKeyframe(prop)}
+        className={cn(
+          'shrink-0 rounded p-0.5 transition-colors',
+          kf ? 'text-amber-400' : anyKeys ? 'text-muted-foreground/70 hover:text-foreground' : 'text-muted-foreground/40 hover:text-foreground',
+        )}
+      >
+        <Diamond className={cn('size-3', kf && 'fill-current')} />
+      </button>
+    )
   }
 
   const nudgeRotation = (delta: number) => {
@@ -1567,6 +1613,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             value={clip.transform.x}
             onChange={(v) => patchTransform('x', v)}
             format={fmtNum}
+            accessory={kfDiamond('x')}
           />
           <SliderRow
             label="Y"
@@ -1576,6 +1623,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             value={clip.transform.y}
             onChange={(v) => patchTransform('y', v)}
             format={fmtNum}
+            accessory={kfDiamond('y')}
           />
           <SliderRow
             label="Scale"
@@ -1585,6 +1633,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             value={clip.transform.scale}
             onChange={(v) => patchTransform('scale', v)}
             format={fmtX}
+            accessory={kfDiamond('scale')}
           />
           <SliderRow
             label="Rotate"
@@ -1594,6 +1643,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             value={clip.transform.rotation}
             onChange={(v) => patchTransform('rotation', v)}
             format={fmtDeg}
+            accessory={kfDiamond('rotation')}
           />
           <SliderRow
             label="Opacity"
@@ -1603,6 +1653,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             value={clip.transform.opacity}
             onChange={(v) => patchTransform('opacity', v)}
             format={fmtPct}
+            accessory={kfDiamond('opacity')}
           />
 
           {/* quick mirror + 90° rotate actions */}
@@ -1646,6 +1697,12 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
               <FlipVertical2 className="h-3 w-3" /> Flip V
             </Button>
           </div>
+
+          {/* keyframe legend — the diamonds next to X/Y/Scale/Rotate/Opacity */}
+          <p className="flex items-center gap-1 text-[10px] leading-snug text-muted-foreground/60">
+            <Diamond className="size-2.5 fill-current text-amber-400" />
+            tap a diamond to key that property at the playhead — values animate between keys (Animation section below)
+          </p>
 
           {/* fit mode — how the source fills the canvas (video / image) */}
           {(clip.kind === 'video' || clip.kind === 'image') && (
