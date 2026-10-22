@@ -217,11 +217,24 @@ export interface TextStyle {
   strike?: boolean
 }
 
+export type StickerFamily = 'emoji' | 'shape' | 'social' | 'vlog'
+
 export interface StickerStyle {
+  /** emoji glyph for family='emoji'; display glyph for shape/element tiles */
   emoji: string
   /** px height in canvas space */
   size: number
   animation: StickerAnimation
+  /** sticker family — default 'emoji' (legacy clips omit it) */
+  family?: StickerFamily
+  /** procedural renderer id for shape/social/vlog families (see sticker-render.ts) */
+  shape?: string
+  /** fill color for shapes / elements (hex) */
+  fill?: string
+  /** stroke color for shapes / elements (hex) */
+  stroke?: string
+  /** stroke width in px — 0 disables outline */
+  strokeWidth?: number
 }
 
 /**

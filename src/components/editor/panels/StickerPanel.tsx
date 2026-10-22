@@ -1,66 +1,222 @@
 'use client'
 
 /**
- * Sticker panel — emoji categories + tap-to-add sticker grid.
+ * Stickers hub — emoji packs, procedural vector shapes, social elements and
+ * vlog callouts with search + live canvas thumbnails. Tap adds at playhead.
  */
-import { useState } from 'react'
-import { Lightbulb } from 'lucide-react'
+import { useMemo, useRef, useState, useEffect } from 'react'
+import { Lightbulb, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { STICKER_CATEGORIES } from '@/lib/editor/constants'
 import { useEditor } from '@/lib/editor/store'
+import {
+  STICKER_SHAPE_DEFS,
+  STICKER_SOCIAL_DEFS,
+  STICKER_VLOG_DEFS,
+  drawStickerArt,
+  type StickerDef,
+} from '@/lib/editor/sticker-render'
+import type { StickerFamily } from '@/lib/editor/types'
+import { cn } from '@/lib/utils'
+
+type Tab = 'emoji' | StickerFamily
+
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: 'emoji', label: 'Emojis', icon: '😀' },
+  { id: 'shape', label: 'Shapes', icon: '⬡' },
+  { id: 'social', label: 'Social', icon: '👍' },
+  { id: 'vlog', label: 'Vlog', icon: '🎬' },
+]
+
+/* ---------------- live canvas thumbnail (same renderer as preview/export) ---------------- */
+
+function StickerThumb({ def, size = 44 }: { def: StickerDef; size?: number }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const cv = ref.current
+    if (!cv) return
+    const ctx = cv.getContext('2d')
+    if (!ctx) return
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const px = 64
+    cv.width = px * dpr
+    cv.height = px * dpr
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, px, px)
+    ctx.save()
+    ctx.translate(px / 2, px / 2)
+    drawStickerArt(
+      ctx,
+      {
+        emoji: def.glyph,
+        size: 46,
+        animation: 'none',
+        family: def.family,
+        shape: def.id,
+        fill: def.fill,
+        stroke: def.stroke,
+        strokeWidth: def.strokeWidth,
+      },
+      0,
+    )
+    ctx.restore()
+  }, [def])
+
+  return <canvas ref={ref} style={{ width: size, height: size }} aria-hidden className="pointer-events-none" />
+}
+
+/* ---------------- panel ---------------- */
 
 export function StickerPanel() {
   const addStickerClip = useEditor((s) => s.addStickerClip)
+  const [tab, setTab] = useState<Tab>('emoji')
   const [activeCat, setActiveCat] = useState(0)
+  const [query, setQuery] = useState('')
+
   const category = STICKER_CATEGORIES[activeCat] ?? STICKER_CATEGORIES[0]
 
-  const handleAdd = (emoji: string) => {
-    addStickerClip(emoji)
-    toast(`${emoji} added`)
+  const q = query.trim()
+  const ql = q.toLowerCase()
+
+  const filteredDefs = useMemo(() => {
+    const defs =
+      tab === 'shape' ? STICKER_SHAPE_DEFS : tab === 'social' ? STICKER_SOCIAL_DEFS : tab === 'vlog' ? STICKER_VLOG_DEFS : []
+    if (!ql) return defs
+    return defs.filter((d) => d.name.toLowerCase().includes(ql) || d.id.includes(ql) || d.glyph === q)
+  }, [tab, ql, q])
+
+  const handleAdd = (desc: Parameters<typeof addStickerClip>[0], label: string) => {
+    addStickerClip(desc)
+    toast(`${label} added`)
   }
 
   return (
     <div className="space-y-3">
-      {/* category chips */}
-      <div className="flex flex-wrap gap-1.5">
-        {STICKER_CATEGORIES.map((cat, i) => {
-          const active = i === activeCat
+      {/* family tabs */}
+      <div className="grid grid-cols-4 gap-1.5" role="tablist" aria-label="Sticker families">
+        {TABS.map((t) => {
+          const active = t.id === tab
           return (
             <button
-              key={cat.name}
+              key={t.id}
               type="button"
-              onClick={() => setActiveCat(i)}
-              className={
+              role="tab"
+              aria-selected={active}
+              onClick={() => {
+                setTab(t.id)
+                setQuery('')
+              }}
+              className={cn(
+                'flex h-8 flex-col items-center justify-center rounded-lg text-[10px] font-medium leading-none transition',
                 active
-                  ? 'nc-gradient h-7 rounded-full px-2.5 text-[11px] font-medium text-white transition'
-                  : 'h-7 rounded-full bg-(--nc-panel) px-2.5 text-[11px] text-muted-foreground transition hover:bg-(--nc-panel-strong)'
-              }
+                  ? 'nc-gradient text-white shadow'
+                  : 'bg-(--nc-panel) text-muted-foreground hover:bg-(--nc-panel-strong) hover:text-foreground',
+              )}
             >
-              {cat.name}
+              <span className="text-sm">{t.icon}</span>
+              {t.label}
             </button>
           )
         })}
       </div>
 
-      {/* emoji grid */}
-      <div className="grid grid-cols-5 gap-1.5">
-        {category?.emojis.map((emoji, i) => (
-          <button
-            key={`${emoji}-${i}`}
-            type="button"
-            title={`Add ${emoji} sticker at playhead`}
-            onClick={() => handleAdd(emoji)}
-            className="flex aspect-square items-center justify-center rounded-lg bg-(--nc-panel) text-2xl transition hover:scale-110 hover:bg-(--nc-panel-strong) active:scale-95"
-          >
-            {emoji}
-          </button>
-        ))}
-      </div>
+      {/* search — all families */}
+      <label className="flex h-8 items-center gap-2 rounded-lg border border-(--nc-line) bg-(--nc-panel) px-2.5 focus-within:border-(--nc-accent)">
+        <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={`Search ${TABS.find((t) => t.id === tab)?.label.toLowerCase()}…`}
+          aria-label="Search stickers"
+          className="w-full bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/60"
+        />
+      </label>
+
+      {/* ---------------- emoji tab ---------------- */}
+      {tab === 'emoji' && (
+        <>
+          {!q && (
+            <div className="flex flex-wrap gap-1.5">
+              {STICKER_CATEGORIES.map((cat, i) => {
+                const active = i === activeCat
+                return (
+                  <button
+                    key={cat.name}
+                    type="button"
+                    onClick={() => setActiveCat(i)}
+                    aria-pressed={active}
+                    className={
+                      active
+                        ? 'nc-gradient h-7 rounded-full px-2.5 text-[11px] font-medium text-white transition'
+                        : 'h-7 rounded-full bg-(--nc-panel) px-2.5 text-[11px] text-muted-foreground transition hover:bg-(--nc-panel-strong)'
+                    }
+                  >
+                    {cat.name}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          <div className="grid max-h-72 grid-cols-5 gap-1.5 overflow-y-auto pr-0.5 nc-scroll">
+            {(q
+              ? STICKER_CATEGORIES.filter((c) => c.name.toLowerCase().includes(ql)).flatMap((c) => c.emojis)
+              : (category?.emojis ?? [])
+            ).map((emoji, i) => (
+              <button
+                key={`${emoji}-${i}`}
+                type="button"
+                title={`Add ${emoji} sticker at playhead`}
+                onClick={() => handleAdd(emoji, emoji)}
+                className="flex aspect-square items-center justify-center rounded-lg bg-(--nc-panel) text-2xl transition hover:scale-110 hover:bg-(--nc-panel-strong) active:scale-95"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          {q &&
+            STICKER_CATEGORIES.filter((c) => c.name.toLowerCase().includes(ql)).length === 0 && (
+              <p className="py-4 text-center text-[11px] text-muted-foreground">No emoji pack matches “{query}”.</p>
+            )}
+        </>
+      )}
+
+      {/* ---------------- shape / social / vlog tabs ---------------- */}
+      {tab !== 'emoji' && (
+        <div className="grid max-h-72 grid-cols-4 gap-1.5 overflow-y-auto pr-0.5 nc-scroll">
+          {filteredDefs.map((def) => (
+            <button
+              key={def.id}
+              type="button"
+              title={`Add ${def.name}`}
+              aria-label={`Add ${def.name} sticker`}
+              onClick={() =>
+                handleAdd(
+                  { family: def.family, shape: def.id, fill: def.fill, stroke: def.stroke, strokeWidth: def.strokeWidth },
+                  def.name,
+                )
+              }
+              className="flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg bg-(--nc-panel) p-1 transition hover:bg-(--nc-panel-strong) active:scale-95"
+            >
+              <StickerThumb def={def} size={36} />
+              <span className="w-full truncate text-center text-[9px] leading-none text-muted-foreground">{def.name}</span>
+            </button>
+          ))}
+          {filteredDefs.length === 0 && (
+            <p className="col-span-4 py-6 text-center text-[11px] text-muted-foreground">
+              No stickers match “{query}”.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* tip */}
       <div className="nc-glass flex gap-2 rounded-lg p-3 text-[11px] text-muted-foreground">
         <Lightbulb className="size-3.5 shrink-0 text-yellow-500" />
-        <p>Stickers appear above video. Drag them on the timeline to reposition in time.</p>
+        <p>
+          Stickers render above video — drag on the timeline to retime, and restyle shapes & elements from Properties
+          (fill, outline, size, animation).
+        </p>
       </div>
     </div>
   )

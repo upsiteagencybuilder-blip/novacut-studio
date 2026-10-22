@@ -11,6 +11,7 @@ import { useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Type } from 'lucide-react'
 import { MIN_CLIP_DURATION, TRACK_HEIGHT } from '@/lib/editor/constants'
+import { stickerGlyph, stickerName } from '@/lib/editor/sticker-render'
 import { useEditor } from '@/lib/editor/store'
 import { clamp, formatShortTime, formatTimecode, snapTime } from '@/lib/editor/utils'
 import type { Clip, ClipKind, Track } from '@/lib/editor/types'
@@ -305,8 +306,8 @@ export function ClipBlock({
           </div>
         ) : clip.kind === 'sticker' ? (
           <div className="flex items-center gap-1.5 px-1.5 pt-1">
-            <span className="text-base leading-none">{clip.sticker?.emoji ?? '✨'}</span>
-            <span className="truncate text-[10px] font-medium text-(--nc-clip-ink)">Sticker</span>
+            <span className="text-base leading-none">{stickerGlyph(clip.sticker)}</span>
+            <span className="truncate text-[10px] font-medium text-(--nc-clip-ink)">{stickerName(clip.sticker)}</span>
           </div>
         ) : (
           <div className="truncate px-1.5 pt-1 text-[10px] font-medium text-(--nc-clip-ink)">{clip.name}</div>

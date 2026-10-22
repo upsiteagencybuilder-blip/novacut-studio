@@ -12,6 +12,7 @@ import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoo
 import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
 import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, evaluateKeyframeProperty, projectDuration } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
+import { drawStickerArt } from './sticker-render'
 import { CANVAS_FONT_LOAD_LIST, MIN_CLIP_DURATION } from './constants'
 
 export interface EngineSnapshot {
@@ -1970,10 +1971,8 @@ class PreviewEngine {
 
     ctx.scale(animScale, animScale)
     if (animRot) ctx.rotate(animRot)
-    ctx.font = `${style.size}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(style.emoji, 0, animY)
+    if (animY) ctx.translate(0, animY)
+    drawStickerArt(ctx, style, tLocal)
 
     const approx = style.size * 1.1
     const bx = tx ?? clip.transform.x

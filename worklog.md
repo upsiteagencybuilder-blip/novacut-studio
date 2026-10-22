@@ -684,3 +684,26 @@ Stage Summary:
 - Sector 7 COMPLETE: Text & Typography now matches its catalog promises — 21 selectable animations in properties (grouped), roll/crawl title scrolls, uppercase/underline/strikethrough, 4-way shadow control (color/opacity/distance/angle), double-click-to-place text tool, all on top of the already-solid 150-effect browser + Bangla fonts + auto-captions. 11 catalog tools flipped live with receipts.
 - 8 files changed: editor/types.ts, editor/engine.ts, editor/store.ts, editor/constants.ts (untouched — no change needed), PropertiesPanel.tsx, PreviewPane.tsx, TextPanel.tsx, tools/sections/motion.ts, tools/sections/timeline.ts.
 - Next: Sector 8 (Stickers) per the serial sector plan.
+
+---
+Task ID: 8
+Agent: Z.ai Code (main)
+Task: Sector 8 — Stickers: verify/complete the sticker system beyond emojis (shapes, social elements, vlog callouts), properties styling, engine+export rendering, catalog honesty, E2E desktop+mobile
+
+Work Log:
+- SURVEY: emoji-only sticker system (6 packs/96 emojis) already healthy — engine drawSticker (pop/float/spin/pulse), StickerSection (size+anim), transform section (X/Y/Scale/Rotate/Opacity/Flip) on stickers, open-stickers deep-link wired. Catalog: shapes/social/vlog/split-screen marked planned.
+- NEW MODULE src/lib/editor/sticker-render.ts: 38 procedural sticker defs in 3 families — 18 SHAPES (circle/ring/square/rounded/triangle/diamond/pentagon/hexagon/octagon/star5/star4/burst/heart/arrow/chevron/line/cross/pin-drop), 10 SOCIAL (like/love/comment/share/subscribe/bell/live/+1-follower/views/gift), 10 VLOG (curved-arrow/double-arrow/callout/speech/thought/frame/progress/location/cursor/zoom-hint) + drawStickerArt (centered painter, deterministic — tLocal only, zero Math.random so export frames are stable), stickerGlyph/stickerName helpers.
+- TYPES: StickerStyle += family ('emoji'|'shape'|'social'|'vlog', default emoji — legacy clips unaffected), shape, fill, stroke, strokeWidth. Store ClipPatch already accepted sticker partials.
+- createStickerClip: string (emoji) OR descriptor {family, shape, fill?...}; def defaults applied; store addStickerClip passthrough.
+- ENGINE: drawSticker delegates artwork to drawStickerArt (float animY moved into translate); animation/bounds logic untouched — all 5 animations now drive every family.
+- STICKERPANEL v2: 4 family tabs (Emojis/Shapes/Social/Vlog) + search across names/ids (emoji tab searches pack names); Shapes/Social/Vlog render LIVE CANVAS THUMBNAILS via the same drawStickerArt as preview/export (no image assets); tap adds at playhead; empty states.
+- PROPERTIES StickerSection: Fill + Outline color wells + Outline W slider (0–24px) for non-emoji families (ColorField reuse); Size/Anim unchanged.
+- TIMELINE ClipBlock: per-family glyph + def name ("Chevron Sticker", "Subscribe Sticker") replacing static "Sticker".
+- CATALOG honesty: library-shapes, library-social-elements, library-vlog-elements planned→live (all open-stickers deep-link), emojis-stickers desc updated; split-screen stays planned. 
+- BONUS FIX (pre-existing tsc failure): store.addTextClip merged-preset type error — spread of undefined preset no longer produces optional id; fallback preset object added. tsc(src) now 100% clean.
+- E2E (agent-browser, demo project, desktop 1280×800 + mobile 390×844): 4 tabs render, 38 thumbs drawn ✓; add Triangle → clip at playhead (0.8), canvas renders ✓; fill #ef4444→#22c55e via updateClip → 5149 green px on preview canvas (canvas[18] — note: 64×64 thumbs are canvases[0..17]) ✓; Social → Subscribe added + red SUBSCRIBE button on canvas ✓; Vlog → callout/speech/progress rendered ✓; Anim dropdown → Float on progress sticker via real UI ✓; search "food"→16 emojis, "star"→Star+Sparkle ✓; timeline shows family glyphs/names ✓; EXPORT → 5.47MB WebM, in-page decode of exported bytes at t=1.2s pixel-verified green triangle 5041px + cyan chevron 5619px (stickers truly in the export) ✓; mobile: sheet tabs, real-tap add Subscribe, canvas render, props sheet with Sticker section (Fill/Outline confirmed in DOM) ✓; persistence: reload w/o demo param restores {family:social, shape:subscribe} from IndexedDB ✓; zero console errors, eslint clean, tsc(src) clean.
+
+Stage Summary:
+- Sector 8 COMPLETE: Stickers grew from 96 emoji clips to a 134-item stickers hub (96 emojis + 38 procedural) with recolorable vector shapes, social elements and vlog callouts; one shared renderer powers panel thumbnails, preview AND export; 3 catalog tools flipped live with receipts.
+- 9 files: +sticker-render.ts (new), types.ts, constants.ts, store.ts, engine.ts, StickerPanel.tsx, PropertiesPanel.tsx, ClipBlock.tsx, tools/sections/libraries.ts.
+- Next: Sector 9 (Motion) per the serial sector plan.

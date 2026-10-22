@@ -691,6 +691,7 @@ function TextSection({ clip }: { clip: Clip }) {
 function StickerSection({ clip }: { clip: Clip }) {
   const updateClip = useEditor((s) => s.updateClip)
   const style = clip.sticker as StickerStyle
+  const family = style.family ?? 'emoji'
 
   const patch = (p: Partial<StickerStyle>, history: boolean | string) =>
     updateClip(clip.id, { sticker: p }, history)
@@ -717,6 +718,25 @@ function StickerSection({ clip }: { clip: Clip }) {
           </SelectItem>
         ))}
       </SelectRow>
+
+      {/* fill / outline — procedural families only */}
+      {family !== 'emoji' && (
+        <>
+          <div className="flex items-end gap-3">
+            <ColorField label="Fill" value={style.fill ?? '#f97316'} onChange={(v) => patch({ fill: v }, 'stk-fill')} />
+            <ColorField label="Outline" value={style.stroke ?? '#ffffff'} onChange={(v) => patch({ stroke: v }, 'stk-stroke')} />
+          </div>
+          <SliderRow
+            label="Outline W"
+            min={0}
+            max={24}
+            step={1}
+            value={style.strokeWidth ?? 0}
+            onChange={(v) => patch({ strokeWidth: v }, 'stk-sw')}
+            format={fmtPx}
+          />
+        </>
+      )}
     </Section>
   )
 }

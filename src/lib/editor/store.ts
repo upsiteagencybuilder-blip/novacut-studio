@@ -33,6 +33,7 @@ import {
   createStickerClip,
   createTextClip,
   createTrack,
+  type StickerRequest,
   type TextPreset,
 } from './constants'
 import { baseValueForProperty, clamp, evaluateKeyframeProperty, formatTimecode, landingTime, normalizeColorGrade, normalizeFilters, projectDuration, round2, uid } from './utils'
@@ -102,7 +103,7 @@ interface EditorStore {
   addClip: (clip: Clip, opts?: { select?: boolean }) => void
   addClipFromMediaId: (mediaId: string) => void
   addTextClip: (preset?: TextPreset, at?: { x: number; y: number }) => void
-  addStickerClip: (emoji: string) => void
+  addStickerClip: (req: StickerRequest) => void
   updateClip: (id: string, patch: ClipPatch, history?: boolean | string) => void
   /** strip a transition between two adjacent clips (fades + wipe mask + iris keys), one undo step */
   removeTransition: (outgoingId: string, incomingId: string) => void
@@ -469,15 +470,18 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const s = get()
     // `at` places the clip at a canvas position (fraction offset from center)
     const merged: TextPreset | undefined = at
-      ? { ...preset, transform: { ...(preset?.transform ?? {}), x: at.x, y: at.y } }
+      ? {
+          ...(preset ?? { id: 'custom', name: 'Custom', preview: '', style: {} }),
+          transform: { ...(preset?.transform ?? {}), x: at.x, y: at.y },
+        }
       : preset
     const clip = createTextClip(s.project, merged, undefined, round2(s.currentTime))
     s.addClip(clip)
   },
 
-  addStickerClip: (emoji) => {
+  addStickerClip: (req) => {
     const s = get()
-    const clip = createStickerClip(s.project, emoji, undefined, round2(s.currentTime))
+    const clip = createStickerClip(s.project, req, undefined, round2(s.currentTime))
     s.addClip(clip)
   },
 

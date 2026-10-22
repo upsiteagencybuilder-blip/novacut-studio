@@ -8,12 +8,14 @@ import type {
   Filters,
   MediaAssetRuntime,
   Project,
+  StickerFamily,
   StickerStyle,
   TextStyle,
   Transform,
   Track,
   TrackKind,
 } from './types'
+import { findStickerDef } from './sticker-render'
 import { round2, uid } from './utils'
 
 export const APP_NAME = 'NovaCut'
@@ -405,6 +407,7 @@ export const DEFAULT_STICKER: StickerStyle = {
   emoji: '✨',
   size: 140,
   animation: 'pop',
+  family: 'emoji',
 }
 
 /* ---------------- Motion presets ---------------- */
@@ -614,14 +617,37 @@ export function createTextClip(project: Project, preset?: TextPreset, trackId?: 
   }
 }
 
-export function createStickerClip(project: Project, emoji: string, trackId?: string, start?: number): Clip {
+/** Sticker add descriptor — plain emoji string or a shape/element reference */
+export type StickerRequest =
+  | string
+  | { family: Exclude<StickerFamily, 'emoji'>; shape: string; fill?: string; stroke?: string; strokeWidth?: number }
+
+export function createStickerClip(project: Project, req: StickerRequest, trackId?: string, start?: number): Clip {
   let track = trackId ? project.tracks.find((t) => t.id === trackId) : project.tracks.find((t) => t.kind === 'overlay')
   if (!track) track = project.tracks[0]
+
+  let style: StickerStyle
+  if (typeof req === 'string') {
+    style = { ...DEFAULT_STICKER, emoji: req }
+  } else {
+    const def = findStickerDef(req.shape, req.family)
+    style = {
+      ...DEFAULT_STICKER,
+      animation: 'none',
+      emoji: def?.glyph ?? '⬡',
+      family: req.family,
+      shape: req.shape,
+      fill: req.fill ?? def?.fill ?? '#f97316',
+      stroke: req.stroke ?? def?.stroke ?? '#ffffff',
+      strokeWidth: req.strokeWidth ?? def?.strokeWidth ?? 0,
+    }
+  }
+
   return {
     id: uid('clip_'),
     trackId: track.id,
     kind: 'sticker',
-    name: `Sticker ${emoji}`,
+    name: `Sticker ${typeof req === 'string' ? req : `(${style.family}:${style.shape})`}`,
     start: start ?? 0,
     duration: 3,
     trimStart: 0,
@@ -636,7 +662,7 @@ export function createStickerClip(project: Project, emoji: string, trackId?: str
     motion: 'none',
     motionIntensity: 0.35,
     ...baseClipFields(),
-    sticker: { ...DEFAULT_STICKER, emoji },
+    sticker: style,
     color: '#eab308',
   }
 }

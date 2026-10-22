@@ -3,8 +3,9 @@ import type { ProTool } from '../types'
 /**
  * Pro Toolkit — libraries section.
  * Stock and element libraries mapped to NovaCut: local persistent media
- * library, six sticker categories, 200 procedural SFX (incl. nature,
- * human, foley and transition families) and 64 procedural music tracks.
+ * library, emoji sticker packs + procedural vector shapes, social elements
+ * and vlog callouts, 200 procedural SFX (incl. nature, human, foley and
+ * transition families) and 64 procedural music tracks.
  */
 
 export const LIBRARIES_TOOLS: ProTool[] = [
@@ -28,9 +29,9 @@ export const LIBRARIES_TOOLS: ProTool[] = [
   { id: 'library-human-sounds', name: 'Human Sounds', section: 'libraries', group: 'Stock & assets', status: 'live', desc: 'Human and Life family renders heartbeats, crowds and applause' },
 
   // -------- Elements & stickers --------
-  { id: 'library-social-elements', name: 'Social Media Elements', section: 'libraries', group: 'Elements & stickers', status: 'planned', desc: 'Dedicated social element packs beyond sticker sets remain roadmap' },
-  { id: 'library-emojis-stickers', name: 'Emojis & Stickers', section: 'libraries', group: 'Elements & stickers', status: 'live', desc: 'Six sticker categories add emoji clips from the sticker panel', action: 'open-stickers' },
-  { id: 'library-shapes', name: 'Shapes Library', section: 'libraries', group: 'Elements & stickers', status: 'planned', desc: 'Vector shapes and badges as draggable overlay elements' },
-  { id: 'library-vlog-elements', name: 'Vlog Elements', section: 'libraries', group: 'Elements & stickers', status: 'planned', desc: 'Vlog-style frames, arrows and callout element packs' },
+  { id: 'library-social-elements', name: 'Social Media Elements', section: 'libraries', group: 'Elements & stickers', status: 'live', desc: 'Like, comment, subscribe, LIVE badge and follower elements draw procedurally', action: 'open-stickers' },
+  { id: 'library-emojis-stickers', name: 'Emojis & Stickers', section: 'libraries', group: 'Elements & stickers', status: 'live', desc: 'Six emoji packs plus shapes, social and vlog stickers from the sticker panel', action: 'open-stickers' },
+  { id: 'library-shapes', name: 'Shapes Library', section: 'libraries', group: 'Elements & stickers', status: 'live', desc: '18 vector shapes — stars, bursts, hearts, arrows, polygons — recolorable', action: 'open-stickers' },
+  { id: 'library-vlog-elements', name: 'Vlog Elements', section: 'libraries', group: 'Elements & stickers', status: 'live', desc: 'Callouts, speech bubbles, frames, progress bars and curved arrows', action: 'open-stickers' },
   { id: 'library-split-screen-layouts', name: 'Split Screen Layouts', section: 'libraries', group: 'Elements & stickers', status: 'planned', desc: 'Preset multi-clip grid layouts for split screens' },
 ]
