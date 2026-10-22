@@ -8,7 +8,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { AudioLines, Eye, EyeOff, Film, Layers, Lock, LockOpen, Plus, Volume2, VolumeX, X } from 'lucide-react'
+import { AudioLines, Blend, Eye, EyeOff, Film, Layers, Lock, LockOpen, Plus, Volume2, VolumeX, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -19,6 +20,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { HEADER_WIDTH, RULER_HEIGHT, TRACK_HEIGHT } from '@/lib/editor/constants'
 import { useEditor } from '@/lib/editor/store'
+import { transitionPairsForTrack } from '@/lib/editor/transitionBridge'
 import { clipsOnTrack, formatShortTime, projectDuration } from '@/lib/editor/utils'
 import type { Clip, ClipKind, Track } from '@/lib/editor/types'
 import { cn } from '@/lib/utils'
@@ -388,6 +390,9 @@ function TrackLane({
         />
       ))}
 
+      {/* transition chips at armed clip boundaries (true crossfades / wipe masks) */}
+      <TransitionChips clips={clips} zoom={zoom} />
+
       {/* locked tracks: subtle stripes under the (non-interactive) clips */}
       {track.locked && clips.length > 0 && (
         <div className="nc-checker pointer-events-none absolute inset-0 z-[5] opacity-50" />
@@ -402,6 +407,67 @@ function TrackLane({
         </div>
       )}
     </div>
+  )
+}
+
+/* ---------------- transition chips ---------------- */
+
+/**
+ * Small badge at each armed transition boundary (adjacent clips where the
+ * engine bridges a true crossfade or wipe). Click → select the outgoing clip
+ * and open the effects panel on the Transitions category; ✕ removes the
+ * transition (clears fades/wipe/iris keys, one undo step).
+ */
+function TransitionChips({ clips, zoom }: { clips: Clip[]; zoom: number }) {
+  const pairs = useMemo(() => transitionPairsForTrack(clips), [clips])
+  if (!pairs.length) return null
+  return (
+    <>
+      {pairs.map((p) => {
+        const out = clips.find((c) => c.id === p.outgoingId)
+        if (!out) return null
+        const x = (out.start + out.duration) * zoom
+        return (
+          <div
+            key={`${p.outgoingId}-${p.incomingId}`}
+            className="group/chip absolute z-[7] flex -translate-x-1/2 -translate-y-1/2 items-center"
+            style={{ left: x, top: '50%' }}
+          >
+            <button
+              type="button"
+              aria-label={`Transition: ${(p.window * 1000).toFixed(0)}ms crossfade or wipe — click to browse transitions`}
+              title={`Transition · ${(p.window).toFixed(2)}s — click to browse, ✕ to remove`}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                const st = useEditor.getState()
+                st.selectClip(p.outgoingId)
+                // deep-link into the Transitions category — the flag covers the
+                // race where the effects panel mounts after this click
+                ;(window as unknown as { __ncEffectsCategoryRequest?: string }).__ncEffectsCategoryRequest = 'transition'
+                st.setPanelTab('effects')
+                window.dispatchEvent(new CustomEvent('nc-effects-category', { detail: 'transition' }))
+              }}
+              className="flex h-6 min-w-6 items-center justify-center rounded-full border border-fuchsia-400/50 bg-(--nc-panel) text-fuchsia-300 shadow-sm transition hover:scale-110 hover:border-fuchsia-300 hover:bg-(--nc-panel-strong)"
+            >
+              <Blend className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Remove transition"
+              title="Remove transition (resets keyframes on both clips)"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                useEditor.getState().removeTransition(p.outgoingId, p.incomingId)
+                toast('Transition removed')
+              }}
+              className="ml-0.5 hidden h-6 w-6 items-center justify-center rounded-full border border-rose-400/50 bg-(--nc-panel) text-rose-300 shadow-sm transition hover:bg-(--nc-panel-strong) group-hover/chip:flex"
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        )
+      })}
+    </>
   )
 }
 

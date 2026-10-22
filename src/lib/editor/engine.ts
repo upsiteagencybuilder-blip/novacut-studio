@@ -5,12 +5,13 @@
  * Renders the project timeline onto a <canvas> and drives synced media playback.
  * Pure module: no direct store import — state arrives via a snapshot fn (see bridge hook).
  */
-import type { Clip, LutData, MediaAssetRuntime, Project } from './types'
+import type { Clip, LutData, MediaAssetRuntime, Project, WipeShape } from './types'
 import type { OverlayDraw, VisionDraw } from '@/lib/effects/types'
 import { getEffect, getOverlayDraw } from '@/lib/effects/registry'
 import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
 import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
 import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, evaluateKeyframeProperty, projectDuration } from './utils'
+import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
 import { CANVAS_FONT_LOAD_LIST, MIN_CLIP_DURATION } from './constants'
 
 export interface EngineSnapshot {
@@ -889,10 +890,14 @@ class PreviewEngine {
 
   /* -------------------------------------------------- sync helpers */
 
-  private fadeFactor(clip: Clip, tLocal: number): number {
+  private fadeFactor(
+    clip: Clip,
+    tLocal: number,
+    opts?: { skipFadeOut?: boolean; skipFadeIn?: boolean }
+  ): number {
     let alpha = 1
-    if (clip.fadeIn > 0.01) alpha *= clamp(tLocal / clip.fadeIn, 0, 1)
-    if (clip.fadeOut > 0.01) alpha *= clamp((clip.duration - tLocal) / clip.fadeOut, 0, 1)
+    if (clip.fadeIn > 0.01 && !opts?.skipFadeIn) alpha *= clamp(tLocal / clip.fadeIn, 0, 1)
+    if (clip.fadeOut > 0.01 && !opts?.skipFadeOut) alpha *= clamp((clip.duration - tLocal) / clip.fadeOut, 0, 1)
     return alpha
   }
 
@@ -921,12 +926,19 @@ class PreviewEngine {
     return 1
   }
 
-  private syncVideo(clip: Clip, tLocal: number, entry: PoolEntry, audible: boolean, volumeScale = 1) {
+  private syncVideo(
+    clip: Clip,
+    tLocal: number,
+    entry: PoolEntry,
+    audible: boolean,
+    volumeScale = 1,
+    fadeOpts?: { skipFadeOut?: boolean; skipFadeIn?: boolean }
+  ) {
     const el = entry.el as HTMLVideoElement
     const expected = clamp(this.expectedSourcePos(clip, tLocal), 0, Math.max(0, (clip.sourceDuration || el.duration || 1) - 0.02))
     el.playbackRate = clamp(clip.speed, 0.0625, 16)
 
-    const vol = audible ? this.effectiveVolume(clip, tLocal) * volumeScale : 0
+    const vol = audible ? this.effectiveVolume(clip, tLocal, fadeOpts) * volumeScale : 0
     if (entry.gain) {
       el.volume = 1
       entry.gain.gain.value = vol
@@ -984,12 +996,19 @@ class PreviewEngine {
     }
   }
 
-  private syncAudio(clip: Clip, tLocal: number, entry: PoolEntry, audible: boolean, volumeScale = 1) {
+  private syncAudio(
+    clip: Clip,
+    tLocal: number,
+    entry: PoolEntry,
+    audible: boolean,
+    volumeScale = 1,
+    fadeOpts?: { skipFadeOut?: boolean; skipFadeIn?: boolean }
+  ) {
     const el = entry.el as HTMLAudioElement
     const expected = clamp(this.expectedSourcePos(clip, tLocal), 0, Math.max(0, (clip.sourceDuration || el.duration || 1) - 0.02))
     el.playbackRate = clamp(clip.speed, 0.0625, 16)
 
-    const vol = audible ? this.effectiveVolume(clip, tLocal) * volumeScale : 0
+    const vol = audible ? this.effectiveVolume(clip, tLocal, fadeOpts) * volumeScale : 0
     if (entry.gain) {
       el.volume = 1
       entry.gain.gain.value = vol
@@ -1013,10 +1032,14 @@ class PreviewEngine {
     }
   }
 
-  private effectiveVolume(clip: Clip, tLocal: number): number {
+  private effectiveVolume(
+    clip: Clip,
+    tLocal: number,
+    fadeOpts?: { skipFadeOut?: boolean; skipFadeIn?: boolean }
+  ): number {
     const master = this.masterMuted ? 0 : this.masterVolume
     const base = evaluateKeyframeProperty(clip, 'volume', tLocal) ?? clip.volume
-    return clamp(base * master * this.fadeFactor(clip, tLocal), 0, 1)
+    return clamp(base * master * this.fadeFactor(clip, tLocal, fadeOpts), 0, 1)
   }
 
   /* -------------------------------------------------- pixel fx (chroma / grade / LUT) */
@@ -1184,11 +1207,31 @@ class PreviewEngine {
     for (let i = tracks.length - 1; i >= 0; i--) {
       const track = tracks[i]
       if (track.kind === 'audio' || track.hidden) continue
-      const clips = project.clips
+      const active = project.clips
         .filter((c) => c.trackId === track.id && t >= c.start - 0.0001 && t < c.start + c.duration)
         .sort((a, b) => a.start - b.start)
-      for (const clip of clips) {
-        this.drawClip(ctx, clip, t, W, H, mediaMap, project)
+      for (const clip of active) {
+        // ---- transition bridge (two phases, one continuous curve):
+        // TAIL  — while the outgoing clip is still active with an armed
+        //         successor, its own fadeOut is SKIPPED so it holds full
+        //         brightness up to its very end (no dip-to-black before the cut);
+        // EXT   — after its end it keeps rendering UNDER the incoming clip with
+        //         alpha (1 − progress) while the incoming's fadeIn ramps up —
+        //         a true crossfade. Wipe masks reveal over the same live bridge.
+        const bridgedSuccessor = project.clips.find(
+          (c) => c.trackId === track.id && c.start >= clip.start + clip.duration - 0.0001 && bridgeWindowFor(clip, c) != null,
+        )
+        const bridgeOut = project.clips.find(
+          (c) => c.trackId === track.id && bridgeWindowFor(c, clip) != null && t >= c.start + c.duration - 0.0001,
+        )
+        if (bridgeOut) {
+          const window = bridgeWindowFor(bridgeOut, clip)!
+          const progress = clamp((t - clip.start) / window, 0, 1)
+          // wipe bridges hold the outgoing at FULL alpha (the mask does the
+          // reveal over untouched pixels); fade bridges ramp (1 − progress)
+          if (progress < 1) this.drawClip(ctx, bridgeOut, t, W, H, mediaMap, project, { progress, hold: !!clip.wipe })
+        }
+        this.drawClip(ctx, clip, t, W, H, mediaMap, project, bridgedSuccessor ? { progress: 0 } : undefined)
       }
     }
 
@@ -1210,7 +1253,35 @@ class PreviewEngine {
           // solo — when any track is soloed, unsoloed tracks go silent
           const audible = !track.muted && (!anySolo || !!track.solo)
           const duck = this.duckFactor(project, clip, t)
-          this.syncAudio(clip, t - clip.start, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, trackVolume * duck)
+          // ---- transition bridge (audio crossfade): the outgoing audio clip
+          // holds full level through its own tail (own fadeOut skipped), then
+          // keeps playing with a (1 − progress) ramp under the incoming
+          const bridgedSuccessor = project.clips.find(
+            (c) => c.kind === 'audio' && c.trackId === track.id && c.start >= clip.start + clip.duration - 0.0001 && bridgeWindowFor(clip, c) != null,
+          )
+          const bridgeOut = project.clips.find(
+            (c) => c.kind === 'audio' && c.trackId === track.id && bridgeWindowFor(c, clip) != null && t >= c.start + c.duration - 0.0001,
+          )
+          if (bridgeOut) {
+            const window = bridgeWindowFor(bridgeOut, clip)!
+            const progress = clamp((t - clip.start) / window, 0, 1)
+            const outMediaId = bridgeOut.mediaId
+            const outAsset = outMediaId ? mediaMap.get(outMediaId) : null
+            if (progress < 1 && outMediaId && outAsset) {
+              const outEntry = this.audios.get(bridgeOut.id)
+              const outEl = outEntry && outEntry.mediaId === outMediaId ? outEntry.el : this.getOrCreateAudio(bridgeOut, outMediaId, outAsset.objectUrl)
+              if (outEl) {
+                const outRouted = this.audios.get(bridgeOut.id)!
+                this.ensureAudioChain(bridgeOut, outRouted)
+                // skip the outgoing's own fadeOut — the bridge ramp replaces it
+                this.syncAudio(bridgeOut, t - bridgeOut.start, { el: outEl, mediaId: outMediaId, gain: outRouted.gain }, audible, trackVolume * duck * (1 - progress), { skipFadeOut: true })
+              }
+            }
+          }
+          const bridged = !!bridgeOut && clamp((t - clip.start) / bridgeWindowFor(bridgeOut, clip)!, 0, 1) < 1
+          // bridged incoming keeps its own fadeIn — it provides the up-ramp that
+          // balances the outgoing's (1 − progress) down-ramp into a true crossfade
+          this.syncAudio(clip, t - clip.start, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, trackVolume * duck, bridged ? { skipFadeIn: false } : bridgedSuccessor ? { skipFadeOut: true } : undefined)
         }
       }
     }
@@ -1257,7 +1328,15 @@ class PreviewEngine {
     return { blob, dataUrl }
   }
 
-  private drawClip(ctx: CanvasRenderingContext2D, clip: Clip, t: number, W: number, H: number, mediaMap: Map<string, MediaAssetRuntime>, project: Project) {
+  /**
+   * Draw one clip at timeline time t.
+   * `bridge` marks the OUTGOING side of a transition bridge: the clip has
+   * already passed its end, so its own fadeOut is skipped (it would clamp to 0)
+   * and alpha/gain ramp down with the bridge progress — producing a true
+   * crossfade under the incoming clip. `hold` keeps full alpha instead (wipe
+   * bridges: the animated mask reveals over untouched outgoing pixels).
+   */
+  private drawClip(ctx: CanvasRenderingContext2D, clip: Clip, t: number, W: number, H: number, mediaMap: Map<string, MediaAssetRuntime>, project: Project, bridge?: { progress: number; hold?: boolean }) {
     const tLocal = t - clip.start
 
     // ---- keyframe-driven transform (falls back to static transform) ----
@@ -1270,7 +1349,10 @@ class PreviewEngine {
     const ty = kfY ?? clip.transform.y
     const tscale = kfScale ?? clip.transform.scale
     const trot = kfRot ?? clip.transform.rotation
-    const alpha = (kfOpacity ?? clip.transform.opacity) * this.fadeFactor(clip, tLocal)
+    // bridged outgoing: hold its fadeOut (end of clip → factor 0 otherwise)
+    const fadeOpts = bridge ? { skipFadeOut: true } : undefined
+    const bridgeAlpha = bridge ? (bridge.hold ? 1 : 1 - bridge.progress) : 1
+    const alpha = (kfOpacity ?? clip.transform.opacity) * this.fadeFactor(clip, tLocal, fadeOpts) * bridgeAlpha
     if (alpha <= 0.002) return
 
     // ---- mega-effects overlay pre-pass (shake / zoomPulse alter the transform) ----
@@ -1338,7 +1420,7 @@ class PreviewEngine {
           // solo — when any track is soloed, unsoloed tracks go silent
           const anySolo = project.tracks.some((tr) => tr.solo)
           const audible = !!track && !track.muted && (!anySolo || !!track.solo)
-          this.syncVideo(clip, tLocal, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, track?.volume ?? 1)
+          this.syncVideo(clip, tLocal, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, (track?.volume ?? 1) * (bridge ? 1 - bridge.progress : 1), fadeOpts)
         }
       }
     }
@@ -1348,6 +1430,21 @@ class PreviewEngine {
     ctx.filter = buildFilterString(clip.filters)
     if (clip.blendMode && clip.blendMode !== 'source-over') {
       ctx.globalCompositeOperation = clip.blendMode
+    }
+
+    // ---- shape-wipe mask (wipe transitions): clip the drawing to an animated
+    // mask in CANVAS space (before the clip's own transform). Progress comes
+    // from 'iris' keyframes: 0 = hidden, 1 = fully revealed.
+    const iris = clip.wipe ? evaluateKeyframeProperty(clip, 'iris', tLocal) : null
+    if (clip.wipe && iris != null && iris < 0.999) {
+      if (iris <= 0.001) {
+        ctx.restore()
+        ctx.filter = 'none'
+        ctx.globalAlpha = 1
+        ctx.globalCompositeOperation = 'source-over'
+        return
+      }
+      this.applyWipeMask(ctx, clip.wipe, clamp(iris, 0, 1), W, H)
     }
 
     // motion (Ken Burns)
@@ -1467,6 +1564,75 @@ class PreviewEngine {
       h,
       rotation: rot,
     }
+  }
+
+  /**
+   * Shape-wipe mask for wipe transitions — clips subsequent drawing to an
+   * animated reveal shape. `p` is the keyframed progress (0 hidden → 1 full
+   * frame). Applied in canvas space so it masks the whole clip draw
+   * (media, text and stickers alike) regardless of its own transform.
+   */
+  private applyWipeMask(ctx: CanvasRenderingContext2D, shape: WipeShape, p: number, W: number, H: number) {
+    const cx = W / 2
+    const cy = H / 2
+    const R = Math.hypot(cx, cy) // half-diagonal — guarantees full cover at p = 1
+    ctx.beginPath()
+    switch (shape) {
+      case 'circle': {
+        ctx.arc(cx, cy, p * R, 0, Math.PI * 2)
+        break
+      }
+      case 'box': {
+        const w = p * W
+        const h = p * H
+        ctx.rect(cx - w / 2, cy - h / 2, w, h)
+        break
+      }
+      case 'diamond': {
+        const r = p * R
+        ctx.moveTo(cx, cy - r)
+        ctx.lineTo(cx + r, cy)
+        ctx.lineTo(cx, cy + r)
+        ctx.lineTo(cx - r, cy)
+        ctx.closePath()
+        break
+      }
+      case 'cross': {
+        // plus-shaped iris: two full-length bars (full height / full width)
+        // whose thickness grows — a clean plus early, full cover at p = 1
+        ctx.rect(cx - (p * W) / 2, 0, p * W, H) // vertical bar
+        ctx.rect(0, cy - (p * H) / 2, W, p * H) // horizontal bar
+        break
+      }
+      case 'clock': {
+        // pie sweep from 12 o'clock, clockwise
+        ctx.moveTo(cx, cy)
+        ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p)
+        ctx.closePath()
+        break
+      }
+      case 'barnDoors': {
+        // two vertical panels growing inward from the left and right edges
+        const w = (p * W) / 2
+        ctx.rect(0, 0, w, H)
+        ctx.rect(W - w, 0, w, H)
+        break
+      }
+      case 'splitH': {
+        // parting reveal: a horizontal gap opens at center and grows outward
+        // (like the outgoing frame splitting top/bottom) — edges reveal last
+        const h = p * H
+        ctx.rect(0, cy - h / 2, W, h)
+        break
+      }
+      case 'splitV': {
+        // parting reveal: a vertical gap opens at center and grows outward
+        const w = p * W
+        ctx.rect(cx - w / 2, 0, w, H)
+        break
+      }
+    }
+    ctx.clip()
   }
 
   /* -------------------------------------------------- text drawing */

@@ -119,8 +119,14 @@ export type TextAnimation =
 export type StickerAnimation = 'none' | 'pop' | 'float' | 'spin' | 'pulse'
 
 /** Properties that can be keyframed */
-export type KeyframeProperty = 'x' | 'y' | 'scale' | 'rotation' | 'opacity' | 'volume'
+export type KeyframeProperty = 'x' | 'y' | 'scale' | 'rotation' | 'opacity' | 'volume' | 'iris'
 export type EasingType = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'bounce'
+
+/**
+ * Shape-wipe masks for transitions (drawn on the INCOMING clip, animated via
+ * the keyframable 'iris' property: 0 = hidden, 1 = fully revealed).
+ */
+export type WipeShape = 'circle' | 'box' | 'diamond' | 'cross' | 'clock' | 'barnDoors' | 'splitH' | 'splitV'
 
 export interface Keyframe {
   id: string
@@ -303,6 +309,12 @@ export interface Clip {
   overlay?: { effectId: string; intensity: number } | null
   /** mega-effects vision post-FX (pixelate/mirror/glow/chroma...) applied to this clip's pixels */
   vision?: { effectId: string; intensity: number } | null
+  /**
+   * Shape-wipe mask used by wipe transitions ('circle' | 'box' | 'clock'...).
+   * The mask progress is driven by 'iris' keyframes (0 hidden → 1 revealed).
+   * null/undefined = no mask (plain draw).
+   */
+  wipe?: WipeShape | null
   /** label color chip on the timeline */
   color: string
 }

@@ -1,13 +1,13 @@
 /**
- * NovaCut Studio — Transition effects (160 definitions)
+ * NovaCut Studio — Transition effects (240 definitions)
  *
- * 16 families × 10 variants. Each transition is a paired patch:
+ * 24 families × 10 variants. Each transition is a paired patch:
  *   - `out` is applied to the OUTGOING clip (fadeOut, motion keys anchored 'start'/'end')
  *   - `in`  is applied to the INCOMING clip (fadeIn, motion keys); null when intro/outro-only
  *
  * Keyframe values: x/y are fractions of the canvas (-1.2 = fully off-screen),
- * scale 1 = fit, rotation in degrees, opacity 0..1. Easing applies per
- * keyframe segment.
+ * scale 1 = fit, rotation in degrees, opacity 0..1, iris 0..1 (wipe mask
+ * progress). Easing applies per keyframe segment.
  *
  * NOTE (UI copy): applying a transition replaces the clips' transform keyframes —
  * every transition carries the 'replaces-keys' tag so the UI can show a hint.
@@ -19,9 +19,15 @@
  * v2 families (Task 10-a): Whip Pan, Cube Spin, Swap, Warp Zoom, Stutter Cut.
  * Stutter Cut uses opacity keyframes (opacity IS keyframable) for
  * dip-to-black/white shutters; Whip Pan/Swap keep fades minimal (0–0.15s).
+ *
+ * v3 families (Sector 5): Film Dissolve (crossfade + gate weave) and TRUE
+ * shape wipes — Iris Round/Box/Diamond/Cross, Clock Wipe, Barn Doors, Split —
+ * driven by the keyframable 'iris' property rendered as an animated canvas
+ * mask on the incoming clip while the engine's transition bridge keeps the
+ * outgoing clip playing underneath.
  */
 
-import type { EasingType, KeyframeProperty } from '@/lib/editor/types'
+import type { EasingType, KeyframeProperty, WipeShape } from '@/lib/editor/types'
 import type { TransitionEffect, TransitionPatch } from './types'
 
 /* ---------------- helpers ---------------- */
@@ -599,7 +605,178 @@ function buildStutterCut(): TransitionEffect[] {
   ]
 }
 
-/* ---------------- assembly (11 × 10 + 5 × 10 = 160) ---------------- */
+/* ---------------- v3 families (Sector 5) ----------------
+ * True shape wipes (animated canvas masks via the 'iris' keyframe property —
+ * the incoming clip reveals OVER a live outgoing bridge) and the Film
+ * Dissolve (crossfade + photochemical gate weave).
+ */
+
+/** Wipe reveal patch: mask shape + iris progress keys over the window */
+function wipePatch(shape: WipeShape, easing: EasingType): TransitionPatch {
+  return { wipe: shape, keys: pair('iris', 0, 1, easing) }
+}
+
+/** Gate-weave jitter keys (fractions of the transition window), amplitude `j` */
+function weaveKeys(j: number): TransitionPatch['keys'] {
+  const e: EasingType = 'easeInOut'
+  return [
+    { property: 'x', at: 0, value: 0, easing: e },
+    { property: 'x', at: 0.25, value: j, easing: e },
+    { property: 'x', at: 0.55, value: -j * 0.8, easing: e },
+    { property: 'x', at: 1, value: 0, easing: e },
+    { property: 'y', at: 0, value: 0, easing: e },
+    { property: 'y', at: 0.35, value: j * 0.6, easing: e },
+    { property: 'y', at: 0.8, value: -j * 0.5, easing: e },
+    { property: 'y', at: 1, value: 0, easing: e },
+  ]
+}
+
+/* ---------------- Film Dissolve (crossfade + gate weave) ---------------- */
+
+function buildFilmDissolve(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number; j: number }> = [
+    { label: 'Subtle', d: 0.6, j: 0.004 },
+    { label: 'Soft', d: 0.8, j: 0.006 },
+    { label: '16mm', d: 1.0, j: 0.008 },
+    { label: 'Super 8', d: 1.0, j: 0.012 },
+    { label: 'Vintage', d: 1.2, j: 0.01 },
+    { label: 'Projector', d: 1.2, j: 0.014 },
+    { label: 'Heavy Grain Feel', d: 1.5, j: 0.016 },
+    { label: 'Nervous', d: 0.5, j: 0.014 },
+    { label: 'Dream Reel', d: 1.5, j: 0.006 },
+    { label: 'Documentary', d: 0.8, j: 0.01 },
+  ]
+  return specs.map((s) =>
+    mk(
+      'film-dissolve', 'Film Dissolve', `Film Dissolve · ${s.label}`, s.d,
+      { fadeOut: s.d, keys: weaveKeys(s.j) },
+      { fadeIn: s.d, keys: weaveKeys(-s.j) },
+      ['gate-weave', 'photochemical'],
+    ),
+  )
+}
+
+/* ---------------- Iris Round (circular mask reveal) ---------------- */
+
+function buildIrisRound(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number; e: EasingType }> = [
+    { label: 'Swift', d: 0.2, e: 'easeOut' },
+    { label: 'Fast', d: 0.3, e: 'easeOut' },
+    { label: 'Smooth', d: 0.5, e: 'easeInOut' },
+    { label: 'Gentle', d: 0.8, e: 'easeInOut' },
+    { label: 'Cinematic', d: 1.0, e: 'easeInOut' },
+    { label: 'Slow', d: 1.2, e: 'easeInOut' },
+    { label: 'Dramatic', d: 1.5, e: 'easeInOut' },
+    { label: 'Pop', d: 0.35, e: 'bounce' },
+    { label: 'Snap', d: 0.25, e: 'easeIn' },
+    { label: 'Linear', d: 0.6, e: 'linear' },
+  ]
+  return specs.map((s) =>
+    mk('iris-round', 'Iris Round', `Iris Round · ${s.label}`, s.d, null, wipePatch('circle', s.e), ['wipe', 'circle', s.e]),
+  )
+}
+
+/* ---------------- Iris Box (rectangular mask reveal) ---------------- */
+
+function buildIrisBox(): TransitionEffect[] {
+  return buildIrisRound().map((t, i) => ({
+    ...t,
+    id: `transition-iris-box-${String(i + 1).padStart(2, '0')}`,
+    name: t.name.replace('Iris Round', 'Iris Box'),
+    family: 'Iris Box',
+    tags: [...t.tags.filter((g) => g !== 'circle'), 'box'],
+    in: t.in ? { ...t.in, wipe: 'box' as WipeShape } : null,
+  }))
+}
+
+/* ---------------- Iris Diamond ---------------- */
+
+function buildIrisDiamond(): TransitionEffect[] {
+  return buildIrisRound().map((t, i) => ({
+    ...t,
+    id: `transition-iris-diamond-${String(i + 1).padStart(2, '0')}`,
+    name: t.name.replace('Iris Round', 'Iris Diamond'),
+    family: 'Iris Diamond',
+    tags: [...t.tags.filter((g) => g !== 'circle'), 'diamond'],
+    in: t.in ? { ...t.in, wipe: 'diamond' as WipeShape } : null,
+  }))
+}
+
+/* ---------------- Iris Cross ---------------- */
+
+function buildIrisCross(): TransitionEffect[] {
+  return buildIrisRound().map((t, i) => ({
+    ...t,
+    id: `transition-iris-cross-${String(i + 1).padStart(2, '0')}`,
+    name: t.name.replace('Iris Round', 'Iris Cross'),
+    family: 'Iris Cross',
+    tags: [...t.tags.filter((g) => g !== 'circle'), 'cross'],
+    in: t.in ? { ...t.in, wipe: 'cross' as WipeShape } : null,
+  }))
+}
+
+/* ---------------- Clock Wipe (angular sweep from 12 o'clock) ---------------- */
+
+function buildClockWipe(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number; e: EasingType }> = [
+    { label: 'Swift', d: 0.25, e: 'linear' },
+    { label: 'Fast', d: 0.35, e: 'linear' },
+    { label: 'Smooth', d: 0.5, e: 'easeInOut' },
+    { label: 'Steady', d: 0.8, e: 'linear' },
+    { label: 'Cinematic', d: 1.0, e: 'easeInOut' },
+    { label: 'Slow', d: 1.2, e: 'linear' },
+    { label: 'Dramatic', d: 1.5, e: 'easeInOut' },
+    { label: 'Rush', d: 0.2, e: 'easeOut' },
+    { label: 'Countdown', d: 1.0, e: 'linear' },
+    { label: 'Mecury', d: 0.6, e: 'easeIn' },
+  ]
+  return specs.map((s) =>
+    mk('clock-wipe', 'Clock Wipe', `Clock Wipe · ${s.label}`, s.d, null, wipePatch('clock', s.e), ['wipe', 'clock', 'sweep', s.e]),
+  )
+}
+
+/* ---------------- Barn Doors (two panels close in from the edges) ---------------- */
+
+function buildBarnDoors(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number; e: EasingType }> = [
+    { label: 'Swift', d: 0.2, e: 'easeOut' },
+    { label: 'Fast', d: 0.3, e: 'easeOut' },
+    { label: 'Smooth', d: 0.5, e: 'easeInOut' },
+    { label: 'Gentle', d: 0.8, e: 'easeInOut' },
+    { label: 'Cinematic', d: 1.0, e: 'easeInOut' },
+    { label: 'Slow', d: 1.2, e: 'easeInOut' },
+    { label: 'Dramatic', d: 1.5, e: 'easeInOut' },
+    { label: 'Slam', d: 0.25, e: 'easeIn' },
+    { label: 'Stage', d: 0.6, e: 'linear' },
+    { label: 'Curtain Call', d: 1.0, e: 'bounce' },
+  ]
+  return specs.map((s) =>
+    mk('barn-doors', 'Barn Doors', `Barn Doors · ${s.label}`, s.d, null, wipePatch('barnDoors', s.e), ['wipe', 'panels', 'vertical', s.e]),
+  )
+}
+
+/* ---------------- Split (parting reveal — gap opens at center, grows outward) ---------------- */
+
+function buildSplit(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number; e: EasingType }> = [
+    { label: 'Vertical · Swift', d: 0.2, e: 'easeOut' },
+    { label: 'Vertical · Fast', d: 0.3, e: 'easeOut' },
+    { label: 'Vertical · Smooth', d: 0.5, e: 'easeInOut' },
+    { label: 'Vertical · Cinematic', d: 1.0, e: 'easeInOut' },
+    { label: 'Vertical · Dramatic', d: 1.5, e: 'easeInOut' },
+    { label: 'Horizontal · Swift', d: 0.2, e: 'easeOut' },
+    { label: 'Horizontal · Fast', d: 0.3, e: 'easeOut' },
+    { label: 'Horizontal · Smooth', d: 0.5, e: 'easeInOut' },
+    { label: 'Horizontal · Cinematic', d: 1.0, e: 'easeInOut' },
+    { label: 'Horizontal · Dramatic', d: 1.5, e: 'easeInOut' },
+  ]
+  return specs.map((s) => {
+    const shape: WipeShape = s.label.startsWith('Vertical') ? 'splitV' : 'splitH'
+    return mk('split', 'Split', `Split · ${s.label}`, s.d, null, wipePatch(shape, s.e), ['wipe', 'split', shape, s.e])
+  })
+}
+
+/* ---------------- assembly (11 × 10 + 5 × 10 v2 + 8 × 10 v3 = 240) ---------------- */
 
 export const TRANSITION_EFFECTS: TransitionEffect[] = [
   ...buildFade(),
@@ -619,4 +796,13 @@ export const TRANSITION_EFFECTS: TransitionEffect[] = [
   ...buildSwap(),
   ...buildWarpZoom(),
   ...buildStutterCut(),
+  // v3 families (Sector 5 — true shape wipes + film dissolve)
+  ...buildFilmDissolve(),
+  ...buildIrisRound(),
+  ...buildIrisBox(),
+  ...buildIrisDiamond(),
+  ...buildIrisCross(),
+  ...buildClockWipe(),
+  ...buildBarnDoors(),
+  ...buildSplit(),
 ]

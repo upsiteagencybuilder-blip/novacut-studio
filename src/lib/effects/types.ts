@@ -29,6 +29,7 @@ import type {
   MotionType,
   TextAnimation,
   TextStyle,
+  WipeShape,
 } from '@/lib/editor/types'
 
 export type EffectCategory =
@@ -73,13 +74,21 @@ export interface TransitionPatch {
   motion?: MotionType
   motionIntensity?: number
   /**
+   * Shape-wipe mask set on the clip (wipe transitions). The mask progress is
+   * driven by the patch's 'iris' keyframes (0 hidden → 1 revealed).
+   */
+  wipe?: WipeShape
+  /**
    * Transform keyframes anchored to the clip start/end.
-   * The applier converts anchors to absolute keyframe times
-   * (0 for 'start', clip.duration for 'end') and generates ids.
+   * The applier converts anchors to absolute keyframe times:
+   *   'start' → window start ('in': 0 · 'out': clip.duration − window)
+   *   'end'   → window end   ('in': window · 'out': clip.duration)
+   *   number  → fraction (0..1) of the window, measured from the window start
+   * and generates ids.
    */
   keys?: Array<{
     property: KeyframeProperty
-    at: 'start' | 'end'
+    at: 'start' | 'end' | number
     value: number
     easing: EasingType
   }>

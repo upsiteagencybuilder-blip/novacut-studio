@@ -41,6 +41,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
+import { transitionPairsForTrack } from '@/lib/editor/transitionBridge'
 import { toast } from 'sonner'
 import {
   BLEND_MODES,
@@ -1609,6 +1610,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
 
       {/* fade */}
       <Section title="Fade" icon={Sun}>
+        <TransitionHint clip={clip} />
         <SliderRow
           label="In"
           min={0}
@@ -1647,6 +1649,29 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
       <ClipActionsRow duplicateId={clip.id} />
     </>
   )
+}
+
+/**
+ * Read-only hint when the selected clip is part of an armed transition
+ * (true crossfade bridge or wipe mask) — mirrors the timeline chips.
+ */
+function TransitionHint({ clip }: { clip: Clip }) {
+  // selector must return a STABLE reference (project.clips) — filtering inside
+  // the selector would allocate a new array per snapshot and loop forever
+  const allClips = useEditor((s) => s.project.clips)
+  const trackClips = useMemo(() => allClips.filter((c) => c.trackId === clip.trackId), [allClips, clip.trackId])
+  const pair = useMemo(() => {
+    const pairs = transitionPairsForTrack(trackClips)
+    return pairs.find((p) => p.outgoingId === clip.id || p.incomingId === clip.id) ?? null
+  }, [trackClips, clip.id])
+  if (!pair) return null
+  const isOutgoing = pair.outgoingId === clip.id
+  const label = isOutgoing
+    ? `True crossfade with the next clip · ${pair.window.toFixed(2)}s — this clip keeps playing underneath`
+    : clip.wipe
+      ? `Wipe reveal (${clip.wipe === 'barnDoors' ? 'barn doors' : clip.wipe}) from the previous clip · ${pair.window.toFixed(2)}s`
+      : `True crossfade with the previous clip · ${pair.window.toFixed(2)}s window`
+  return <p className="text-[10px] leading-snug text-fuchsia-300/80">{label}</p>
 }
 
 /* ================================================================ multi select */

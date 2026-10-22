@@ -17,8 +17,10 @@ import {
   ArrowRight,
   AudioLines,
   Check,
+  Circle,
   Loader2,
   Plus,
+  Scan,
   Search,
   SearchX,
   Sparkles,
@@ -250,18 +252,24 @@ function textPreviewStyle(effect: TextEffect): CSSProperties {
  * `side` confines the motion to the transition window, not the whole clip:
  *   out → keys live in the clip's LAST `duration` seconds
  *   in  → keys live in the clip's FIRST `duration` seconds
+ * Key anchors: 'start'/'end' map to the window edges; a number is a fraction
+ * of the window (0 = window start) — used by multi-key patches like the Film
+ * Dissolve's gate weave.
  */
 function transitionClipPatch(patch: TransitionPatch, clip: Clip, side: 'out' | 'in', duration: number): ClipPatch {
   const window = Math.min(duration, clip.duration)
-  const anchorTime = (at: 'start' | 'end'): number => {
-    if (side === 'in') return at === 'start' ? 0 : window
-    return at === 'start' ? Math.max(0, clip.duration - window) : clip.duration
+  const windowStart = side === 'in' ? 0 : Math.max(0, clip.duration - window)
+  const anchorTime = (at: 'start' | 'end' | number): number => {
+    if (at === 'start') return windowStart
+    if (at === 'end') return side === 'in' ? window : clip.duration
+    return Math.min(windowStart + at * window, clip.duration)
   }
   return {
     ...(patch.fadeIn !== undefined ? { fadeIn: patch.fadeIn } : {}),
     ...(patch.fadeOut !== undefined ? { fadeOut: patch.fadeOut } : {}),
     ...(patch.motion !== undefined ? { motion: patch.motion } : {}),
     ...(patch.motionIntensity !== undefined ? { motionIntensity: patch.motionIntensity } : {}),
+    ...(patch.wipe !== undefined ? { wipe: patch.wipe } : {}),
     keyframes: (patch.keys ?? []).map((k) => ({
       id: uid('kf'),
       property: k.property,
@@ -321,13 +329,29 @@ function TransitionCard({
   onFav: () => void
   onApply: () => void
 }) {
+  const wipe = effect.in?.wipe
   return (
     <div {...cardA11y(onApply)} title={effect.name} className={cardClass(false)}>
       <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <span className="flex h-12 w-full items-center justify-center gap-1 bg-(--nc-scrim)" aria-hidden>
-        <span className="h-6 w-7 rounded border border-(--nc-line) bg-(--nc-panel-strong)" />
-        <ArrowRight className="size-3.5 text-fuchsia-300" />
-        <span className="nc-gradient h-6 w-7 rounded" />
+        {wipe ? (
+          // wipe transitions reveal through an animated mask — mask icon
+          <span className="flex items-center gap-1">
+            <span className="h-6 w-7 rounded border border-(--nc-line) bg-(--nc-panel-strong)" />
+            {wipe === 'circle' ? (
+              <Circle className="size-3.5 text-fuchsia-300" />
+            ) : (
+              <Scan className="size-3.5 text-fuchsia-300" />
+            )}
+            <span className="nc-gradient h-6 w-7 rounded" />
+          </span>
+        ) : (
+          <>
+            <span className="h-6 w-7 rounded border border-(--nc-line) bg-(--nc-panel-strong)" />
+            <ArrowRight className="size-3.5 text-fuchsia-300" />
+            <span className="nc-gradient h-6 w-7 rounded" />
+          </>
+        )}
       </span>
       <span className="block truncate px-1 pt-1 text-center text-[9px] leading-tight text-muted-foreground">
         {effect.name}
@@ -637,6 +661,30 @@ export function EffectsPanel() {
   const [voiceApplyingId, setVoiceApplyingId] = useState<string | null>(null)
   const previewEndTimer = useRef<number | null>(null)
   const voiceEndTimer = useRef<number | null>(null)
+
+  /* timeline transition chips (and other tools) can deep-link into a category */
+  useEffect(() => {
+    const applyCategory = (cat: string) => {
+      setCategory(cat as CategoryFilter)
+      setVisibleCount(PAGE_SIZE)
+      setSearch('')
+    }
+    const openCategory = (e: Event) => {
+      const cat = (e as CustomEvent<string>).detail
+      if (!cat) return
+      // consume the pending deep-link flag so a later mount doesn't reapply it
+      ;(window as unknown as { __ncEffectsCategoryRequest?: string }).__ncEffectsCategoryRequest = undefined
+      applyCategory(cat)
+    }
+    window.addEventListener('nc-effects-category', openCategory)
+    // the panel may mount AFTER the deep-link fired (tab switch race) — consume it now
+    const pending = (window as unknown as { __ncEffectsCategoryRequest?: string }).__ncEffectsCategoryRequest
+    if (pending) {
+      ;(window as unknown as { __ncEffectsCategoryRequest?: string }).__ncEffectsCategoryRequest = undefined
+      applyCategory(pending)
+    }
+    return () => window.removeEventListener('nc-effects-category', openCategory)
+  }, [])
 
   /* favorites & recent — persisted locally, restored on every mount */
   const [favorites, setFavorites] = useState<string[]>(() => loadIdList(FAVORITES_KEY))
@@ -1473,7 +1521,7 @@ export function EffectsPanel() {
       {/* transitions rewrite transform keyframes on both clips — always disclose */}
       {category === 'transition' && results.length > 0 && (
         <p className="text-[10px] leading-snug text-muted-foreground/80">
-          Replaces transform keyframes on both clips — transitions need a following clip on the same track.
+          Replaces transform keyframes on both clips — transitions need a following clip on the same track. Fades become true crossfades over the cut; wipe transitions reveal through an animated mask.
         </p>
       )}
 

@@ -104,6 +104,8 @@ interface EditorStore {
   addTextClip: (preset?: TextPreset) => void
   addStickerClip: (emoji: string) => void
   updateClip: (id: string, patch: ClipPatch, history?: boolean | string) => void
+  /** strip a transition between two adjacent clips (fades + wipe mask + iris keys), one undo step */
+  removeTransition: (outgoingId: string, incomingId: string) => void
   moveClip: (id: string, start: number, trackId: string | null, history?: boolean | string) => void
   trimClip: (id: string, opts: { start?: number; trimStart?: number; duration?: number }, history?: boolean | string) => void
   splitClip: (id: string, time: number) => void
@@ -460,6 +462,33 @@ export const useEditor = create<EditorStore>((set, get) => ({
     if (history === true) get().pushHistory()
     else if (typeof history === 'string') get().pushHistory(history)
     set((s) => ({ project: withUpdatedAt(applyClipPatch(s.project, id, patch)) }))
+  },
+
+  /**
+   * Remove a transition between two adjacent clips: clears both clips' fades,
+   * the incoming wipe mask + its iris keys, and resets the transition's
+   * transform keyframes (transitions REPLACE keyframes when applied, so
+   * removal resets them — disclosed in the effects panel). One undo step.
+   */
+  removeTransition: (outgoingId, incomingId) => {
+    get().pushHistory(`transition-remove-${outgoingId}-${incomingId}`)
+    set((s) => ({
+      project: withUpdatedAt({
+        ...s.project,
+        clips: s.project.clips.map((c) => {
+          if (c.id === outgoingId) return { ...c, fadeOut: 0, keyframes: [] }
+          if (c.id === incomingId) {
+            return {
+              ...c,
+              fadeIn: 0,
+              wipe: null,
+              keyframes: (c.keyframes ?? []).filter((k) => k.property !== 'iris'),
+            }
+          }
+          return c
+        }),
+      }),
+    }))
   },
 
   moveClip: (id, start, trackId, history) => {

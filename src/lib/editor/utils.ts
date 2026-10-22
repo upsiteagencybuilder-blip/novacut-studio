@@ -182,6 +182,9 @@ export function baseValueForProperty(clip: Clip, property: KeyframeProperty): nu
       return clip.transform.opacity
     case 'volume':
       return clip.kind === 'text' || clip.kind === 'sticker' ? 0 : clip.volume
+    case 'iris':
+      // wipe mask progress — 1 = fully revealed (no clipping)
+      return 1
   }
 }
 
