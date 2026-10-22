@@ -5,12 +5,18 @@
  * The timeline plays through once while recording, then the blob is ready for download.
  */
 import { getEngine } from './engine'
+import { encodeMp3, encodeWav, renderProjectAudio } from './audio-mix'
+import type { MediaAssetRuntime, Project } from './types'
 
 export interface ExportOptions {
   fps: number
   videoBitsPerSecond: number
   /** preferred container: 'webm' | 'mp4' — falls back to what the browser supports */
   format?: 'webm' | 'mp4'
+  /** audio track bitrate for the recorded file (default 128 kbps) */
+  audioBitsPerSecond?: number
+  /** burn a running timecode into the picture (review copies) */
+  burnIn?: 'timecode'
   onProgress?: (progress: number) => void
 }
 
@@ -62,7 +68,7 @@ export function cancelExport(): void {
 
 export async function startExport(opts: ExportOptions): Promise<ExportResult> {
   const engine = getEngine()
-  const stream = engine.beginExport(opts.fps)
+  const stream = engine.beginExport(opts.fps, { burnIn: opts.burnIn })
   if (!stream) throw new Error('Canvas is not ready for export')
   if (!stream.getVideoTracks().length) throw new Error('No video track available')
 
@@ -71,7 +77,7 @@ export async function startExport(opts: ExportOptions): Promise<ExportResult> {
   const recorder = new MediaRecorder(stream, {
     mimeType,
     videoBitsPerSecond: opts.videoBitsPerSecond,
-    audioBitsPerSecond: 128000,
+    audioBitsPerSecond: opts.audioBitsPerSecond ?? 128000,
   })
   activeRecorder = recorder
   cancelled = false
@@ -129,4 +135,48 @@ export async function startExport(opts: ExportOptions): Promise<ExportResult> {
     recorder.start(250)
     setTimeout(() => engine.play(), 150)
   })
+}
+
+export interface AudioExportOptions {
+  sampleRate: 44100 | 48000
+  channels: 1 | 2
+  /** 'wav' renders instantly (offline mixdown); 'mp3' encodes with lame */
+  format: 'wav' | 'mp3'
+  /** MP3 bitrate — ignored for WAV */
+  mp3Kbps?: 128 | 192 | 320
+  onProgress?: (p: number) => void
+}
+
+export interface AudioExportResult {
+  blob: Blob
+  mimeType: string
+  extension: 'wav' | 'mp3'
+  durationSec: number
+}
+
+/**
+ * Render the project's full audio mix OFFLINE (faster than real time) and
+ * encode it as WAV or MP3. Uses the same per-clip FX chains, volumes, fades,
+ * mute/solo and auto-duck the preview plays with. MP3 always renders at
+ * 44.1 kHz (the lame encoder's reliable rate) to guarantee correct pitch.
+ */
+export async function exportProjectAudio(
+  project: Project,
+  mediaMap: Map<string, MediaAssetRuntime>,
+  opts: AudioExportOptions
+): Promise<AudioExportResult> {
+  const buffer = await renderProjectAudio(project, mediaMap, {
+    sampleRate: opts.format === 'mp3' ? 44100 : opts.sampleRate,
+    channels: opts.channels,
+    onProgress: opts.onProgress,
+  })
+  opts.onProgress?.(0.96)
+  if (opts.format === 'mp3') {
+    const blob = await encodeMp3(buffer, opts.mp3Kbps ?? 192)
+    opts.onProgress?.(1)
+    return { blob, mimeType: 'audio/mpeg', extension: 'mp3', durationSec: buffer.duration }
+  }
+  const blob = encodeWav(buffer)
+  opts.onProgress?.(1)
+  return { blob, mimeType: 'audio/wav', extension: 'wav', durationSec: buffer.duration }
 }

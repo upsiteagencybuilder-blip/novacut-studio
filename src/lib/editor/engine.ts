@@ -10,8 +10,10 @@ import type { OverlayDraw, VisionDraw } from '@/lib/effects/types'
 import { getEffect, getOverlayDraw } from '@/lib/effects/registry'
 import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
 import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
-import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, evaluateKeyframeProperty, projectDuration } from './utils'
+import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, evaluateKeyframeProperty, formatTimecode, projectDuration } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
+import { applyClipFx, buildFxChain, makeImpulse, rebuildModulation } from './audio-mix'
+import type { AudioFxChain } from './audio-mix'
 import { drawStickerArt } from './sticker-render'
 import { CANVAS_FONT_LOAD_LIST, MIN_CLIP_DURATION } from './constants'
 
@@ -45,46 +47,8 @@ interface PoolEntry {
   analyserData?: Uint8Array
 }
 
-/** Modulation sub-graph nodes (chorus / flanger / phaser) */
-interface ModNodes {
-  dry: GainNode
-  wet?: GainNode
-  dly?: DelayNode
-  lfo?: OscillatorNode
-  lfoGain?: GainNode
-  fb?: GainNode
-  aps?: BiquadFilterNode[]
-}
-
-/**
- * Per-clip audio FX chain — stable topology with param-driven bypass.
- * src → pan → eqLow → eqMid → eqHigh → hp → lp → comp → modIn → [mod] → modOut
- * modOut → dry → sum;  modOut → delay → delayWet → sum (feedback loop);
- * modOut → convolver → reverbWet → sum;  sum → gain (playback envelope).
- * Neutral params make every stage transparent, so a clip without FX sounds
- * untouched while still running through the same nodes preview AND export use.
- */
-interface AudioFxChain {
-  pan: AudioNode
-  eqLow: BiquadFilterNode
-  eqMid: BiquadFilterNode
-  eqHigh: BiquadFilterNode
-  hp: BiquadFilterNode
-  lp: BiquadFilterNode
-  comp: DynamicsCompressorNode
-  modIn: GainNode
-  modOut: GainNode
-  dry: GainNode
-  sum: GainNode
-  mod?: ModNodes
-  modKind?: string
-  delay?: DelayNode
-  delayWet?: GainNode
-  delayFb?: GainNode
-  convolver?: ConvolverNode
-  reverbWet?: GainNode
-}
-
+// AudioFxChain / ModNodes types + chain builders live in ./audio-mix — the SAME
+// topology powers preview, video export and the offline audio mixdown.
 /** Screen-space bounds of a drawn clip (canvas coords) for selection overlay */
 export interface ClipBounds {
   x: number
@@ -214,6 +178,8 @@ class PreviewEngine {
   private renderQuality: RenderQuality = 'high'
   /** forced scale while exporting (always full project resolution) */
   private exportScaleOverride: number | null = null
+  /** timecode burn-in overlay, armed only between beginExport/endExport */
+  private exportBurnIn: 'timecode' | null = null
 
   /** Detect device tier once and pick the adaptive preview render scale */
   initAdaptiveQuality() {
@@ -367,10 +333,11 @@ class PreviewEngine {
   /* -------------------------------------------------- audio graph (export) */
 
   /** Route all element audio through WebAudio and return a capture stream for export */
-  beginExport(fps: number): MediaStream | null {
+  beginExport(fps: number, opts?: { burnIn?: 'timecode' }): MediaStream | null {
     if (!this.canvas) return null
     // Export always records at full project resolution — never the adaptive preview scale.
     this.exportScaleOverride = 1
+    this.exportBurnIn = opts?.burnIn ?? null
     const proj = this.snapshotFn?.().project
     if (proj) {
       this.canvas.width = proj.canvasWidth
@@ -404,6 +371,7 @@ class PreviewEngine {
 
   endExport() {
     // keep audioCtx alive (elements are permanently routed); nothing to tear down
+    this.exportBurnIn = null
     if (this.exportScaleOverride !== null) {
       this.exportScaleOverride = null
       this.invalidate()
@@ -524,247 +492,23 @@ class PreviewEngine {
     }
   }
 
-  /** Build the always-present core chain with fully neutral (transparent) params. */
+  /** Build the always-present core chain (shared topology — see audio-mix.ts). */
   private buildCoreChain(): AudioFxChain {
-    const ctx = this.audioCtx!
-    const pan: AudioNode = typeof ctx.createStereoPanner === 'function' ? ctx.createStereoPanner() : ctx.createGain()
-    const eqLow = ctx.createBiquadFilter()
-    eqLow.type = 'lowshelf'
-    eqLow.frequency.value = 200
-    eqLow.gain.value = 0
-    const eqMid = ctx.createBiquadFilter()
-    eqMid.type = 'peaking'
-    eqMid.frequency.value = 1200
-    eqMid.Q.value = 0.9
-    eqMid.gain.value = 0
-    const eqHigh = ctx.createBiquadFilter()
-    eqHigh.type = 'highshelf'
-    eqHigh.frequency.value = 4200
-    eqHigh.gain.value = 0
-    const hp = ctx.createBiquadFilter()
-    hp.type = 'allpass' // transparent until the user asks for a high-pass
-    hp.frequency.value = 500
-    hp.Q.value = 0.7
-    const lp = ctx.createBiquadFilter()
-    lp.type = 'allpass'
-    lp.frequency.value = 8000
-    lp.Q.value = 0.7
-    const comp = ctx.createDynamicsCompressor()
-    comp.threshold.value = 0
-    comp.knee.value = 24
-    comp.ratio.value = 1
-    comp.attack.value = 0.01
-    comp.release.value = 0.25
-    const modIn = ctx.createGain()
-    const modOut = ctx.createGain()
-    const dry = ctx.createGain()
-    dry.gain.value = 1
-    const sum = ctx.createGain()
-    modIn.connect(modOut) // 'none' modulation — direct wire
-    modOut.connect(dry)
-    dry.connect(sum)
-    pan.connect(eqLow)
-    eqLow.connect(eqMid)
-    eqMid.connect(eqHigh)
-    eqHigh.connect(hp)
-    hp.connect(lp)
-    lp.connect(comp)
-    comp.connect(modIn)
-    return { pan, eqLow, eqMid, eqHigh, hp, lp, comp, modIn, modOut, dry, sum, modKind: 'none' }
-  }
-
-  /** (Re)wire the modulation sub-graph for the requested flavor. */
-  private rebuildMod(chain: AudioFxChain, kind: 'none' | 'chorus' | 'flanger' | 'phaser', amount: number) {
-    const ctx = this.audioCtx!
-    // tear down the previous sub-graph
-    try {
-      chain.modIn.disconnect()
-      if (chain.mod) {
-        chain.mod.dry.disconnect()
-        chain.mod.wet?.disconnect()
-        chain.mod.lfo?.stop()
-        chain.mod.lfo?.disconnect()
-        chain.mod.lfoGain?.disconnect()
-        chain.mod.fb?.disconnect()
-        chain.mod.dly?.disconnect()
-        chain.mod.aps?.forEach((ap) => ap.disconnect())
-      }
-    } catch {
-      /* best-effort teardown */
-    }
-    const dry = ctx.createGain()
-    dry.gain.value = 1
-    dry.connect(chain.modOut)
-    chain.modIn.connect(dry)
-    const mod: ModNodes = { dry }
-    const a = clamp(amount, 0, 1)
-    if (kind === 'chorus') {
-      const dly = ctx.createDelay(0.1)
-      dly.delayTime.value = 0.025
-      const lfo = ctx.createOscillator()
-      lfo.type = 'sine'
-      lfo.frequency.value = 0.8
-      const lfoGain = ctx.createGain()
-      lfoGain.gain.value = 0.008
-      lfo.connect(lfoGain)
-      lfoGain.connect(dly.delayTime)
-      lfo.start()
-      const wet = ctx.createGain()
-      wet.gain.value = 0.6 * a
-      dry.gain.value = 1 - 0.5 * a
-      chain.modIn.connect(dly)
-      dly.connect(wet)
-      wet.connect(chain.modOut)
-      Object.assign(mod, { wet, dly, lfo, lfoGain })
-    } else if (kind === 'flanger') {
-      const dly = ctx.createDelay(0.05)
-      dly.delayTime.value = 0.003
-      const lfo = ctx.createOscillator()
-      lfo.type = 'sine'
-      lfo.frequency.value = 0.35
-      const lfoGain = ctx.createGain()
-      lfoGain.gain.value = 0.0022
-      lfo.connect(lfoGain)
-      lfoGain.connect(dly.delayTime)
-      lfo.start()
-      const fb = ctx.createGain()
-      fb.gain.value = 0.55 * a
-      dly.connect(fb)
-      fb.connect(dly)
-      const wet = ctx.createGain()
-      wet.gain.value = 0.7 * a
-      dry.gain.value = 1 - 0.45 * a
-      chain.modIn.connect(dly)
-      dly.connect(wet)
-      wet.connect(chain.modOut)
-      Object.assign(mod, { wet, dly, lfo, lfoGain, fb })
-    } else if (kind === 'phaser') {
-      const aps: BiquadFilterNode[] = []
-      const bases = [300, 800, 1600, 2400]
-      let prev: AudioNode = chain.modIn
-      for (const base of bases) {
-        const ap = ctx.createBiquadFilter()
-        ap.type = 'allpass'
-        ap.frequency.value = base
-        ap.Q.value = 1
-        prev.connect(ap)
-        prev = ap
-        aps.push(ap)
-      }
-      const lfo = ctx.createOscillator()
-      lfo.type = 'sine'
-      lfo.frequency.value = 0.25
-      const lfoGain = ctx.createGain()
-      lfoGain.gain.value = 800
-      lfo.connect(lfoGain)
-      for (const ap of aps) lfoGain.connect(ap.frequency)
-      lfo.start()
-      const wet = ctx.createGain()
-      wet.gain.value = 0.55 * a
-      dry.gain.value = 1 - 0.5 * a
-      prev.connect(wet)
-      wet.connect(chain.modOut)
-      Object.assign(mod, { wet, lfo, lfoGain, aps })
-    }
-    chain.mod = mod
-    chain.modKind = kind
+    return buildFxChain(this.audioCtx!)
   }
 
   /** Push a clip's ClipAudioFx values into its chain nodes (called on signature change). */
   private updateAudioChain(clip: Clip, chain: AudioFxChain) {
-    const fx = clip.audioFx ?? {}
-    const ctx = this.audioCtx
-    if (!ctx) return
-    const t = ctx.currentTime
-    const set = (param: AudioParam, v: number) => {
-      try {
-        param.setTargetAtTime(v, t, 0.015)
-      } catch {
-        param.value = v
-      }
-    }
-    set((chain.pan as StereoPannerNode).pan ?? (chain.pan as GainNode).gain, clamp(fx.pan ?? 0, -1, 1))
-    set(chain.eqLow.gain, clamp(fx.eqLow ?? 0, -24, 24))
-    set(chain.eqMid.gain, clamp(fx.eqMid ?? 0, -24, 24))
-    set(chain.eqHigh.gain, clamp(fx.eqHigh ?? 0, -24, 24))
-    // filters — swap to allpass when off (transparent, keeps the topology stable)
-    const hpOn = (fx.highPass ?? 0) > 20
-    chain.hp.type = hpOn ? 'highpass' : 'allpass'
-    if (hpOn) set(chain.hp.frequency, clamp(fx.highPass!, 20, 800))
-    const lpOn = (fx.lowPass ?? 0) > 0
-    chain.lp.type = lpOn ? 'lowpass' : 'allpass'
-    if (lpOn) set(chain.lp.frequency, clamp(fx.lowPass!, 200, 18000))
-    // compressor
-    const compOn = !!fx.compressor
-    const ca = clamp(fx.compAmount ?? 0.5, 0, 1)
-    set(chain.comp.threshold, compOn ? -(6 + 26 * ca) : 0)
-    set(chain.comp.ratio, compOn ? 2 + 8 * ca : 1)
-    // modulation
-    const kind = fx.modKind ?? 'none'
-    const amount = clamp(fx.modAmount ?? 0.5, 0, 1)
-    if (kind !== chain.modKind || kind !== 'none') this.rebuildMod(chain, kind, amount)
-    else if (chain.mod) set(chain.mod.dry.gain, 1)
-    // delay aux
-    const dMix = clamp(fx.delayMix ?? 0, 0, 1)
-    if (dMix > 0.001) {
-      if (!chain.delay) {
-        const dly = ctx.createDelay(1.2)
-        const wet = ctx.createGain()
-        const fb = ctx.createGain()
-        chain.modOut.connect(dly)
-        dly.connect(wet)
-        wet.connect(chain.sum)
-        dly.connect(fb)
-        fb.connect(dly)
-        chain.delay = dly
-        chain.delayWet = wet
-        chain.delayFb = fb
-      }
-      set(chain.delay.delayTime, clamp(fx.delayTime ?? 0.25, 0.05, 0.9))
-      set(chain.delayFb!.gain, clamp(fx.delayFeedback ?? 0.3, 0, 0.85))
-      set(chain.delayWet!.gain, dMix * 0.9)
-    } else if (chain.delayWet) {
-      set(chain.delayWet.gain, 0)
-    }
-    // reverb aux (convolver created lazily, IR generated + cached)
-    const rMix = clamp(fx.reverbMix ?? 0, 0, 1)
-    if (rMix > 0.001) {
-      if (!chain.convolver) {
-        const size = clamp(fx.reverbSize ?? 0.6, 0.2, 1)
-        const conv = ctx.createConvolver()
-        conv.buffer = this.getImpulse(0.4 + 2.8 * size)
-        const wet = ctx.createGain()
-        chain.modOut.connect(conv)
-        conv.connect(wet)
-        wet.connect(chain.sum)
-        chain.convolver = conv
-        chain.reverbWet = wet
-      }
-      set(chain.reverbWet!.gain, rMix * 0.8)
-    } else if (chain.reverbWet) {
-      set(chain.reverbWet.gain, 0)
-    }
+    if (!this.audioCtx) return
+    applyClipFx(this.audioCtx, chain, clip.audioFx ?? undefined)
   }
 
   /** Deterministic noise-decay impulse response, cached per 0.1s bucket. */
   private getImpulse(seconds: number): AudioBuffer {
-    const ctx = this.audioCtx!
     const sec = Math.round(seconds * 10) / 10
     const cached = this.irCache.get(String(sec))
     if (cached) return cached
-    const rate = ctx.sampleRate
-    const len = Math.max(1, Math.floor(rate * sec))
-    const buf = ctx.createBuffer(2, len, rate)
-    for (let c = 0; c < 2; c++) {
-      const data = buf.getChannelData(c)
-      // simple LCG noise — deterministic, plenty for a reverb tail
-      let seed = 0x2f6e2b1 + c * 7919
-      for (let i = 0; i < len; i++) {
-        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
-        const t = i / len
-        data[i] = ((seed / 0xffffffff) * 2 - 1) * Math.pow(1 - t, 2.4) * (1 - t * 0.2)
-      }
-    }
+    const buf = makeImpulse(this.audioCtx!, sec)
     this.irCache.set(String(sec), buf)
     return buf
   }
@@ -1293,6 +1037,39 @@ class PreviewEngine {
           this.syncAudio(clip, t - clip.start, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, trackVolume * duck, bridged ? { skipFadeIn: false } : bridgedSuccessor ? { skipFadeOut: true } : undefined)
         }
       }
+    }
+
+    // timecode burn-in (export only — never drawn in the live preview)
+    if (this.exportBurnIn === 'timecode') {
+      const fs = Math.max(14, Math.round(H * 0.045))
+      const label = formatTimecode(t, project.fps)
+      ctx.save()
+      ctx.setTransform(scale, 0, 0, scale, 0, 0)
+      ctx.font = `600 ${fs}px ui-monospace, SFMono-Regular, Menlo, monospace`
+      ctx.textAlign = 'right'
+      ctx.textBaseline = 'bottom'
+      const padX = fs * 0.5
+      const padY = fs * 0.3
+      const metrics = ctx.measureText(label)
+      const bx = W - fs * 0.6
+      const by = H - fs * 0.6
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'
+      ctx.beginPath()
+      const rw = metrics.width + padX * 2
+      const rh = fs + padY * 2
+      const rx = bx - rw
+      const ry = by - rh
+      const rr = Math.min(8, rh / 2)
+      ctx.moveTo(rx + rr, ry)
+      ctx.arcTo(bx, ry, bx, ry + rh, rr)
+      ctx.arcTo(bx, by, rx, by, rr)
+      ctx.arcTo(rx, by, rx, ry, rr)
+      ctx.arcTo(rx, ry, bx, ry, rr)
+      ctx.closePath()
+      ctx.fill()
+      ctx.fillStyle = '#ffffff'
+      ctx.fillText(label, bx - padX, by - padY)
+      ctx.restore()
     }
 
     this.cb?.onAfterRender?.()

@@ -696,6 +696,7 @@ export function buildCaptionClips(project: Project, segments: CaptionSegment[]):
       motion: 'none' as const,
       motionIntensity: 0.35,
       ...baseClipFields(),
+      isCaption: true,
       textStyle: style,
       color: '#f43f5e',
     }

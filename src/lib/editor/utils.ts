@@ -450,3 +450,35 @@ export function mediaKindFromType(mime: string, name: string): 'video' | 'image'
   if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) return 'audio'
   return null
 }
+
+/** HH:MM:SS,mmm — the SRT timestamp format */
+function srtTimestamp(t: number): string {
+  const safe = Math.max(0, t)
+  const h = Math.floor(safe / 3600)
+  const m = Math.floor((safe % 3600) / 60)
+  const s = Math.floor(safe % 60)
+  const ms = Math.round((safe - Math.floor(safe)) * 1000)
+  const pad = (n: number, len = 2) => String(n).padStart(len, '0')
+  return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms, 3)}`
+}
+
+/**
+ * Build an .srt sidecar from the project's AI caption clips (isCaption).
+ * Returns an empty string when the project has no captions.
+ */
+export function buildSrtFromCaptions(clips: Clip[]): string {
+  const captions = clips
+    .filter((c) => c.isCaption && c.kind === 'text' && (c.textStyle?.content ?? '').trim())
+    .sort((a, b) => a.start - b.start)
+  if (!captions.length) return ''
+  return (
+    captions
+      .map((c, i) => {
+        const start = c.start
+        const end = Math.max(start + 0.2, start + c.duration)
+        const text = (c.textStyle?.content ?? '').trim().replace(/\r?\n/g, '\n')
+        return `${i + 1}\n${srtTimestamp(start)} --> ${srtTimestamp(end)}\n${text}`
+      })
+      .join('\n\n') + '\n'
+  )
+}

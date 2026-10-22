@@ -352,6 +352,8 @@ export interface Clip {
    * null/undefined = no mask (plain draw).
    */
   wipe?: WipeShape | null
+  /** created by AI auto-captions — included in .srt sidecar export */
+  isCaption?: boolean
   /** label color chip on the timeline */
   color: string
 }

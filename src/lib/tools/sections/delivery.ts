@@ -3,8 +3,10 @@ import type { ProTool } from '../types'
 /**
  * Pro Toolkit — delivery section.
  * Export and delivery tools mapped to the ExportDialog: WebM (VP9/VP8) and
- * MP4 (H.264) via MediaRecorder, quality presets, fps and custom resolution,
- * platform canvas presets and a live estimated file size.
+ * MP4 (H.264) via MediaRecorder, quality presets + free bitrate slider, fps,
+ * custom resolution, audio-track bitrate, timecode burn-in, platform canvas
+ * presets, an OFFLINE audio mixdown (WAV / MP3, faster than real time) and an
+ * .srt caption sidecar — plus a live estimated file size.
  */
 
 export const DELIVERY_TOOLS: ProTool[] = [
@@ -31,8 +33,8 @@ export const DELIVERY_TOOLS: ProTool[] = [
   { id: 'delivery-cineform-encoder', name: 'GoPro CineForm Encoder', section: 'delivery', group: 'Codecs', status: 'planned', desc: 'Visually lossless CineForm wavelet codec' },
 
   // -------- Export settings --------
-  { id: 'delivery-export-settings-dialogue', name: 'Export Settings Dialogue', section: 'delivery', group: 'Export settings', status: 'live', desc: 'Export dialog covers format, quality, fps, resolution and presets', action: 'open-export' },
-  { id: 'delivery-preset-dropdown', name: 'Preset Dropdown', section: 'delivery', group: 'Export settings', status: 'beta', desc: 'Quality tiers from low to high act as render presets' },
+  { id: 'delivery-export-settings-dialogue', name: 'Export Settings Dialogue', section: 'delivery', group: 'Export settings', status: 'live', desc: 'Export dialog covers format, quality, bitrate, fps, resolution, audio and presets', action: 'open-export' },
+  { id: 'delivery-preset-dropdown', name: 'Preset Dropdown', section: 'delivery', group: 'Export settings', status: 'live', desc: 'Quality tiers (Draft→Ultra) and platform presets drive the render settings', action: 'open-export' },
   { id: 'delivery-frame-rate-dropdown', name: 'Frame Rate Dropdown', section: 'delivery', group: 'Export settings', status: 'live', desc: 'Choose 24, 30 or 60 fps in the export dialog', action: 'open-export' },
   { id: 'delivery-resolution-width-input', name: 'Resolution Width Input', section: 'delivery', group: 'Export settings', status: 'live', desc: 'Type a custom width up to 7680 in the dialog', action: 'open-export' },
   { id: 'delivery-resolution-height-input', name: 'Resolution Height Input', section: 'delivery', group: 'Export settings', status: 'live', desc: 'Paired height input accepts any value from 16 upward', action: 'open-export' },
@@ -51,24 +53,24 @@ export const DELIVERY_TOOLS: ProTool[] = [
   { id: 'delivery-cbr', name: 'CBR (Constant Bitrate)', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Fixed bitrate for predictable delivery sizes' },
   { id: 'delivery-vbr-1-pass', name: 'VBR 1-Pass (Variable Bitrate)', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Single-pass variable bitrate spending bits adaptively' },
   { id: 'delivery-vbr-2-pass', name: 'VBR 2-Pass', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Two-pass analysis for the best quality ceiling' },
-  { id: 'delivery-target-bitrate-slider', name: 'Target Bitrate Slider', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Quality tiers map to fixed bitrates, a free slider remains roadmap' },
+  { id: 'delivery-target-bitrate-slider', name: 'Target Bitrate Slider', section: 'delivery', group: 'Bitrate & quality', status: 'live', desc: 'Free 1–40 Mbps slider in the export dialog — quality tiers snap it to presets', action: 'open-export' },
   { id: 'delivery-max-bitrate-slider', name: 'Maximum Bitrate Slider', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Cap VBR spikes with a maximum bitrate' },
   { id: 'delivery-keyframe-distance', name: 'Keyframe Distance Input', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Control GOP length for streaming compatibility' },
 
   // -------- Audio export --------
-  { id: 'delivery-wav', name: 'Waveform Audio (.wav)', section: 'delivery', group: 'Audio export', status: 'planned', desc: 'Voice FX render WAVs internally, WAV export stays roadmap' },
-  { id: 'delivery-mp3', name: 'MPEG Audio Layer 3 (.mp3)', section: 'delivery', group: 'Audio export', status: 'planned', desc: 'Universal compressed audio export for podcasts' },
-  { id: 'delivery-aac', name: 'Advanced Audio Coding (.aac)', section: 'delivery', group: 'Audio export', status: 'planned', desc: 'Efficient AAC audio tracks for video containers' },
-  { id: 'delivery-audio-sample-rate', name: 'Audio Sample Rate Dropdown', section: 'delivery', group: 'Audio export', status: 'planned', desc: 'Pick 44.1 or 48 kHz sample rates on export' },
-  { id: 'delivery-audio-channels', name: 'Audio Channels Dropdown (Stereo/Mono/5.1)', section: 'delivery', group: 'Audio export', status: 'planned', desc: 'Downmix or upmix channel layouts for delivery' },
-  { id: 'delivery-audio-bitrate', name: 'Audio Bitrate Dropdown', section: 'delivery', group: 'Audio export', status: 'planned', desc: 'Set compressed audio quality per export' },
+  { id: 'delivery-wav', name: 'Waveform Audio (.wav)', section: 'delivery', group: 'Audio export', status: 'live', desc: 'Offline mixdown renders a lossless 16-bit WAV in seconds — full FX, fades, duck', action: 'open-export' },
+  { id: 'delivery-mp3', name: 'MPEG Audio Layer 3 (.mp3)', section: 'delivery', group: 'Audio export', status: 'live', desc: 'MP3 encode at 192/320 kbps from the same offline mixdown', action: 'open-export' },
+  { id: 'delivery-aac', name: 'Advanced Audio Coding (.aac)', section: 'delivery', group: 'Audio export', status: 'planned', desc: 'MP4 video exports carry AAC audio; a standalone .aac file stays roadmap' },
+  { id: 'delivery-audio-sample-rate', name: 'Audio Sample Rate Dropdown', section: 'delivery', group: 'Audio export', status: 'live', desc: 'Pick 44.1 or 48 kHz for the audio mixdown', action: 'open-export' },
+  { id: 'delivery-audio-channels', name: 'Audio Channels Dropdown (Stereo/Mono/5.1)', section: 'delivery', group: 'Audio export', status: 'live', desc: 'Stereo or mono downmix on the mixdown; 5.1 stays roadmap', action: 'open-export' },
+  { id: 'delivery-audio-bitrate', name: 'Audio Bitrate Dropdown', section: 'delivery', group: 'Audio export', status: 'live', desc: 'Video audio track 96–256 kbps, MP3 mixdown 192/320 kbps', action: 'open-export' },
 
   // -------- Captions & metadata --------
-  { id: 'delivery-captions-export', name: 'Captions Export Dropdown', section: 'delivery', group: 'Captions & metadata', status: 'planned', desc: 'Export captions as sidecars or embedded tracks' },
-  { id: 'delivery-burn-captions', name: 'Burn Captions into Video Option', section: 'delivery', group: 'Captions & metadata', status: 'planned', desc: 'Render caption text permanently into the picture' },
-  { id: 'delivery-sidecar-srt', name: 'Create Sidecar File (.srt)', section: 'delivery', group: 'Captions & metadata', status: 'planned', desc: 'Save an .srt next to the master file' },
+  { id: 'delivery-captions-export', name: 'Captions Export Dropdown', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'Captions export as an .srt sidecar and render into the picture as text clips', action: 'open-export' },
+  { id: 'delivery-burn-captions', name: 'Burn Captions into Video Option', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'AI captions are ordinary text clips — every export renders them into the picture', action: 'open-export' },
+  { id: 'delivery-sidecar-srt', name: 'Create Sidecar File (.srt)', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'Download an .srt built from AI Auto Captions with timestamps', action: 'open-export' },
   { id: 'delivery-metadata-export', name: 'Metadata Export Options', section: 'delivery', group: 'Captions & metadata', status: 'planned', desc: 'Embed title, creator and rights metadata' },
-  { id: 'delivery-timecode-burn-in', name: 'Timecode Burn-in Effect', section: 'delivery', group: 'Captions & metadata', status: 'planned', desc: 'Stamp visible timecode for review copies' },
+  { id: 'delivery-timecode-burn-in', name: 'Timecode Burn-in Effect', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'Toggle in the export dialog stamps a running timecode pill for review copies', action: 'open-export' },
 
   // -------- Device & social presets --------
   { id: 'delivery-estimated-file-size', name: 'Estimated File Size Indicator', section: 'delivery', group: 'Device & social presets', status: 'live', desc: 'Dialog estimates file size from bitrate and duration live', action: 'open-export' },

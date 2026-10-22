@@ -3,11 +3,15 @@
 /**
  * Export dialog — Pro edition.
  * Platform preset grid (resizes the canvas), quality/fps/format selects,
- * custom resolution, estimated size and the real-time recording flow.
+ * free bitrate slider, custom resolution, audio-track bitrate, timecode
+ * burn-in, estimated size, the real-time recording flow — plus an offline
+ * AUDIO mixdown (WAV / MP3, faster than real time) and .srt caption sidecar.
  */
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AudioLines,
   BadgeCheck,
+  Captions,
   CheckCircle2,
   ChevronDown,
   Download,
@@ -19,9 +23,15 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
-import { cancelExport, extensionForMime, startExport, supportedExportMimeTypes } from '@/lib/editor/exporter'
+import {
+  cancelExport,
+  exportProjectAudio,
+  extensionForMime,
+  startExport,
+  supportedExportMimeTypes,
+} from '@/lib/editor/exporter'
 import { EXPORT_PRESETS, EXPORT_QUALITY_PRESETS } from '@/lib/editor/constants'
-import { formatBytes, formatTimecode, projectDuration } from '@/lib/editor/utils'
+import { buildSrtFromCaptions, formatBytes, formatTimecode, projectDuration } from '@/lib/editor/utils'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,8 +39,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Slider } from '@/components/ui/slider'
+import { Switch } from '@/components/ui/switch'
 
 type ExportFormat = 'webm' | 'mp4'
+type AudioFormat = 'wav' | 'mp3'
+
+function safeFileName(name: string): string {
+  const cleaned = (name || '').replace(/[\\/:*?"<>|]+/g, '').trim()
+  return cleaned || 'novacut-export'
+}
 
 export function ExportDialog() {
   const open = useEditor((s) => s.activeDialog === 'export')
@@ -46,6 +64,19 @@ export function ExportDialog() {
   const [customW, setCustomW] = useState('')
   const [customH, setCustomH] = useState('')
   const [lastMime, setLastMime] = useState('video/webm')
+
+  // v2: filename, audio bitrate, burn-in
+  const [fileName, setFileName] = useState('')
+  const [audioKbps, setAudioKbps] = useState(128)
+  const [burnIn, setBurnIn] = useState(false)
+
+  // v2: offline audio mixdown state
+  const [audioFormat, setAudioFormat] = useState<AudioFormat>('wav')
+  const [sampleRate, setSampleRate] = useState<'44100' | '48000'>('48000')
+  const [channels, setChannels] = useState<'1' | '2'>('2')
+  const [mp3Kbps, setMp3Kbps] = useState<'192' | '320'>('192')
+  const [audioRendering, setAudioRendering] = useState(false)
+  const [audioResult, setAudioResult] = useState<{ url: string; size: number; ext: 'wav' | 'mp3' } | null>(null)
 
   const duration = projectDuration(project)
   const phase = exportState.phase
@@ -67,10 +98,24 @@ export function ExportDialog() {
     [fps]
   )
 
+  // caption sidecar (.srt) built from AI caption clips
+  const srtContent = useMemo(() => buildSrtFromCaptions(project.clips), [project.clips])
+
   // always start paused — the export loop drives the playhead itself
   useEffect(() => {
-    if (open) useEditor.getState().pause()
+    if (open) {
+      useEditor.getState().pause()
+      setFileName(useEditor.getState().project.name || 'novacut-export')
+    }
   }, [open])
+
+  // free previous result blobs when the dialog closes
+  useEffect(() => {
+    if (!open && audioResult) {
+      URL.revokeObjectURL(audioResult.url)
+      setAudioResult(null)
+    }
+  }, [open, audioResult])
 
   const handlePreset = (id: string) => {
     const preset = EXPORT_PRESETS.find((p) => p.id === id)
@@ -112,6 +157,8 @@ export function ExportDialog() {
         fps,
         videoBitsPerSecond: bitrate,
         format,
+        audioBitsPerSecond: audioKbps * 1000,
+        burnIn: burnIn ? 'timecode' : undefined,
         onProgress: (p) => useEditor.getState().setExportState({ progress: p }),
       })
       setLastMime(result.mimeType)
@@ -133,6 +180,53 @@ export function ExportDialog() {
     }
   }
 
+  const handleAudioExport = async () => {
+    const store = useEditor.getState()
+    store.pause()
+    if (audioResult) {
+      URL.revokeObjectURL(audioResult.url)
+      setAudioResult(null)
+    }
+    setAudioRendering(true)
+    try {
+      const result = await exportProjectAudio(project, store.getMediaMap(), {
+        sampleRate: sampleRate === '44100' ? 44100 : 48000,
+        channels: channels === '1' ? 1 : 2,
+        format: audioFormat,
+        mp3Kbps: mp3Kbps === '320' ? 320 : 192,
+        onProgress: (p) => useEditor.getState().setExportState({ progress: p }),
+      })
+      const url = URL.createObjectURL(result.blob)
+      setAudioResult({ url, size: result.blob.size, ext: result.extension })
+      // auto-download, like the video flow
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${safeFileName(fileName)}.${result.extension}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      toast.success(`Audio exported — ${formatBytes(result.blob.size)} ${result.extension.toUpperCase()}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Audio export failed')
+    } finally {
+      setAudioRendering(false)
+    }
+  }
+
+  const handleSrtDownload = () => {
+    if (!srtContent) return
+    const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${safeFileName(fileName)}.srt`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 4000)
+    toast.success('Subtitle sidecar (.srt) downloaded')
+  }
+
   const handleClose = (o: boolean) => {
     if (o) return
     if (useEditor.getState().exportState.phase === 'recording') cancelExport()
@@ -141,7 +235,7 @@ export function ExportDialog() {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-h-[92dvh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Download className="h-4 w-4 text-fuchsia-400" />
@@ -200,6 +294,23 @@ export function ExportDialog() {
               )}
             </div>
 
+            {/* file name */}
+            <div className="space-y-1.5">
+              <Label htmlFor="export-filename" className="text-[11px] text-muted-foreground">
+                File name
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="export-filename"
+                  value={fileName}
+                  onChange={(e) => setFileName(e.target.value)}
+                  placeholder="novacut-export"
+                  className="h-9 flex-1 border-(--nc-line) bg-(--nc-panel) text-xs"
+                />
+                <span className="font-mono text-[10px] text-muted-foreground">.{extensionForMime(selectedMime)}</span>
+              </div>
+            </div>
+
             {/* quality + format */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -222,7 +333,7 @@ export function ExportDialog() {
                     ))}
                     {qualityId === 'custom' && (
                       <SelectItem value="custom" disabled className="text-xs">
-                        Custom · {Math.round(bitrate / 1_000_000)} Mbps
+                        Custom · {(bitrate / 1_000_000).toFixed(1)} Mbps
                       </SelectItem>
                     )}
                   </SelectContent>
@@ -244,6 +355,25 @@ export function ExportDialog() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* free bitrate slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] text-muted-foreground">Target bitrate</Label>
+                <span className="font-mono text-[11px] tabular-nums text-fuchsia-300">
+                  {(bitrate / 1_000_000).toFixed(1)} Mbps
+                </span>
+              </div>
+              <Slider
+                aria-label="Target bitrate"
+                min={1}
+                max={40}
+                step={0.5}
+                value={[Math.round((bitrate / 1_000_000) * 2) / 2]}
+                onValueChange={(v) => setBitrate(Math.round(v[0] * 1_000_000))}
+                className="nc-gradient [&_[data-slot=slider-range]]:opacity-0 [&_[data-slot=slider-thumb]]:border-fuchsia-400"
+              />
             </div>
 
             {/* resolution + frame rate */}
@@ -268,6 +398,37 @@ export function ExportDialog() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            {/* audio track + burn-in */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-muted-foreground">Audio bitrate</Label>
+                <Select value={String(audioKbps)} onValueChange={(v) => setAudioKbps(Number(v))}>
+                  <SelectTrigger className="h-9 w-full text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[96, 128, 192, 256].map((k) => (
+                      <SelectItem key={k} value={String(k)} className="text-xs">
+                        {k} kbps
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end justify-between gap-3 rounded-md border border-(--nc-line) bg-(--nc-panel) px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-medium">Timecode burn-in</p>
+                  <p className="text-[9px] text-muted-foreground">Stamp HH:MM.SS.FF on the picture</p>
+                </div>
+                <Switch
+                  aria-label="Timecode burn-in"
+                  checked={burnIn}
+                  onCheckedChange={setBurnIn}
+                  className="data-[state=checked]:bg-fuchsia-500"
+                />
               </div>
             </div>
 
@@ -326,15 +487,126 @@ export function ExportDialog() {
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">File</span>
                 <span className="truncate font-mono text-[11px]">
-                  {project.name || 'novacut-export'}.{extensionForMime(selectedMime)}
+                  {safeFileName(fileName)}.{extensionForMime(selectedMime)}
                 </span>
+              </div>
+            </div>
+
+            {/* audio-only mixdown */}
+            <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel) p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <AudioLines className="h-4 w-4 shrink-0 text-emerald-400" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold">Audio only</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Offline mixdown — full FX, fades, duck · faster than real time
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={duration <= 0 || audioRendering}
+                  onClick={() => void handleAudioExport()}
+                  className="h-8 shrink-0 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20"
+                >
+                  {audioRendering ? 'Rendering…' : 'Export audio'}
+                </Button>
+              </div>
+              <div className="mt-2.5 grid grid-cols-3 gap-2">
+                <Select value={audioFormat} onValueChange={(v) => setAudioFormat(v as AudioFormat)}>
+                  <SelectTrigger aria-label="Audio format" className="h-8 w-full text-[11px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="wav" className="text-[11px]">WAV · lossless</SelectItem>
+                    <SelectItem value="mp3" className="text-[11px]">MP3 · compressed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={sampleRate} onValueChange={(v) => setSampleRate(v as '44100' | '48000')}>
+                  <SelectTrigger aria-label="Sample rate" className="h-8 w-full text-[11px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="48000" className="text-[11px]">48 kHz</SelectItem>
+                    <SelectItem value="44100" className="text-[11px]">44.1 kHz</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={channels} onValueChange={(v) => setChannels(v as '1' | '2')}>
+                  <SelectTrigger aria-label="Channels" className="h-8 w-full text-[11px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2" className="text-[11px]">Stereo</SelectItem>
+                    <SelectItem value="1" className="text-[11px]">Mono</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {audioFormat === 'mp3' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">MP3 bitrate</span>
+                  <Select value={mp3Kbps} onValueChange={(v) => setMp3Kbps(v as '192' | '320')}>
+                    <SelectTrigger aria-label="MP3 bitrate" className="h-7 w-24 text-[11px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="192" className="text-[11px]">192 kbps</SelectItem>
+                      <SelectItem value="320" className="text-[11px]">320 kbps</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-[10px] text-muted-foreground">· renders at 44.1 kHz</span>
+                </div>
+              )}
+              {audioRendering && (
+                <p className="mt-2 animate-pulse text-[10px] text-emerald-300">Mixing offline — no waiting on playback…</p>
+              )}
+              {audioResult && !audioRendering && (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-emerald-500/10 px-2.5 py-1.5">
+                  <span className="font-mono text-[10px] text-emerald-300">
+                    {safeFileName(fileName)}.{audioResult.ext} · {formatBytes(audioResult.size)}
+                  </span>
+                  <a
+                    href={audioResult.url}
+                    download={`${safeFileName(fileName)}.${audioResult.ext}`}
+                    className="flex items-center gap-1 text-[10px] font-semibold text-emerald-300 underline-offset-2 hover:underline"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download again
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* captions sidecar */}
+            <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel) p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Captions className="h-4 w-4 shrink-0 text-sky-400" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold">Captions (.srt sidecar)</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {srtContent
+                        ? `${srtContent.trim().split('\n\n').length} caption${srtContent.trim().split('\n\n').length > 1 ? 's' : ''} from AI Auto Captions`
+                        : 'Run AI Auto Captions first — caption clips become sidecar cues'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={!srtContent}
+                  onClick={handleSrtDownload}
+                  className="h-8 shrink-0 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 text-xs font-semibold text-sky-300 hover:bg-sky-500/20"
+                >
+                  Download .srt
+                </Button>
               </div>
             </div>
 
             <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
               <p className="text-[11px] leading-relaxed text-amber-200">
-                Keep this tab visible and in the foreground while exporting — browsers pause hidden tabs.
+                Keep this tab visible and in the foreground while exporting video — browsers pause hidden tabs. The
+                audio mixdown does not need the tab in focus.
               </p>
             </div>
 
@@ -420,7 +692,10 @@ export function ExportDialog() {
             )}
 
             <Button asChild className="nc-gradient h-10 w-full rounded-xl font-semibold text-white hover:opacity-90">
-              <a href={exportState.url} download={`${project.name || 'novacut-export'}.${extensionForMime(lastMime)}`}>
+              <a
+                href={exportState.url}
+                download={`${safeFileName(fileName)}.${extensionForMime(lastMime)}`}
+              >
                 <Download className="h-4 w-4" />
                 Download video
               </a>
