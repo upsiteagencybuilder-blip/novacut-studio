@@ -867,3 +867,19 @@ Stage Summary:
 - Sector 15 COMPLETE: NovaCut now has working cloud project sync — the local-first editor gains one-tap Turso-backed backups (structure + thumbnail) with restore/upsert/delete, honest backend health, and graceful degradation to SQLite in dev/offline. Deployment with TURSO_* env vars lights up the real Turso backend automatically — zero code changes needed.
 - Key artifacts: rebuilt ProjectsDialog (tabs + CloudTab + DeviceTab), src/lib/cloud/backup.ts, panels.ts catalog entry, prisma tables verified.
 - Next: Sector 16 / remaining work per user's command.
+
+---
+Task ID: 19 (Day 0 — 90-Day Roadmap)
+Agent: Z.ai Code (main)
+Task: Per user command — survey the entire platform structure, reorganize the development plan better, divide it by categories for a 90-day daily-development grind, and prepare the working protocol.
+
+Work Log:
+- SURVEY receipts: HEAD 895a956 (Sector 15 Turso cloud sync already committed as b239520 with full E2E receipts in worklog Task 15 — all 15 sectors + 17 + 18 now done); worklog holds 30+ task entries; tool catalog audited per section — live/planned: ai 9/9, color 10/49, delivery 19/36, filters 12/29, libraries 11/10, motion 29/21, panels 14/19, sound 26/26, timeline 44/51, transitions 18/8, vfx 24/52 → totals 216 live / 310 planned; APIs: ai/{assistant,copilot,image,transcribe,tts} + cloud/{health,projects,share}; prisma models CloudProject/ShareLink/Feedback; @libsql/client + @prisma/adapter-libsql installed.
+- Wrote docs/ROADMAP-90.md — the full 90-day plan in 9 categories × ~10 days: A Core Editing Engine (1-10), B Visual FX & Color (11-20), C Audio Suite (21-30), D AI Studio (31-40), E Cloud/Sync/Collab (41-50), F Export & Delivery (51-58), G PWA/Performance/Reliability (59-66), H Templates/Onboarding/Growth (67-74), I Tools-Wall honesty batches + v1.0.0 (75-90); includes current-state inventory table, daily protocol (implement → lint+tsc → agent-browser E2E desktop+mobile → worklog Day-XX → Bengali report → git push origin main), weekly rhythm (10-day category regression, 7-day hygiene), non-negotiables (serial discipline, honesty, local-first, zero-error bar).
+- All four woven backlog items (audio-extract voice FX, favorites/recents effects, per-effect custom controls, beat-sync markers) are scheduled inside Categories A/C; Sector-15 follow-ups (media sync, share viewer) inside Category E.
+- No app code touched (docs-only day); lint unaffected; browser sanity re-verified before push.
+
+Stage Summary:
+- The 90-day grind plan is now a durable repo artifact (docs/ROADMAP-90.md) — every future day maps to exactly one row + one worklog Task ID (Day-01…Day-90).
+- Baseline confirmed: 15/15 sectors + verification + deep-polish rounds complete, 216 live tools, cloud backup shipped, zero unpushed feature debt.
+- Next: Day 01 (Category A — Keyframes v2 curve editor) on the user's next command.
