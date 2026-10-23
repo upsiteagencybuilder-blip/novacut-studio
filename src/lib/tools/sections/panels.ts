@@ -49,6 +49,7 @@ export const PANELS_TOOLS: ProTool[] = [
   // -------- Project & metadata --------
   { id: 'panel-project-panel', name: 'Project Panel', section: 'panels', group: 'Project & metadata', status: 'live', desc: 'Media panel imports files and persists assets in the browser', action: 'open-media' },
   { id: 'panel-media-pool', name: 'Media Pool', section: 'panels', group: 'Project & metadata', status: 'live', desc: 'Every imported asset persists in the local media library', action: 'open-media' },
+  { id: 'panel-cloud-backup', name: 'Cloud Project Backup', section: 'panels', group: 'Project & metadata', status: 'live', desc: 'Turso-backed snapshots in the projects dialog — back up, restore and manage per device', action: 'open-projects' },
   { id: 'panel-libraries-panel', name: 'Libraries Panel', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'Shared asset libraries synced across multiple projects' },
   { id: 'panel-history-panel', name: 'History Panel', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'Undo and redo with coalesced steps ship, a history list remains roadmap' },
   { id: 'panel-info-panel', name: 'Info Panel', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'Show codec, resolution and metadata of the selection' },

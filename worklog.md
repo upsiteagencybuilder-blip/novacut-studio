@@ -848,3 +848,22 @@ Stage Summary:
 - Sector 18 COMPLETE: the "loading" complaint is fixed at the root — every long AI op now shows a live elapsed counter, a phase, an honest time hint and a working Cancel; aborts are instant and silent; AI image gains a session gallery with one-tap re-import; Linear Dodge (Add) blend ships. Tool re-audit confirms every panel/dialog/AI flow works end-to-end on desktop and mobile.
 - Key artifacts: AIPanel (useAiElapsed/formatElapsed/AiBusyBar + 5 abort-wired ops + image gallery), types.ts BlendMode+'lighter', constants.ts BLEND_MODES, vfx.ts catalog flip.
 - Next: Sector 15 (Turso cloud sync) or per user's next command.
+
+---
+Task ID: 15
+Agent: Z.ai Code (main)
+Task: Sector 15 — Turso cloud sync: wire the existing (unwired) cloud backend into real UI — projects dialog Cloud Backup tab (health, backup, restore, upsert, delete), per-row device backup, honest fallback states, honest catalog entry, full E2E desktop+mobile
+
+Work Log:
+- SURVEY: the Sector-15 backend already existed but had ZERO consumers — src/lib/cloud/db.ts (Prisma + @prisma/adapter-libsql → Turso when TURSO_DATABASE_URL+TURSO_AUTH_TOKEN present, local SQLite fallback otherwise), client.ts typed wrappers, /api/cloud/{health,projects,share} routes (zod-validated upsert keyed @@unique([deviceId, localId]), idempotent delete), CloudProject/ShareLink/Feedback schema. No component imported the client; no share viewer page exists.
+- DB: prisma db push verified — cloudProject + shareLink tables live in the local file DB (0 rows), backend='sqlite' fallback path is the sandbox verification surface; the same Prisma code path automatically binds Turso in production when the two env vars are set (documented in .env.example).
+- UI (ProjectsDialog rebuilt): two tabs — "On this device" (IndexedDB list, unchanged behavior + NEW per-row cloud-backup button with spinner) and "Cloud backup" (health pill: 'Turso cloud' / 'Local SQLite (dev fallback)' / 'Cloud unreachable — backups disabled' with latency; Back up current project with 160×90 JPEG thumbnail captured from the live preview canvas; cloud list rows name · clips · synced-relative-time with Current badge, Restore + confirm-delete; empty/loading/error states; honest footnote: backups store project structure keyed to the device, media binaries stay in this browser). Share route deliberately left unwired — no viewer page exists yet and media blobs would not travel cross-device (recorded honestly, no catalog claims for share).
+- NEW src/lib/cloud/backup.ts: captureThumbnail() (largest live canvas → 160×90 JPEG data-URL, try/catch-safe) + isCloudProjectPayload() defensive shape check for cloud payloads.
+- Restore semantics: cloudLoadProject → JSON.parse → shape-validated → saveProject(parsed) → openProject(id) → dialog closes; restore genuinely replaces local state.
+- E2E receipts (agent-browser, 1280×800 + 390×844, demo): tabs render + reset to device on reopen (Radix unmount, no effect); health pill 'Local SQLite (dev fallback) · 150 ms'; backup → toast '"My First Edit ✨" backed up to the cloud' + row '6 clips · synced <1 min ago · Current'; STRONG restore proof — added 'Extra Clip' (7 clips) → Restore → exactly 6 clips back, extra gone; UPSERT proof — modified to 7 clips → per-row device backup → Cloud tab shows a SINGLE row at 7 clips (in-place update, no duplicate); delete → confirm → empty state back; mobile: tabs, health, backup + row all work; /api/cloud/* all 200 in dev.log (health 23ms, projects GET 17ms, POST 57ms); zero page errors on fresh sessions; eslint + tsc(src) clean.
+- CATALOG honesty: added live 'Cloud Project Backup' (panels, 'Project & metadata', action open-projects) — visible in the Pro panel, deep-link opens the projects dialog. No share flips (viewer absent).
+
+Stage Summary:
+- Sector 15 COMPLETE: NovaCut now has working cloud project sync — the local-first editor gains one-tap Turso-backed backups (structure + thumbnail) with restore/upsert/delete, honest backend health, and graceful degradation to SQLite in dev/offline. Deployment with TURSO_* env vars lights up the real Turso backend automatically — zero code changes needed.
+- Key artifacts: rebuilt ProjectsDialog (tabs + CloudTab + DeviceTab), src/lib/cloud/backup.ts, panels.ts catalog entry, prisma tables verified.
+- Next: Sector 16 / remaining work per user's command.
