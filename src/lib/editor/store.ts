@@ -123,7 +123,9 @@ interface EditorStore {
   deleteSelected: () => void
   rippleDeleteSelected: () => void
   duplicateClip: (id: string) => void
+  duplicateSelected: () => void
   selectClip: (id: string | null, additive?: boolean) => void
+  setSelection: (ids: string[]) => void
   /** copy selected clips to the internal clipboard (Ctrl+C) */
   copySelected: () => void
   /** copy then delete in one history step (Ctrl+X) */
@@ -1017,6 +1019,25 @@ export const useEditor = create<EditorStore>((set, get) => ({
     s.addClip(copy)
   },
 
+  duplicateSelected: () => {
+    const s = get()
+    const sel = s.project.clips.filter((c) => s.selectedClipIds.includes(c.id))
+    if (!sel.length) return
+    s.pushHistory()
+    const selStart = Math.min(...sel.map((c) => c.start))
+    const selEnd = Math.max(...sel.map((c) => c.start + c.duration))
+    const offset = selEnd - selStart
+    const copies = sel.map((c) => ({
+      ...(JSON.parse(JSON.stringify(c)) as Clip),
+      id: uid('clip_'),
+      start: round2(c.start + offset),
+    }))
+    set((st) => ({
+      project: withUpdatedAt({ ...st.project, clips: [...st.project.clips, ...copies] }),
+      selectedClipIds: copies.map((c) => c.id),
+    }))
+  },
+
   selectClip: (id, additive) => {
     if (id === null) {
       set({ selectedClipIds: [] })
@@ -1032,6 +1053,10 @@ export const useEditor = create<EditorStore>((set, get) => ({
       }
       return { selectedClipIds: [id] }
     })
+  },
+
+  setSelection: (ids) => {
+    set({ selectedClipIds: ids })
   },
 
   copySelected: () => {

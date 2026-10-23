@@ -136,10 +136,16 @@ function useKeyboardShortcuts() {
         return
       }
       if (mod && key === 'd') {
-        // Premiere-style duplicate alias (D also duplicates)
+        // Premiere-style duplicate alias (D also duplicates) — batch-aware
         e.preventDefault()
-        const id = s.selectedClipIds[0]
-        if (id) s.duplicateClip(id)
+        if (s.selectedClipIds.length > 1) {
+          const n = s.selectedClipIds.length
+          s.duplicateSelected()
+          toast.success(`${n} clips duplicated`)
+        } else {
+          const id = s.selectedClipIds[0]
+          if (id) s.duplicateClip(id)
+        }
         return
       }
       // any other Ctrl/Cmd combination must never fall through to the
@@ -259,10 +265,22 @@ function useKeyboardShortcuts() {
         }
         case 'd':
         case 'D': {
-          const id = s.selectedClipIds[0]
-          if (id) s.duplicateClip(id)
+          if (s.selectedClipIds.length > 1) {
+            const n = s.selectedClipIds.length
+            s.duplicateSelected()
+            toast.success(`${n} clips duplicated`)
+          } else {
+            const id = s.selectedClipIds[0]
+            if (id) s.duplicateClip(id)
+          }
           break
         }
+        case 'Escape':
+          if (s.selectedClipIds.length) {
+            s.selectClip(null)
+            toast('Selection cleared', { duration: 900 })
+          }
+          break
         case 'Delete':
         case 'Backspace':
           e.preventDefault()

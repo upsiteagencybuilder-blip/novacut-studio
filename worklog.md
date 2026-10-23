@@ -903,3 +903,22 @@ Stage Summary:
 - Day 01 COMPLETE: keyframes graduate from rows-only to a pro curve editor — 9 easing presets (engine-wide), draggable keys on a visual value-vs-time graph, double-click to add, live playhead, per-key or bulk easing — desktop + mobile verified, catalog honestly extended.
 - Key artifacts: KeyframeCurve.tsx (new), utils/types/constants (4 new easings), store.addKeyframeAt, PropertiesPanel integration, timeline.ts catalog entry.
 - Next: Day 02 (Category A — Multi-select + batch ops) on the user's next command.
+
+---
+Task ID: Day-02
+Agent: Z.ai Code (main)
+Task: ROADMAP-90 Category A, Day 2 — Multi-select + batch ops: marquee selection, mobile long-press multi-select, batch duplicate/delete with floating N-selected badge, Escape clear.
+
+Work Log:
+- SURVEY: shift/ctrl-click multi-select + group-move (frozen positions) + deleteSelected + selectAll + Ctrl+A/C/X/V + Alt-arrow batch nudge already wired from earlier sectors. Genuine gaps: no marquee, no batch duplicate (D duplicated only the first selected), no touch path to multi-select, no Escape, no selection UI affordance.
+- STORE: new setSelection(ids) (raw replace, no history — marquee streams through it) + duplicateSelected() — duplicates the WHOLE selection as a block placed after the selection end (offset = selEnd - selStart, deep-cloned, new ids), selects the copies, ONE history push.
+- TIMELINE marquee: TrackLane background pointerdown/move/up now drives a rubber-band — viewport-space rect (position:fixed overlay z-47, escapes scroll clipping), 3px threshold so plain clicks still deselect, hit test = getBoundingClientRect intersection against every [data-clip-id] element, replace semantics (shift/ctrl/meta = additive on top of the pre-drag selection), setSelection churn-guarded.
+- CLIPBLOCK touch: tap = replace-select, drag = replace-select then move, LONG-PRESS (380ms, pointerType touch) = ADD to the multi-selection; deferred selection via pendingSelectRef so touch never collapses an existing selection before the gesture is known; long-press timer cleared on threshold-cross and on release.
+- KEYBOARD: Escape clears the selection (toast); D / Ctrl+D now batch-aware (>1 selected → duplicateSelected with toast 'N clips duplicated').
+- UI: floating batch badge over the tracks when 2+ selected — 'N selected' + Duplicate + Delete (aria-labeled) + Clear, fuchsia glass pill (data-nc-batch-badge), plus honest catalog entries timeline-marquee-select + timeline-batch-operations (both live, real behavior).
+- E2E receipts (agent-browser, demo): DESKTOP 1280×800 — marquee drag over 2 rows → exactly 5 selected (audio row excluded), marquee rect visible mid-drag and removed on release, badge '5 selected'; GROUP MOVE — dragging one selected clip moved ALL five by exactly +1.11s each on their own tracks; batch duplicate via D: 6→11 clips, selection = the 5 copies, ONE undo → 6; batch delete via Delete: 6→1, badge gone, ONE undo → 6; Ctrl+A = 6, Escape = 0; shift-marquee additive preserved the 3-image base and added the audio clip (4 = 3 image + 1 audio, kind-verified); badge Duplicate click: 6→10, copies selected, one undo → 6; zero page errors. MOBILE 390×844 — synthetic touch-pointer receipts (setPointerCapture patched only for the synthetic dispatch): quick tap → replace-select (1), long-press second clip (380ms) → ADDITIVE (2) with badge visible; badge Duplicate → 8 clips / 2 copies selected; badge Delete → 6 clips, badge cleared; playback 0→1.44s regression clean; zero errors. Screenshots verify-d2-desktop.png (5 selected rings + badge + inspector '5 clips selected' state) / verify-d2-mobile.png. eslint + filtered tsc clean.
+
+Stage Summary:
+- Day 02 COMPLETE: professional multi-selection UX — marquee rubber-band, touch long-press multi-add, group move (pre-existing), one-undo batch duplicate/delete, batch nudge (pre-existing), Escape, and a discoverable floating action badge; catalog honestly extended (+2 live).
+- Key artifacts: store.setSelection + duplicateSelected, Timeline marquee + batch badge, ClipBlock touch gesture state machine, EditorShell Escape/batch-D.
+- Next: Day 03 (Category A — Magnetic timeline + ripple/roll/slip/slide edit modes) on the user's next command.

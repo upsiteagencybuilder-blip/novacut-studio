@@ -88,6 +88,9 @@ export function ClipBlock({
   const groupOrigRef = useRef<GroupOrigin[] | null>(null)
   /** was the clip already inside the selection when the pointer went down? */
   const wasSelectedRef = useRef(false)
+  /** touch: deferred replace-select (tap) vs long-press additive select */
+  const longPressRef = useRef<number | null>(null)
+  const pendingSelectRef = useRef(false)
 
   const asset = useEditor((s) => (clip.mediaId ? s.media.find((m) => m.id === clip.mediaId) : undefined))
   const razorMode = useEditor((s) => s.toolMode === 'razor')
@@ -104,8 +107,20 @@ export function ClipBlock({
     const st0 = useEditor.getState()
     wasSelectedRef.current = st0.selectedClipIds.includes(clip.id)
     if (!wasSelectedRef.current) {
-      // clip outside the current selection → select (or toggle into) it
-      st0.selectClip(clip.id, e.shiftKey || e.ctrlKey || e.metaKey)
+      // clip outside the current selection → select (or toggle into) it.
+      // Touch defers the decision: tap = replace-select, long-press = ADD to
+      // the multi-selection, drag = replace-select then move.
+      if (e.pointerType === 'touch') {
+        pendingSelectRef.current = true
+        longPressRef.current = window.setTimeout(() => {
+          longPressRef.current = null
+          if (!activeRef.current || startedRef.current) return
+          pendingSelectRef.current = false
+          useEditor.getState().selectClip(clip.id, true)
+        }, 380)
+      } else {
+        st0.selectClip(clip.id, e.shiftKey || e.ctrlKey || e.metaKey)
+      }
     }
     // if the clip was already selected the WHOLE selection is kept — dragging
     // a member of a multi-selection must never collapse it to one clip
@@ -160,6 +175,15 @@ export function ClipBlock({
     if (!startedRef.current) {
       if (Math.abs(e.clientX - startXRef.current) < DRAG_THRESHOLD_PX) return
       startedRef.current = true
+      if (longPressRef.current !== null) {
+        window.clearTimeout(longPressRef.current)
+        longPressRef.current = null
+      }
+      if (pendingSelectRef.current) {
+        // real drag on a touch pointer that hadn't been selected yet
+        pendingSelectRef.current = false
+        useEditor.getState().selectClip(clip.id)
+      }
     }
     const st = useEditor.getState()
     const dx = (e.clientX - startXRef.current) / zoom
@@ -229,6 +253,16 @@ export function ClipBlock({
 
   const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!activeRef.current) return
+    if (longPressRef.current !== null) {
+      window.clearTimeout(longPressRef.current)
+      longPressRef.current = null
+    }
+    // touch tap on an unselected clip (no long-press, no drag) → select it
+    if (!startedRef.current && pendingSelectRef.current) {
+      pendingSelectRef.current = false
+      useEditor.getState().selectClip(clip.id)
+    }
+    pendingSelectRef.current = false
     // modifier-click on an already-selected clip with no drag movement →
     // toggle it back OFF (deselect from the multi-selection)
     if (!startedRef.current && wasSelectedRef.current && (e.shiftKey || e.ctrlKey || e.metaKey)) {
@@ -264,6 +298,7 @@ export function ClipBlock({
   return (
     <div
       data-drag="move"
+      data-clip-id={clip.id}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}

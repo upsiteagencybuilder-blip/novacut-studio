@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { AudioLines, Blend, Eye, EyeOff, Film, Layers, Lock, LockOpen, Plus, Volume2, VolumeX, X } from 'lucide-react'
+import { AudioLines, Blend, Copy, Eye, EyeOff, Film, Layers, Lock, LockOpen, Plus, Trash2, Volume2, VolumeX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -153,6 +153,48 @@ export function Timeline() {
   const handleHoverTrack = useCallback((id: string | null) => setHoverTrackId(id), [])
   const handleSnapLine = useCallback((x: number | null) => setSnapLineX(x), [])
 
+  /* ---------------- marquee (rubber-band) selection ---------------- */
+
+  const marqueeRef = useRef<{ additive: boolean; base: string[]; startX: number; startY: number } | null>(null)
+  const [marqueeRect, setMarqueeRect] = useState<{ l: number; t: number; w: number; h: number } | null>(null)
+
+  const beginMarquee = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    const st = useEditor.getState()
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey
+    marqueeRef.current = { additive, base: additive ? st.selectedClipIds : [], startX: e.clientX, startY: e.clientY }
+    // plain click on empty lane still clears the selection
+    if (!additive) st.selectClip(null)
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }, [])
+
+  const moveMarquee = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const m = marqueeRef.current
+    if (!m) return
+    const l = Math.min(m.startX, e.clientX)
+    const t = Math.min(m.startY, e.clientY)
+    const w = Math.abs(e.clientX - m.startX)
+    const h = Math.abs(e.clientY - m.startY)
+    // below the drag threshold → treat as a plain click, no rect yet
+    if (w < 3 && h < 3) return
+    setMarqueeRect({ l, t, w, h })
+    const hits: string[] = []
+    document.querySelectorAll<HTMLElement>('[data-clip-id]').forEach((el) => {
+      const r = el.getBoundingClientRect()
+      if (r.left < l + w && r.right > l && r.top < t + h && r.bottom > t) hits.push(el.dataset.clipId!)
+    })
+    const merged = m.additive ? Array.from(new Set([...m.base, ...hits])) : hits
+    const st = useEditor.getState()
+    if (merged.length !== st.selectedClipIds.length || merged.some((id) => !st.selectedClipIds.includes(id))) {
+      st.setSelection(merged)
+    }
+  }, [])
+
+  const endMarquee = useCallback(() => {
+    marqueeRef.current = null
+    setMarqueeRect(null)
+  }, [])
+
   const emptyHintTrackId =
     project.clips.length === 0
       ? (project.tracks.find((t) => t.kind === 'video')?.id ?? project.tracks[0]?.id ?? null)
@@ -207,6 +249,9 @@ export function Timeline() {
                       onDragChange={handleDragChange}
                       onHoverTrack={handleHoverTrack}
                       onSnapLine={handleSnapLine}
+                      onMarqueeStart={beginMarquee}
+                      onMarqueeMove={moveMarquee}
+                      onMarqueeEnd={endMarquee}
                     />
                   </div>
                 )
@@ -309,6 +354,63 @@ export function Timeline() {
               </div>
             </div>
           </div>
+
+          {/* batch-selection badge — floating over the tracks while 2+ clips selected */}
+          {selectedIds.length > 1 && (
+            <div
+              role="toolbar"
+              aria-label={`${selectedIds.length} clips selected — batch actions`}
+              data-nc-batch-badge
+              className="absolute bottom-2 left-1/2 z-[46] flex -translate-x-1/2 items-center gap-1 rounded-full border border-fuchsia-400/40 bg-(--nc-panel-strong)/95 py-1 pr-1 pl-3 shadow-lg backdrop-blur"
+            >
+              <span className="text-[11px] font-medium tabular-nums text-fuchsia-200">{selectedIds.length} selected</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 rounded-full px-2 text-[11px] text-foreground/80 hover:text-foreground"
+                onClick={() => {
+                  const n = selectedIds.length
+                  useEditor.getState().duplicateSelected()
+                  toast.success(`${n} clips duplicated`)
+                }}
+              >
+                <Copy className="size-3" />
+                Duplicate
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Delete ${selectedIds.length} selected clips`}
+                className="h-7 w-7 rounded-full p-0 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+                onClick={() => {
+                  const n = selectedIds.length
+                  useEditor.getState().deleteSelected()
+                  toast(`${n} clips deleted`)
+                }}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Clear selection"
+                className="h-7 w-7 rounded-full p-0 text-muted-foreground hover:text-foreground"
+                onClick={() => useEditor.getState().selectClip(null)}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
+          )}
+
+          {/* marquee rubber-band rect (viewport space → escapes timeline scroll clipping) */}
+          {marqueeRect && (
+            <div
+              data-nc-marquee
+              aria-hidden
+              className="pointer-events-none fixed z-[47] rounded-sm border border-fuchsia-300/70 bg-fuchsia-400/15"
+              style={{ left: marqueeRect.l, top: marqueeRect.t, width: marqueeRect.w, height: marqueeRect.h }}
+            />
+          )}
         </div>
       </div>
     </TooltipProvider>
@@ -390,6 +492,9 @@ interface TrackLaneProps {
   onDragChange: (d: ClipDragInfo | null) => void
   onHoverTrack: (trackId: string | null) => void
   onSnapLine: (x: number | null) => void
+  onMarqueeStart: (e: ReactPointerEvent<HTMLDivElement>) => void
+  onMarqueeMove: (e: ReactPointerEvent<HTMLDivElement>) => void
+  onMarqueeEnd: () => void
 }
 
 function TrackLane({
@@ -405,13 +510,19 @@ function TrackLane({
   onDragChange,
   onHoverTrack,
   onSnapLine,
+  onMarqueeStart,
+  onMarqueeMove,
+  onMarqueeEnd,
 }: TrackLaneProps) {
   return (
     <div
       ref={(el) => {
         registerLane(track.id, el)
       }}
-      onPointerDown={() => useEditor.getState().selectClip(null)}
+      onPointerDown={onMarqueeStart}
+      onPointerMove={onMarqueeMove}
+      onPointerUp={onMarqueeEnd}
+      onPointerCancel={onMarqueeEnd}
       className={cn(
         'nc-timeline-bg relative h-full min-w-0 flex-1 border-b border-(--nc-line)',
         track.hidden && 'opacity-40',
