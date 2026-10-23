@@ -167,6 +167,34 @@ export function easeBounce(p: number): number {
   return n1 * (p -= 2.625 / d1) * p + 0.984375
 }
 
+/** Back-in: pulls slightly negative before accelerating (anticipation) */
+export function easeBackIn(p: number): number {
+  const c1 = 1.70158
+  const c3 = c1 + 1
+  return c3 * p * p * p - c1 * p * p
+}
+
+/** Back-out: overshoots past the target then settles back */
+export function easeBackOut(p: number): number {
+  const c1 = 1.70158
+  const c3 = c1 + 1
+  const q = p - 1
+  return 1 + c3 * q * q * q + c1 * q * q
+}
+
+/** Elastic-out: damped spring oscillation around the target value */
+export function easeElastic(p: number): number {
+  if (p <= 0) return 0
+  if (p >= 1) return 1
+  const c4 = (2 * Math.PI) / 3
+  return Math.pow(2, -10 * p) * Math.sin((p * 10 - 0.75) * c4) + 1
+}
+
+/** Hold (step): keeps the previous key's value until the next key is reached */
+export function easeHold(p: number): number {
+  return p >= 1 ? 1 : 0
+}
+
 export function applyEasing(p: number, easing: EasingType): number {
   const x = clamp(p, 0, 1)
   switch (easing) {
@@ -178,6 +206,14 @@ export function applyEasing(p: number, easing: EasingType): number {
       return easeInOut(x)
     case 'bounce':
       return easeBounce(x)
+    case 'backIn':
+      return easeBackIn(x)
+    case 'backOut':
+      return easeBackOut(x)
+    case 'elastic':
+      return easeElastic(x)
+    case 'hold':
+      return easeHold(x)
     default:
       return x
   }

@@ -58,6 +58,7 @@ import {
   TEXT_FONTS,
 } from '@/lib/editor/constants'
 import { clamp, computeHistogram, formatTimecode, KEYFRAME_PROPERTIES } from '@/lib/editor/utils'
+import { KeyframeCurveEditor } from '@/components/editor/preview/KeyframeCurve'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -931,6 +932,7 @@ function AnimationSection({ clip, fps }: { clip: Clip; fps: number }) {
       sectionId="animation"
       hint="Move the playhead and add keys — values animate between keys with your chosen easing."
     >
+      {hasKeys && <KeyframeCurveEditor clip={clip} fps={fps} />}
       {props.map((p) => (
         <KeyframePropertyCard key={p.id} clip={clip} meta={p} fps={fps} />
       ))}

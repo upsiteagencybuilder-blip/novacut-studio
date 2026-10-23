@@ -883,3 +883,23 @@ Stage Summary:
 - The 90-day grind plan is now a durable repo artifact (docs/ROADMAP-90.md) — every future day maps to exactly one row + one worklog Task ID (Day-01…Day-90).
 - Baseline confirmed: 15/15 sectors + verification + deep-polish rounds complete, 216 live tools, cloud backup shipped, zero unpushed feature debt.
 - Next: Day 01 (Category A — Keyframes v2 curve editor) on the user's next command.
+
+---
+Task ID: Day-01
+Agent: Z.ai Code (main)
+Task: ROADMAP-90 Category A (Core Editing Engine), Day 1 — Keyframes v2: per-property curve editor with easing presets + visual graph.
+
+Work Log:
+- SURVEY: existing keyframe model (Keyframe{id,property,time,value,easing}, 7 properties, evaluateKeyframeProperty with per-segment left-key easing), Animation section = rows only (time/value/easing select/delete), EASING_OPTIONS had 5 presets, no graph anywhere.
+- EASING v2: EasingType union +4 pro presets — backIn (anticipation), backOut (overshoot settle), elastic (damped spring), hold (step); easeBackIn/easeBackOut/easeElastic/easeHold in utils.ts, applyEasing switch extended (9 presets), EASING_OPTIONS labels incl. 'Hold (step)'.
+- STORE: new addKeyframeAt(clipId,property,time,value) — clamps to clip duration, dedupes within 0.05s (same slot updates value instead of stacking), single history push 'kf-add'.
+- NEW src/components/editor/preview/KeyframeCurve.tsx — per-property curve editor: property chips (with key counts), SVG value-vs-time graph (auto-range sampled per-segment so overshoot easings fit, grid, axis labels, timecode scale), draggable key dots (pointer capture, drag = retime+revalue, frame-grid snapping via fps, value clamped to meta range, ONE history push per gesture via pushHistory('kf-drag') + history:false moves), live amber playhead line, double-click graph = add key at that time with the currently evaluated value, 9 easing chips with mini curve previews — applied to the selected key, or to ALL keys of the property when none selected; touch-action none for mobile drag; full aria (tablist, aria-pressed, role=img with keys count).
+- PropertiesPanel AnimationSection: renders <KeyframeCurveEditor> above the key rows when the clip has any keys (rows kept for precision input).
+- CATALOG honesty: timeline-keyframe-curve-editor flipped live with deep-link open-properties-animation (real feature + E2E proof).
+- E2E receipts (agent-browser, demo project): DESKTOP 1280×800 — 2 scale keys via diamonds → editor auto-appears (aria 'Scale keyframe curve graph with 2 keys', 9 chips, path drawn); DRAG key (0.6s,1.0)→(1.63s,1.86) frame-snapped, path re-drawn, dots stay 2; easing backOut applied to selected key (store easing + aria-pressed true); curve-shape proof — elastic path oscillates (y 64.5→105.3→118.9→108.6) vs easeInOut smooth (25.5→26.7→28.6→31.3), distinct paths per easing; UNDO — one undo reverts exactly one chip click (backOut→elastic; pushHistory key-coalescing 900ms confirmed as intended rapid-click merge); dblclick adds 3rd key t=0.78 with evaluated flat value 1.86; playback 0→3.45s clean. MOBILE 390×844 — Edit sheet → graph renders (Rotation 2 dots, 9 chips); bounce chip with no selection applies to ALL keys (by design); drag (0.5,0)→(1.0,0.65) path re-drawn; dblclick inside dedupe range updates value (no dup) and at 30% adds 3rd key; screenshots verify-d1-desktop.png / verify-d1-mobile.png show the graph with oscillation, playhead line and all easing chips. ZERO page errors both viewports; eslint + filtered tsc clean.
+- Docs: plan lives in docs/ROADMAP-90.md (Day-01 row: 'Keyframes v2 — per-property curve editor (easing presets + visual graph)') — shipped as specified.
+
+Stage Summary:
+- Day 01 COMPLETE: keyframes graduate from rows-only to a pro curve editor — 9 easing presets (engine-wide), draggable keys on a visual value-vs-time graph, double-click to add, live playhead, per-key or bulk easing — desktop + mobile verified, catalog honestly extended.
+- Key artifacts: KeyframeCurve.tsx (new), utils/types/constants (4 new easings), store.addKeyframeAt, PropertiesPanel integration, timeline.ts catalog entry.
+- Next: Day 02 (Category A — Multi-select + batch ops) on the user's next command.

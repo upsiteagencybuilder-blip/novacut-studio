@@ -486,6 +486,10 @@ export const EASING_OPTIONS: { id: EasingType; label: string }[] = [
   { id: 'easeOut', label: 'Ease Out' },
   { id: 'easeInOut', label: 'Ease In Out' },
   { id: 'bounce', label: 'Bounce' },
+  { id: 'backIn', label: 'Back In' },
+  { id: 'backOut', label: 'Back Out' },
+  { id: 'elastic', label: 'Elastic' },
+  { id: 'hold', label: 'Hold (step)' },
 ]
 
 export const DEFAULT_CHROMA_KEY: ChromaKey = {

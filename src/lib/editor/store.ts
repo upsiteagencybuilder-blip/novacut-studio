@@ -173,6 +173,7 @@ interface EditorStore {
 
   /* ---------- keyframes ---------- */
   addKeyframeAtPlayhead: (clipId: string, property: KeyframeProperty) => void
+  addKeyframeAt: (clipId: string, property: KeyframeProperty, time: number, value: number) => void
   updateKeyframe: (clipId: string, kfId: string, patch: Partial<Keyframe>, history?: boolean | string) => void
   removeKeyframe: (clipId: string, kfId: string) => void
 
@@ -930,6 +931,36 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const value = baseValueForProperty(clip, property)
     const kf: Keyframe = { id: uid('kf_'), property, time: tLocal, value, easing: 'easeInOut' }
     get().pushHistory()
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: st.project.clips.map((c) => (c.id === clipId ? { ...c, keyframes: [...(c.keyframes ?? []), kf] } : c)),
+      }),
+    }))
+  },
+
+  addKeyframeAt: (clipId, property, time, value) => {
+    const s = get()
+    const clip = s.project.clips.find((c) => c.id === clipId)
+    if (!clip) return
+    const tLocal = round2(clamp(time, 0, clip.duration))
+    const existing = (clip.keyframes ?? []).find((k) => k.property === property && Math.abs(k.time - tLocal) < 0.05)
+    get().pushHistory('kf-add')
+    if (existing) {
+      // same slot: update the value instead of stacking two keys on one frame
+      set((st) => ({
+        project: withUpdatedAt({
+          ...st.project,
+          clips: st.project.clips.map((c) =>
+            c.id === clipId
+              ? { ...c, keyframes: (c.keyframes ?? []).map((k) => (k.id === existing.id ? { ...k, value } : k)) }
+              : c
+          ),
+        }),
+      }))
+      return
+    }
+    const kf: Keyframe = { id: uid('kf_'), property, time: tLocal, value, easing: 'easeInOut' }
     set((st) => ({
       project: withUpdatedAt({
         ...st.project,

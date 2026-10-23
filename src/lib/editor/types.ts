@@ -134,7 +134,16 @@ export type StickerAnimation = 'none' | 'pop' | 'float' | 'spin' | 'pulse'
 
 /** Properties that can be keyframed */
 export type KeyframeProperty = 'x' | 'y' | 'scale' | 'rotation' | 'opacity' | 'volume' | 'iris'
-export type EasingType = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 'bounce'
+export type EasingType =
+  | 'linear'
+  | 'easeIn'
+  | 'easeOut'
+  | 'easeInOut'
+  | 'bounce'
+  | 'backIn'
+  | 'backOut'
+  | 'elastic'
+  | 'hold'
 
 /**
  * Shape-wipe masks for transitions (drawn on the INCOMING clip, animated via
