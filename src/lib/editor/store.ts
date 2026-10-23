@@ -102,7 +102,8 @@ interface EditorStore {
 
   /* ---------- clips ---------- */
   addClip: (clip: Clip, opts?: { select?: boolean }) => void
-  addClipFromMediaId: (mediaId: string) => void
+  /** `at` (seconds) drops the clip at that timeline time (e.g. the playhead); default appends at the track end */
+  addClipFromMediaId: (mediaId: string, at?: number) => void
   addTextClip: (preset?: TextPreset, at?: { x: number; y: number }) => void
   addStickerClip: (req: StickerRequest) => void
   updateClip: (id: string, patch: ClipPatch, history?: boolean | string) => void
@@ -463,11 +464,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
     }))
   },
 
-  addClipFromMediaId: (mediaId) => {
+  addClipFromMediaId: (mediaId, at) => {
     const s = get()
     const asset = s.media.find((m) => m.id === mediaId)
     if (!asset) return
-    const clip = createClipFromMedia(s.project, asset)
+    const clip = createClipFromMedia(s.project, asset, undefined, typeof at === 'number' ? Math.max(0, at) : undefined)
     s.addClip(clip)
   },
 

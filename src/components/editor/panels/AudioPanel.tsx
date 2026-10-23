@@ -4,16 +4,37 @@
  * Audio panel — voiceover recorder, master volume control,
  * audio-only media library and tips.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Lightbulb, Loader2, Mic, Music, Plus, Square, Upload, Volume2, VolumeX, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AudioWaveform,
+  Lightbulb,
+  Library as LibraryIcon,
+  Loader2,
+  Mic,
+  Music,
+  Plus,
+  Square,
+  Star,
+  Upload,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
+import { SoundBrowser } from '@/components/editor/panels/SoundBrowser'
+import { loadIdList, saveIdList, toggleIdInList } from '@/lib/effects/favorites'
 import { useEditor } from '@/lib/editor/store'
 import { importFiles } from '@/lib/editor/importer'
 import { formatShortTime } from '@/lib/editor/utils'
+import { cn } from '@/lib/utils'
 
 type RecState = 'idle' | 'recording' | 'processing'
+type AudioTab = 'library' | 'music' | 'sfx'
+
+/** audio-asset favorites (separate from the effect-favorites keys) */
+const AUDIO_FAVORITES_KEY = 'novacut.audio.favorites.v1'
 
 const EMERALD_GRADIENT = 'linear-gradient(90deg, #10b981, #34d399)'
 const ROSE_GRADIENT = 'linear-gradient(90deg, #f43f5e, #fb7185)'
@@ -289,7 +310,51 @@ function VoiceoverRecorder() {
 
 /* ---------------- panel ---------------- */
 
+const AUDIO_TABS: Array<{ id: AudioTab; label: string; icon: typeof Music }> = [
+  { id: 'library', label: 'Library', icon: LibraryIcon },
+  { id: 'music', label: 'Music', icon: Music },
+  { id: 'sfx', label: 'SFX', icon: AudioWaveform },
+]
+
 export function AudioPanel() {
+  const [tab, setTab] = useState<AudioTab>('library')
+
+  return (
+    <div className='space-y-3'>
+      {/* ---------- hub tabs ---------- */}
+      <div
+        className='grid grid-cols-3 gap-1 rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-1'
+        role='tablist'
+        aria-label='Audio sections'
+      >
+        {AUDIO_TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type='button'
+            role='tab'
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={cn(
+              'flex h-8 items-center justify-center gap-1.5 rounded-lg text-[11px] font-semibold transition',
+              tab === id
+                ? 'nc-gradient text-white shadow-md'
+                : 'text-muted-foreground hover:bg-(--nc-panel) hover:text-foreground',
+            )}
+          >
+            <Icon className='size-3.5' />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'library' && <LibraryTab />}
+      {tab === 'music' && <SoundBrowser category='music' />}
+      {tab === 'sfx' && <SoundBrowser category='sound' />}
+    </div>
+  )
+}
+
+function LibraryTab() {
   const media = useEditor((s) => s.media)
   const audioAssets = media.filter((m) => m.kind === 'audio')
   const setImporting = useEditor((s) => s.setImporting)
@@ -299,6 +364,22 @@ export function AudioPanel() {
   const masterMuted = useEditor((s) => s.masterMuted)
   const setMasterVolume = useEditor((s) => s.setMasterVolume)
   const toggleMasterMuted = useEditor((s) => s.toggleMasterMuted)
+
+  /* audio-asset favorites — persisted locally */
+  const [favIds, setFavIds] = useState<string[]>(() => loadIdList(AUDIO_FAVORITES_KEY))
+  const [favsOnly, setFavsOnly] = useState(false)
+  const toggleFav = useCallback((id: string) => {
+    setFavIds((prev) => {
+      const next = toggleIdInList(prev, id)
+      saveIdList(AUDIO_FAVORITES_KEY, next)
+      return next
+    })
+  }, [])
+
+  const shownAssets = useMemo(
+    () => (favsOnly ? audioAssets.filter((a) => favIds.includes(a.id)) : audioAssets),
+    [audioAssets, favIds, favsOnly],
+  )
 
   const audioInputRef = useRef<HTMLInputElement>(null)
   const effectiveVolume = masterMuted ? 0 : masterVolume
@@ -335,61 +416,61 @@ export function AudioPanel() {
   )
 
   return (
-    <div className="space-y-3">
+    <div className='space-y-3'>
       {/* ---------- voiceover recorder ---------- */}
       <VoiceoverRecorder />
 
       {/* ---------- master volume ---------- */}
-      <div className="nc-glass rounded-lg p-3">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div className='nc-glass rounded-lg p-3'>
+        <div className='flex items-center justify-between'>
+          <span className='text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'>
             Master volume
           </span>
           <button
-            type="button"
+            type='button'
             title={masterMuted ? 'Unmute master' : 'Mute master'}
             onClick={toggleMasterMuted}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-(--nc-panel) text-muted-foreground transition hover:bg-(--nc-panel-strong) hover:text-foreground"
+            className='flex h-8 w-8 items-center justify-center rounded-lg bg-(--nc-panel) text-muted-foreground transition hover:bg-(--nc-panel-strong) hover:text-foreground'
           >
-            {masterMuted ? <VolumeX className="size-4 text-rose-400" /> : <Volume2 className="size-4" />}
+            {masterMuted ? <VolumeX className='size-4 text-rose-400' /> : <Volume2 className='size-4' />}
           </button>
         </div>
-        <div className="mt-2.5 flex items-center gap-2.5">
+        <div className='mt-2.5 flex items-center gap-2.5'>
           <Slider
             min={0}
             max={1}
             step={0.01}
             value={[effectiveVolume]}
             onValueChange={(v) => setMasterVolume(v[0] ?? 0)}
-            className="flex-1"
+            className='flex-1'
           />
-          <span className="w-9 text-right text-[10px] tabular-nums text-muted-foreground">
+          <span className='w-9 text-right text-[10px] tabular-nums text-muted-foreground'>
             {Math.round(effectiveVolume * 100)}%
           </span>
         </div>
       </div>
 
       {/* ---------- audio library ---------- */}
-      <section className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <section className='space-y-1.5'>
+        <div className='flex items-center justify-between'>
+          <span className='text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'>
             Audio library
           </span>
           <button
-            type="button"
-            title="Import audio files"
+            type='button'
+            title='Import audio files'
             onClick={() => audioInputRef.current?.click()}
-            className="flex h-7 items-center gap-1 rounded-lg bg-(--nc-panel) px-2 text-[11px] text-muted-foreground transition hover:bg-(--nc-panel-strong) hover:text-foreground"
+            className='flex h-7 items-center gap-1 rounded-lg bg-(--nc-panel) px-2 text-[11px] text-muted-foreground transition hover:bg-(--nc-panel-strong) hover:text-foreground'
           >
-            <Upload className="size-3" />
+            <Upload className='size-3' />
             Import
           </button>
           <input
             ref={audioInputRef}
-            type="file"
+            type='file'
             multiple
-            accept="audio/*"
-            className="hidden"
+            accept='audio/*'
+            className='hidden'
             onChange={(e) => {
               const files = Array.from(e.target.files ?? [])
               e.target.value = ''
@@ -398,41 +479,97 @@ export function AudioPanel() {
           />
         </div>
 
-        {audioAssets.length > 0 ? (
-          <div className="space-y-1.5">
-            {audioAssets.map((asset) => (
-              <div
-                key={asset.id}
-                className="flex items-center gap-2 rounded-lg border border-(--nc-line) bg-(--nc-panel) p-2 transition hover:border-emerald-400/50"
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15">
-                  <Music className="size-4 text-emerald-300" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[11px]" title={asset.name}>
-                    {asset.name}
-                  </p>
-                  {asset.duration > 0 && (
-                    <span className="mt-0.5 inline-block rounded bg-(--nc-scrim-strong) px-1 text-[9px] tabular-nums text-white/90">
-                      {formatShortTime(asset.duration)}
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  title="Add to timeline"
-                  onClick={() => addToTimeline(asset.id)}
-                  className="nc-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white transition hover:scale-110"
+        {/* All / Favorites filter chips */}
+        {audioAssets.length > 0 && (
+          <div className='flex gap-1'>
+            <button
+              type='button'
+              onClick={() => setFavsOnly(false)}
+              aria-pressed={!favsOnly}
+              className={cn(
+                'flex h-6 items-center rounded-full border px-2.5 text-[10px] font-medium transition',
+                !favsOnly
+                  ? 'border-(--nc-accent) bg-(--nc-accent)/15 text-foreground'
+                  : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground',
+              )}
+            >
+              All · {audioAssets.length}
+            </button>
+            <button
+              type='button'
+              onClick={() => setFavsOnly((v) => !v)}
+              aria-pressed={favsOnly}
+              className={cn(
+                'flex h-6 items-center gap-1 rounded-full border px-2.5 text-[10px] font-medium transition',
+                favsOnly
+                  ? 'border-amber-300/60 bg-amber-300/15 text-amber-200'
+                  : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Star className={cn('size-2.5', favsOnly && 'fill-amber-300')} />
+              {favIds.length}
+            </button>
+          </div>
+        )}
+
+        {shownAssets.length > 0 ? (
+          <div className='space-y-1.5'>
+            {shownAssets.map((asset) => {
+              const fav = favIds.includes(asset.id)
+              return (
+                <div
+                  key={asset.id}
+                  className='flex items-center gap-2 rounded-lg border border-(--nc-line) bg-(--nc-panel) p-2 transition hover:border-emerald-400/50'
                 >
-                  <Plus className="size-3.5" />
-                </button>
-              </div>
-            ))}
+                  <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15'>
+                    <Music className='size-4 text-emerald-300' />
+                  </span>
+                  <div className='min-w-0 flex-1'>
+                    <p className='truncate text-[11px]' title={asset.name}>
+                      {asset.name}
+                    </p>
+                    {asset.duration > 0 && (
+                      <span className='mt-0.5 inline-block rounded bg-(--nc-scrim-strong) px-1 text-[9px] tabular-nums text-white/90'>
+                        {formatShortTime(asset.duration)}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type='button'
+                    title={fav ? 'Remove from favorites' : 'Add to favorites'}
+                    aria-label={fav ? `Remove ${asset.name} from favorites` : `Add ${asset.name} to favorites`}
+                    aria-pressed={fav}
+                    onClick={() => toggleFav(asset.id)}
+                    className={cn(
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition hover:bg-(--nc-panel-strong)',
+                      fav ? 'text-amber-300' : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Star className={cn('size-3.5', fav && 'fill-amber-300')} />
+                  </button>
+                  <button
+                    type='button'
+                    title='Add to timeline'
+                    onClick={() => addToTimeline(asset.id)}
+                    className='nc-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white transition hover:scale-110'
+                  >
+                    <Plus className='size-3.5' />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        ) : favsOnly && favIds.length === 0 ? (
+          <div className='rounded-lg border border-dashed border-(--nc-line-strong) p-4 text-center'>
+            <Star className='mx-auto size-5 text-muted-foreground' />
+            <p className='mt-1.5 text-xs text-muted-foreground'>
+              No favorites yet — tap the star on any audio row to keep it a tap away.
+            </p>
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-(--nc-line-strong) p-4 text-center">
-            <Music className="mx-auto size-5 text-muted-foreground" />
-            <p className="mt-1.5 text-xs text-muted-foreground">
+          <div className='rounded-lg border border-dashed border-(--nc-line-strong) p-4 text-center'>
+            <Music className='mx-auto size-5 text-muted-foreground' />
+            <p className='mt-1.5 text-xs text-muted-foreground'>
               No audio yet — import music, record a voiceover, or extract audio from a video clip.
             </p>
           </div>
@@ -440,11 +577,11 @@ export function AudioPanel() {
       </section>
 
       {/* ---------- tip ---------- */}
-      <div className="nc-glass flex gap-2 rounded-lg p-3 text-[11px] text-muted-foreground">
-        <Lightbulb className="size-3.5 shrink-0 text-yellow-500" />
+      <div className='nc-glass flex gap-2 rounded-lg p-3 text-[11px] text-muted-foreground'>
+        <Lightbulb className='size-3.5 shrink-0 text-yellow-500' />
         <p>
           Pro tip:{' '}
-          <kbd className="rounded border border-(--nc-line) bg-(--nc-panel-strong) px-1.5 py-0.5 font-mono text-[10px] text-foreground/90">
+          <kbd className='rounded border border-(--nc-line) bg-(--nc-panel-strong) px-1.5 py-0.5 font-mono text-[10px] text-foreground/90'>
             S
           </kbd>{' '}
           splits a clip at the playhead.

@@ -86,6 +86,7 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-snapping-guides', name: 'Snapping Guides', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Yellow guide line flashes when a dragged edge snaps' },
   { id: 'timeline-add-marker', name: 'Add Marker (Shift+M)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Bookmark menu or Shift M drops accent markers, click their spot to seek' },
   { id: 'timeline-beat-sync-markers', name: 'Beat-Sync Markers', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Toolbar beat menu detects BPM and draws snap markers on the clip' },
+  { id: 'timeline-beat-quantize', name: 'Align Clips to Beats', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Quantize selected clip starts onto the detected beat grid in one tap' },
   { id: 'timeline-zoom-to-fit', name: 'Zoom to Fit Timeline (Shift+Z)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Click the fit button to frame the whole project' },
 
   // -------- Tracks & locking --------

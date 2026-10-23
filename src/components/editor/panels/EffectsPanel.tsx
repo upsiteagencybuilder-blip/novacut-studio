@@ -33,6 +33,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { previewEffect, renderEffectToWav, stopPreview } from '@/lib/effects/audio-render'
+import {
+  FAVORITES_KEY,
+  RECENT_CAP,
+  RECENT_KEY,
+  loadIdList,
+  pushRecentId,
+  saveIdList,
+  toggleIdInList,
+} from '@/lib/effects/favorites'
 import { EFFECT_COUNTS, TOTAL_EFFECTS, getEffect, searchEffects } from '@/lib/effects/registry'
 import { previewVoiceEffect, renderVoiceToWav, stopVoicePreview } from '@/lib/effects/voice'
 import type {
@@ -78,31 +87,6 @@ const CATEGORY_CHIPS: Array<{ id: CategoryFilter; label: string; emoji: string; 
 
 /** Voice previews render a short snippet (~2.4s) — keep the playing state a beat longer */
 const VOICE_PREVIEW_MS = 2600
-
-/* ---------------- favorites / recent (local-first persistence) ---------------- */
-
-const FAVORITES_KEY = 'novacut.fx.favorites.v1'
-const RECENT_KEY = 'novacut.fx.recent.v1'
-const RECENT_CAP = 24
-
-function loadIdList(key: string, cap = 200): string[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? '[]')
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((x): x is string => typeof x === 'string').slice(0, cap)
-  } catch {
-    return []
-  }
-}
-
-function saveIdList(key: string, ids: string[]): void {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(ids))
-  } catch {
-    // storage blocked/full — favorites stay session-only
-  }
-}
 
 /** Registry text-match shared with searchEffects (name / family / tags). */
 function matchesSearch(effect: Effect, search: string): boolean {
@@ -698,7 +682,7 @@ export function EffectsPanel() {
 
   const toggleFavorite = useCallback((id: string) => {
     setFavorites((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [id, ...prev]
+      const next = toggleIdInList(prev, id)
       saveIdList(FAVORITES_KEY, next)
       return next
     })
@@ -707,7 +691,7 @@ export function EffectsPanel() {
   /** Records an apply/add into the Recent rail (deduped, capped). */
   const noteUsed = useCallback((id: string) => {
     setRecent((prev) => {
-      const next = [id, ...prev.filter((x) => x !== id)].slice(0, RECENT_CAP)
+      const next = pushRecentId(prev, id, RECENT_CAP)
       saveIdList(RECENT_KEY, next)
       return next
     })

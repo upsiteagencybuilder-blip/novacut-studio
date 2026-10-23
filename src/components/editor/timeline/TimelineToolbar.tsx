@@ -380,6 +380,16 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             <AudioWaveform className="mr-2 size-3.5" />
             Detect beats (selected clip)
           </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={beatMarkers.length === 0 || !hasSelection}
+            onClick={() => {
+              const n = alignSelectedClipsToBeats()
+              if (n > 0) toast.success(`${n} clip${n === 1 ? '' : 's'} aligned to beats`)
+            }}
+          >
+            <Magnet className="mr-2 size-3.5" />
+            Align selected clips to beats
+          </DropdownMenuItem>
           <DropdownMenuItem disabled={beatMarkers.length === 0} onClick={() => useEditor.getState().toggleShowBeatMarkers()}>
             {showBeatMarkers ? <EyeOff className="mr-2 size-3.5" /> : <Eye className="mr-2 size-3.5" />}
             {showBeatMarkers ? 'Hide beat markers' : 'Show beat markers'}
@@ -473,14 +483,23 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
 /* ---------------- beat detection ---------------- */
 
 /**
- * Detects beats on the selected audio/video clip and stores them as
- * timeline markers. Kept outside the component so the handler stays stable.
+ * Detects beats for the timeline: from the selected audio/video clip, or —
+ * when the selection is empty or carries no audio — auto-picked from the
+ * longest audio clip on an audio track (the music bed), so one tap works.
  */
 async function detectBeatsFromSelection(setDetecting: (v: boolean) => void): Promise<void> {
   const st = useEditor.getState()
-  const clip = st.project.clips.find((c) => c.id === st.selectedClipIds[0])
+  let clip = st.project.clips.find((c) => c.id === st.selectedClipIds[0])
+  let autoPicked = false
   if (!clip || (clip.kind !== 'audio' && clip.kind !== 'video')) {
-    toast('Select an audio or video clip first — beats are detected from its audio')
+    // auto-pick: prefer dedicated audio clips (music), fall back to any video audio
+    const audioClips = st.project.clips.filter((c) => c.kind === 'audio').sort((a, b) => b.duration - a.duration)
+    clip = audioClips[0] ?? st.project.clips.filter((c) => c.kind === 'video').sort((a, b) => b.duration - a.duration)[0]
+    autoPicked = clip !== undefined
+    if (clip) st.selectClip(clip.id, false)
+  }
+  if (!clip || (clip.kind !== 'audio' && clip.kind !== 'video')) {
+    toast('Add an audio or video clip first — beats are detected from its audio')
     return
   }
   const asset = st.media.find((m) => m.id === clip.mediaId)
@@ -488,6 +507,7 @@ async function detectBeatsFromSelection(setDetecting: (v: boolean) => void): Pro
     toast.error('Source media for this clip was not found')
     return
   }
+  const target = clip
   setDetecting(true)
   try {
     const res = await detectBeats(asset.rawBlob)
@@ -500,17 +520,55 @@ async function detectBeatsFromSelection(setDetecting: (v: boolean) => void): Pro
     // ruler guides and snap targets land exactly where the beats are audible:
     // timeline = clip.start + (sourceT - inPoint) / speed (in-point beats dropped)
     const shifted = res.times
-      .map((t) => clip.start + (t - clip.trimStart) / (clip.speed || 1))
+      .map((t) => target.start + (t - target.trimStart) / (target.speed || 1))
       .filter((t) => t >= 0)
     st.setBeatMarkers(shifted, res.bpm)
     toast.success(
-      `${res.bpm !== null ? `${Math.round(res.bpm)} BPM · ` : ''}${res.times.length} beat markers added`,
+      `${res.bpm !== null ? `${Math.round(res.bpm)} BPM · ` : ''}${res.times.length} beat markers added${autoPicked ? ` — from ${target.name}` : ''}`,
     )
   } catch (e) {
     toast.error(e instanceof Error ? e.message : 'Beat detection failed')
   } finally {
     setDetecting(false)
   }
+}
+
+/**
+ * Quantizes the start of every selected clip to its nearest beat marker
+ * (tolerance = half the median beat gap, capped at 0.6 s) so cuts land on
+ * the music. Returns how many clips actually moved.
+ */
+function alignSelectedClipsToBeats(): number {
+  const st = useEditor.getState()
+  const beats = st.beatMarkers
+  if (beats.length < 2) {
+    toast('Detect beats first — then clips can align to them')
+    return 0
+  }
+  // tolerance = half the median inter-beat gap (capped) so nothing jumps absurdly
+  const gaps: number[] = []
+  for (let i = 1; i < beats.length; i++) gaps.push(beats[i]! - beats[i - 1]!)
+  gaps.sort((a, b) => a - b)
+  const tolerance = Math.min(0.6, (gaps[Math.floor(gaps.length / 2)] ?? 0.5) / 2)
+
+  let moved = 0
+  for (const clip of st.project.clips) {
+    if (!st.selectedClipIds.includes(clip.id)) continue
+    let best = beats[0]!
+    let bestDist = Infinity
+    for (const b of beats) {
+      const d = Math.abs(b - clip.start)
+      if (d < bestDist) {
+        bestDist = d
+        best = b
+      }
+    }
+    if (bestDist > tolerance || bestDist < 0.005) continue
+    st.moveClip(clip.id, Math.max(0, best), clip.trackId, `beat-align-${clip.id}`)
+    moved++
+  }
+  if (moved === 0) toast('Selected clips are already on the beat grid')
+  return moved
 }
 
 export default TimelineToolbar
