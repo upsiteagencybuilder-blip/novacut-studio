@@ -32,7 +32,6 @@ import { VersionsDialog } from '@/components/editor/dialogs/VersionsDialog'
 import { ThemeStudioDialog } from '@/components/editor/dialogs/ThemeStudioDialog'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
-import { InstallSuggestion } from '@/components/editor/pwa/InstallSuggestion'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 function useDesktop(): boolean {
@@ -424,7 +423,6 @@ export function EditorShell() {
       <VersionsDialog />
       <ThemeStudioDialog />
       <OnboardingOverlay />
-      <InstallSuggestion />
     </div>
   )
 }

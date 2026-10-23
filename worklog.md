@@ -794,3 +794,19 @@ Stage Summary:
 - Sector 13 COMPLETE: the Audio tab is now a full audio hub — imported library with favorites, 64 music loops and 200 SFX browsable/searchable/previewable/star-able with one-tap offline-render + drop at the playhead; beat-sync hardened (auto-pick + one-tap align-to-beats); favorites/recent are a shared local-first contract across panels.
 - Key artifacts: lib/effects/favorites.ts, components/editor/panels/SoundBrowser.tsx, AudioPanel hub rebuild, store.addClipFromMediaId(at), TimelineToolbar beat menu, libraries.ts + timeline.ts flips.
 - Next: Sector 14 (PWA direct install — remove suggestion screen) or per user's next command.
+
+---
+Task ID: 14
+Agent: Z.ai Code (main)
+Task: Sector 14 — PWA Direct Install: remove the suggestion screen entirely (user rule: install click → native dialog, NO suggestion popups), pending feedback on the install button, E2E desktop+mobile
+
+Work Log:
+- SURVEY: usePWAInstall().install() already fires the native prompt directly (waits ≤4s for beforeinstallprompt); TopBar InstallApp wired; manifest/SW/apple-meta complete (SW v4 offline-first + SKIP_WAITING update flow); BUT InstallSuggestion.tsx was a floating auto-popup card that slid up 6s after mount — exactly the "suggestion screen" the user banned; its CSS block (nc-install-float/nc-pulse-ring/ncFloatY/ncPulseRing) sat in globals.css used nowhere else.
+- REMOVED: src/components/editor/pwa/InstallSuggestion.tsx deleted; EditorShell import + <InstallSuggestion /> mount removed; InstallSuggestion CSS block removed from globals.css (verified zero remaining references across src+tests; rg clean).
+- HARDENED InstallApp (PWAStatus.tsx): pending state — click instantly shows Loader2 spinner + disables the button for the (usually <1s, worst-case 4s) prompt wait, so the tap always has immediate feedback; double-click guard; 'dismissed' stays silent (correct — user declined the native dialog), 'accepted' → success toast, 'unavailable' → iOS guide dialog (platform necessity) or one-line menu hint elsewhere. novacut.installHint localStorage key retired with the component (never written anymore).
+- E2E receipts (agent-browser, localhost:3000, 1280×800 + 390×844): desktop — after 7.5s wait: suggestionCards=0, floatingInstallBtns=0, topbarInstall=true, installHint=null; manifest 200 + SW 'controlled'; click → spinner+disabled at T+1s, at T+4.5s toasts=[] & guideOpen=false → install() did NOT return 'unavailable' → beforeinstallprompt was captured and prompt() called directly (headless auto-dismisses the native dialog → silent 'dismissed', the honest behavior); zero page errors. Mobile — same: no card after 7.5s, button visible in TopBar, click → spinner at T+1.2s, toasts=[], guideOpen=false, installHint=null, zero errors. OnboardingOverlay (first-visit welcome, separate feature) encountered on the fresh session and dismissed via "Start from scratch" — not an install suggestion. Regression: demo loads (6 clips), playback advances 0→2.42s, persistence reload restores 6 clips; dev.log all 200s; eslint clean; tsc(src) clean.
+
+Stage Summary:
+- Sector 14 COMPLETE: the install UX is now exactly "tap → native install dialog" — the auto-popup suggestion screen no longer exists anywhere in the codebase; the only install entry point is the TopBar button (hidden when already standalone) with instant spinner feedback and honest iOS fallback.
+- Key artifacts: deleted pwa/InstallSuggestion.tsx, EditorShell mount removal, globals.css block removal, PWAStatus.InstallApp pending state.
+- Next: Sector 15 (Turso cloud sync) or per user's next command.

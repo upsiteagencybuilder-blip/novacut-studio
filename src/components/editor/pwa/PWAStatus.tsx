@@ -6,7 +6,7 @@
  */
 import { useEffect, useReducer, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowDownToLine, RefreshCw, Share, SquarePlus, WifiOff } from 'lucide-react'
+import { ArrowDownToLine, Loader2, RefreshCw, Share, SquarePlus, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { applySWUpdate, usePWAInstall, useOnlineStatus, useSWUpdateWaiting } from '@/hooks/usePWA'
@@ -69,18 +69,25 @@ export function PWAUpdateToast() {
 export function InstallApp() {
   const { iosGuide, installed, install } = usePWAInstall()
   const [guideOpen, setGuideOpen] = useState(false)
+  const [pending, setPending] = useState(false)
 
   // hidden when already running as the installed app
   if (installed) return null
 
   const handleClick = async () => {
-    // Direct install — the native dialog opens immediately (the hook waits
-    // briefly for `beforeinstallprompt` if needed). No suggestion screens.
-    const outcome = await install()
-    if (outcome === 'accepted') toast.success('NovaCut installed 🎉 — find it on your home screen')
-    if (outcome === 'unavailable') {
-      if (iosGuide) setGuideOpen(true)
-      else toast('To install: open the browser menu ⋮ and choose "Install NovaCut"', { duration: 6000 })
+    if (pending) return
+    setPending(true)
+    try {
+      // Direct install — the native dialog opens immediately (the hook waits
+      // briefly for `beforeinstallprompt` if needed). No suggestion screens.
+      const outcome = await install()
+      if (outcome === 'accepted') toast.success('NovaCut installed 🎉 — find it on your home screen')
+      if (outcome === 'unavailable') {
+        if (iosGuide) setGuideOpen(true)
+        else toast('To install: open the browser menu ⋮ and choose "Install NovaCut"', { duration: 6000 })
+      }
+    } finally {
+      setPending(false)
     }
   }
 
@@ -92,9 +99,10 @@ export function InstallApp() {
         className="h-8 w-8 text-muted-foreground hover:text-foreground"
         title="Install NovaCut as an app"
         aria-label="Install NovaCut as an app"
+        disabled={pending}
         onClick={() => void handleClick()}
       >
-        <ArrowDownToLine className="h-4 w-4" />
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
       </Button>
 
       <Dialog open={guideOpen} onOpenChange={setGuideOpen}> {/* iOS-only fallback */}

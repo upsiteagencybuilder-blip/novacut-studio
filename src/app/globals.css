@@ -991,39 +991,3 @@ input[type="range"].nc-range::-webkit-slider-thumb {
   }
 }
 
-/* ============================================================
-   InstallSuggestion — floating mark + pulsing accent glow ring
-   ============================================================ */
-@keyframes ncFloatY {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-.nc-install-float {
-  animation: ncFloatY 3.2s ease-in-out infinite;
-}
-@keyframes ncPulseRing {
-  0% {
-    box-shadow:
-      0 0 0 0 var(--nc-accent-glow),
-      0 0 18px var(--nc-accent-glow-soft);
-  }
-  70% {
-    box-shadow:
-      0 0 0 10px transparent,
-      0 0 26px var(--nc-accent-glow);
-  }
-  100% {
-    box-shadow:
-      0 0 0 0 transparent,
-      0 0 18px var(--nc-accent-glow-soft);
-  }
-}
-.nc-pulse-ring {
-  animation: ncPulseRing 2.4s ease-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .nc-install-float,
-  .nc-pulse-ring {
-    animation: none !important;
-  }
-}
