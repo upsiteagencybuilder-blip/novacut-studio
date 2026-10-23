@@ -193,6 +193,7 @@ export type BlendMode =
   | 'saturation'
   | 'color'
   | 'luminosity'
+  | 'lighter'
 
 export interface TextStyle {
   content: string

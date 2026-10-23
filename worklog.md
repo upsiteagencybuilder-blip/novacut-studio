@@ -831,3 +831,20 @@ Stage Summary:
 - Sector 17 COMPLETE: NovaCut now edits like pro software — JKL shuttle (±1/2/4× with true reverse playback), In/Out points with Lift/Extract range edits (Premiere ' and ; keys), click-to-cut Blade tool, Q/W ripple trims, ↑/↓ edit-point navigation, Alt-nudge, Ctrl+K/D aliases, Shift+Z fit; 12 catalog flips/adds all backed by working receipts; 3 real bugs fixed during verification.
 - Key artifacts: engine.ts rate transport, useEngineBridge jkl sync, store pro cluster (toolMode/jkl/in-out/jumpEdit/nudge/ripple-trims/lift/extract/zoomFit + exciseRange + pickTrimTarget), EditorShell keyboard layer 2, TimelineToolbar pro cluster, Timeline work-area band + flags, ClipBlock blade mode, constants SHORTCUTS v2, timeline.ts catalog flips.
 - Next: per user's command (Sector 15 Turso cloud / 16 or others remaining).
+
+---
+Task ID: 18
+Agent: Z.ai Code (main)
+Task: Deep polish pass — "playground still has problems, many things showing load, make it advanced like pro software": full tool re-audit + AI long-op loading UX (elapsed timer + cancel + honest time hints) + AI image session gallery + blend 'lighter' (Linear Dodge) + E2E desktop+mobile
+
+Work Log:
+- RE-AUDIT (agent-browser, demo, 1280×800 + 390×844): every panel opens with zero stuck spinners (Media/Effects/Audio/Text/Stickers/AI/Pro); dialogs Export/Mixer/Projects/Versions/Theme all render; AI Copilot applied "1 edit" live; Script Writer produced a full Bangla script; Silence analysis returned "0s · 0 gaps" on music (correct); Auto Captions completed ≤12 s; Voiceover WAV landed in the media library (ai-voiceover.wav ×2 receipts); AI Image DID generate (proven via media library + preview) but takes 60–65 s (upstream) with a bare spinner — the "loading" complaint root cause. Pro panel SOON wall (321 planned vs 214 live) remains honest roadmap.
+- AI LONG-OP UX (AIPanel): new useAiElapsed(active) hook (200 ms ticker, no setState-in-effect) + formatElapsed + AiBusyBar component (shimmer track, live phase, honest elapsed counter m:ss with data-nc-elapsed hook, time hint, Cancel). Wired into ALL five long ops with AbortController + signal on every fetch: Copilot ("Planning edits…", cancel → 'Cancelled.' bubble), Script Writer (hint "Usually 10–25 s"), Auto Captions (per-phase text + transcribe/translate signals, hint "usually 10–30 s"), AI Image (hint "usually 30–90 s", cancel toast), AI Voiceover (per-part phase + signal, cancel toast). AbortError paths never show error toasts.
+- AI IMAGE SESSION GALLERY: bounded (8) blob-URL history with eviction-safe revoke; latest render as preview; thumbnails grid (4-up, aspect-video, hover "+ Add" overlay) — click re-imports that generation to the media library with prompt toast.
+- BLEND 'lighter': BlendMode union + BLEND_MODES entry 'Linear Dodge (Add)' + catalog vfx-linear-dodge-mode flipped planned→live (canvas-native additive; engine writes globalCompositeOperation directly) — now 17 blend options, one more honest flip.
+- E2E receipts (desktop + mobile): image busy bar "Painting pixels… 0:02 … Cancel" → elapsed ticked to 0:11 → Cancel → bar gone + "Image generation cancelled" + button restored (both viewports); Script Writer bar "Writing voiceover script… 0:01 Usually 10–25 s" → Cancel clean; blend dropdown 17 options with 'Linear Dodge (Add)' checked after store set; playback with lighter blend advanced 0→2.48 s; zero page errors on both viewports; eslint clean; tsc(src) clean; dev.log all 200s.
+
+Stage Summary:
+- Sector 18 COMPLETE: the "loading" complaint is fixed at the root — every long AI op now shows a live elapsed counter, a phase, an honest time hint and a working Cancel; aborts are instant and silent; AI image gains a session gallery with one-tap re-import; Linear Dodge (Add) blend ships. Tool re-audit confirms every panel/dialog/AI flow works end-to-end on desktop and mobile.
+- Key artifacts: AIPanel (useAiElapsed/formatElapsed/AiBusyBar + 5 abort-wired ops + image gallery), types.ts BlendMode+'lighter', constants.ts BLEND_MODES, vfx.ts catalog flip.
+- Next: Sector 15 (Turso cloud sync) or per user's next command.

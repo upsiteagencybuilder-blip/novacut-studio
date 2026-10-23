@@ -477,6 +477,7 @@ export const BLEND_MODES: { id: BlendMode; label: string }[] = [
   { id: 'saturation', label: 'Saturation' },
   { id: 'color', label: 'Color' },
   { id: 'luminosity', label: 'Luminosity' },
+  { id: 'lighter', label: 'Linear Dodge (Add)' },
 ]
 
 export const EASING_OPTIONS: { id: EasingType; label: string }[] = [

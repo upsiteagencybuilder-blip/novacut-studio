@@ -42,7 +42,7 @@ export const VFX_TOOLS: ProTool[] = [
   { id: 'vfx-lighten-mode', name: 'Lighten Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Lighten in the blend dropdown to keep brighter pixels' },
   { id: 'vfx-screen-mode', name: 'Screen Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Screen for glows, smoke and light leak comps' },
   { id: 'vfx-color-dodge-mode', name: 'Color Dodge Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Color Dodge for bright, blown-out glow comps' },
-  { id: 'vfx-linear-dodge-mode', name: 'Linear Dodge Mode', section: 'vfx', group: 'Blending modes', status: 'planned', desc: 'Additive blend that simply adds the pixel values' },
+  { id: 'vfx-linear-dodge-mode', name: 'Linear Dodge Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Linear Dodge (Add) in the blend dropdown for true additive glow comps' },
   { id: 'vfx-lighter-color-mode', name: 'Lighter Color Mode', section: 'vfx', group: 'Blending modes', status: 'planned', desc: 'Keep the lighter color per pixel, not per channel' },
   { id: 'vfx-overlay-mode', name: 'Overlay Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Overlay to boost contrast while keeping midtones' },
   { id: 'vfx-soft-light-mode', name: 'Soft Light Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Soft Light for a gentle photographic contrast lift' },

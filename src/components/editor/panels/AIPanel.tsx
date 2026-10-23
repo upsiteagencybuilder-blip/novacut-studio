@@ -102,6 +102,78 @@ function NoteRow({ icon: Icon, children }: { icon: LucideIcon; children: React.R
   )
 }
 
+/* ================= long-op progress (pro UX) ================= */
+
+/**
+ * Elapsed-seconds ticker for long AI operations.
+ * Renders nothing itself — the busy bar consumes `ms`.
+ */
+function useAiElapsed(active: boolean) {
+  const [ms, setMs] = useState(0)
+  useEffect(() => {
+    if (!active) return
+    const t0 = performance.now()
+    const iv = window.setInterval(() => setMs(performance.now() - t0), 200)
+    return () => window.clearInterval(iv)
+  }, [active])
+  return ms
+}
+
+function formatElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+/**
+ * Pro-style progress row for AI calls that take 10–90 s: shimmer track,
+ * live phase, honest elapsed counter and an always-reachable Cancel.
+ */
+function AiBusyBar({
+  phase,
+  elapsedMs,
+  hint,
+  onCancel,
+}: {
+  phase: string
+  elapsedMs: number
+  hint?: string
+  onCancel?: () => void
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="rounded-lg border border-fuchsia-400/25 bg-(--nc-scrim) p-2.5"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-foreground">
+          <Loader2 className="size-3 shrink-0 animate-spin text-fuchsia-300" aria-hidden />
+          <span className="truncate">{phase}</span>
+        </span>
+        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground" data-nc-elapsed>
+          {formatElapsed(elapsedMs)}
+        </span>
+      </div>
+      <div className="nc-shimmer mt-2 h-1 w-full overflow-hidden rounded-full" aria-hidden />
+      {(hint || onCancel) && (
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <span className="min-w-0 text-[9.5px] leading-tight text-muted-foreground">{hint}</span>
+          {onCancel && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              className="h-6 shrink-0 rounded-md border-(--nc-line-strong) bg-(--nc-panel) px-2 text-[10px] font-semibold hover:bg-(--nc-panel-strong) hover:text-foreground"
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ================= tab bar ================= */
 
 const AI_TABS: { id: AiSubTab; label: string; icon: LucideIcon }[] = [
@@ -369,6 +441,8 @@ function CopilotCard() {
   const [msgs, setMsgs] = useState<CopilotMsg[]>([{ role: 'ai', text: COPILOT_WELCOME }])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
+  const elapsed = useAiElapsed(busy)
   const chatRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -382,12 +456,15 @@ function CopilotCard() {
       if (!command || busy) return
       setInput('')
       setBusy(true)
+      const ac = new AbortController()
+      abortRef.current = ac
       setMsgs((m) => [...m, { role: 'user', text: command }])
       try {
         const res = await fetch('/api/ai/copilot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ command, context: buildCopilotContext(useEditor.getState()) }),
+          signal: ac.signal,
         })
         const data = (await res.json().catch(() => null)) as
           | { actions?: unknown[]; note?: string; error?: string }
@@ -414,13 +491,22 @@ function CopilotCard() {
         if (applied.length > 0) toast.success(`${applied.length} edit${applied.length === 1 ? '' : 's'} applied`)
         else if (skipped.length > 0) toast(`Nothing applied — ${skipped.length} step${skipped.length === 1 ? '' : 's'} skipped`)
       } catch (e) {
-        setMsgs((m) => [...m, { role: 'ai', text: e instanceof Error ? e.message : 'Copilot failed' }])
+        if ((e as Error)?.name === 'AbortError') {
+          setMsgs((m) => [...m, { role: 'ai', text: 'Cancelled.' }])
+        } else {
+          setMsgs((m) => [...m, { role: 'ai', text: e instanceof Error ? e.message : 'Copilot failed' }])
+        }
       } finally {
+        abortRef.current = null
         setBusy(false)
       }
     },
     [input, busy]
   )
+
+  const cancel = useCallback(() => {
+    abortRef.current?.abort()
+  }, [])
 
   return (
     <FeatureCard icon={Bot} title="AI Copilot" subtitle="Type an edit — the copilot does it">
@@ -469,9 +555,13 @@ function CopilotCard() {
         ))}
         {busy && (
           <div className="flex justify-start">
-            <div className="flex items-center gap-1.5 rounded-xl border border-(--nc-line) bg-(--nc-panel) px-2.5 py-1.5 text-[11px] text-muted-foreground">
-              <Loader2 className="size-3 animate-spin" />
-              Planning edits…
+            <div className="min-w-0 flex-1">
+              <AiBusyBar
+                phase="Planning edits…"
+                elapsedMs={elapsed}
+                hint="Reading your project and drafting the edit plan"
+                onCancel={cancel}
+              />
             </div>
           </div>
         )}
@@ -536,6 +626,8 @@ function ScriptWriterCard() {
   const [language, setLanguage] = useState('Bangla')
   const [busy, setBusy] = useState(false)
   const [output, setOutput] = useState('')
+  const abortRef = useRef<AbortController | null>(null)
+  const elapsed = useAiElapsed(busy)
 
   const generate = useCallback(async () => {
     const t = topic.trim()
@@ -546,22 +638,32 @@ function ScriptWriterCard() {
     if (busy) return
     requireOnline()
     setBusy(true)
+    const ac = new AbortController()
+    abortRef.current = ac
     try {
       const res = await fetch('/api/ai/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'script', topic: t, kind, language }),
+        signal: ac.signal,
       })
       const data = (await res.json().catch(() => null)) as { text?: string; error?: string } | null
       if (!res.ok || !data?.text) throw new Error(data?.error ?? `Script generation failed (${res.status})`)
       setOutput(data.text)
       toast.success('Script ready')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Script generation failed')
+      if ((e as Error)?.name !== 'AbortError') {
+        toast.error(e instanceof Error ? e.message : 'Script generation failed')
+      }
     } finally {
+      abortRef.current = null
       setBusy(false)
     }
   }, [topic, kind, language, busy])
+
+  const cancel = useCallback(() => {
+    abortRef.current?.abort()
+  }, [])
 
   const useInVoiceover = useCallback(() => {
     if (!output.trim()) return
@@ -622,6 +724,14 @@ function ScriptWriterCard() {
         {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
         {busy ? 'Writing…' : 'Generate'}
       </Button>
+      {busy && (
+        <AiBusyBar
+          phase={`Writing ${SCRIPT_KINDS.find((k) => k.id === kind)?.label.toLowerCase() ?? 'script'}…`}
+          elapsedMs={elapsed}
+          hint="Usually 10–25 s — Bangla and long topics can take a little longer"
+          onCancel={cancel}
+        />
+      )}
       {output && (
         <div className="space-y-1.5">
           <FieldLabel>Output</FieldLabel>
@@ -740,11 +850,19 @@ export function AIPanel() {
   const [captionPhase, setCaptionPhase] = useState('')
   const [transcript, setTranscript] = useState<string | null>(null)
   const [translatedTranscript, setTranslatedTranscript] = useState<string | null>(null)
+  const captionAbortRef = useRef<AbortController | null>(null)
+  const captionElapsed = useAiElapsed(captionBusy)
+
+  const cancelCaptions = useCallback(() => {
+    captionAbortRef.current?.abort()
+  }, [])
 
   const handleGenerateCaptions = useCallback(async () => {
     if (!selectedClip || !clipMedia || captionBusy) return
     requireOnline()
     setCaptionBusy(true)
+    const ac = new AbortController()
+    captionAbortRef.current = ac
     try {
       setCaptionPhase('Extracting audio…')
       const sourceEnd = selectedClip.trimStart + selectedClip.duration * selectedClip.speed
@@ -756,6 +874,7 @@ export function AIPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ audioBase64 }),
+        signal: ac.signal,
       })
       const data = (await res.json().catch(() => null)) as { text?: string; error?: string } | null
       if (!res.ok || !data?.text) {
@@ -773,6 +892,7 @@ export function AIPanel() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ mode: 'translate', text: original.slice(0, 4000), language: captionLang }),
+            signal: ac.signal,
           })
           const tData = (await tRes.json().catch(() => null)) as { text?: string; error?: string } | null
           if (tRes.ok && tData?.text) {
@@ -807,8 +927,11 @@ export function AIPanel() {
         `${count} caption clip${count === 1 ? '' : 's'} added${translated ? ` (translated to ${captionLang})` : ''}`
       )
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Caption generation failed')
+      if ((e as Error)?.name !== 'AbortError') {
+        toast.error(e instanceof Error ? e.message : 'Caption generation failed')
+      }
     } finally {
+      captionAbortRef.current = null
       setCaptionPhase('')
       setCaptionBusy(false)
     }
@@ -944,7 +1067,38 @@ export function AIPanel() {
   const [imagePrompt, setImagePrompt] = useState('')
   const [imageSize, setImageSize] = useState('1344x768')
   const [imageBusy, setImageBusy] = useState(false)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageHistory, setImageHistory] = useState<{ url: string; prompt: string }[]>([])
+  const imageAbortRef = useRef<AbortController | null>(null)
+  const imageElapsed = useAiElapsed(imageBusy)
+
+  const cancelImage = useCallback(() => {
+    imageAbortRef.current?.abort()
+  }, [])
+
+  const reimportImage = useCallback(
+    (url: string, prompt: string) => {
+      void (async () => {
+        try {
+          const blob = await (await fetch(url)).blob()
+          const file = imageBase64ToFile(
+            await new Promise<string>((resolve, reject) => {
+              const fr = new FileReader()
+              fr.onload = () => resolve(String(fr.result).split(',')[1] ?? '')
+              fr.onerror = () => reject(new Error('Could not read the image'))
+              fr.readAsDataURL(blob)
+            }),
+            `ai-image-${Date.now()}`
+          )
+          const assets = await importFiles([file])
+          assets.forEach(addMediaAsset)
+          toast.success(`"${prompt.slice(0, 40)}${prompt.length > 40 ? '…' : ''}" added to media library`)
+        } catch (e) {
+          toast.error(e instanceof Error ? e.message : 'Could not re-add the image')
+        }
+      })()
+    },
+    [addMediaAsset]
+  )
 
   const handleGenerateImage = useCallback(async () => {
     if (imageBusy) return
@@ -955,11 +1109,14 @@ export function AIPanel() {
     }
     requireOnline()
     setImageBusy(true)
+    const ac = new AbortController()
+    imageAbortRef.current = ac
     try {
       const res = await fetch('/api/ai/image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, size: imageSize }),
+        signal: ac.signal,
       })
       const data = (await res.json().catch(() => null)) as { imageBase64?: string; error?: string } | null
       if (!res.ok || !data?.imageBase64) {
@@ -970,14 +1127,18 @@ export function AIPanel() {
       const assets = await importFiles([file])
       assets.forEach(addMediaAsset)
       const url = URL.createObjectURL(blob)
-      setImagePreview((prev) => {
-        if (prev) URL.revokeObjectURL(prev)
-        return url
+      setImageHistory((prev) => {
+        const next = [{ url, prompt }, ...prev]
+        // revoke only the entry evicted out of the bounded gallery, never the live ones
+        if (next.length > 8) URL.revokeObjectURL(next.pop()!.url)
+        return next
       })
       toast.success('AI image added to media library')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Image generation failed')
+      if ((e as Error)?.name === 'AbortError') toast('Image generation cancelled')
+      else toast.error(e instanceof Error ? e.message : 'Image generation failed')
     } finally {
+      imageAbortRef.current = null
       setImageBusy(false)
     }
   }, [imageBusy, imagePrompt, imageSize, addMediaAsset])
@@ -988,6 +1149,12 @@ export function AIPanel() {
   const [voiceSpeed, setVoiceSpeed] = useState(1)
   const [voiceBusy, setVoiceBusy] = useState(false)
   const [voicePhase, setVoicePhase] = useState('')
+  const voiceAbortRef = useRef<AbortController | null>(null)
+  const voiceElapsed = useAiElapsed(voiceBusy)
+
+  const cancelVoiceover = useCallback(() => {
+    voiceAbortRef.current?.abort()
+  }, [])
 
   // Script Writer → Voiceover handoff (same panel, different sub-tab)
   useEffect(() => {
@@ -1008,6 +1175,8 @@ export function AIPanel() {
     }
     requireOnline()
     setVoiceBusy(true)
+    const ac = new AbortController()
+    voiceAbortRef.current = ac
     try {
       const chunks = splitTextForTts(text)
       let imported = 0
@@ -1017,6 +1186,7 @@ export function AIPanel() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: chunks[i], voice, speed: voiceSpeed }),
+          signal: ac.signal,
         })
         const data = (await res.json().catch(() => null)) as
           | { audioBase64?: string; mimeType?: string; error?: string }
@@ -1037,8 +1207,10 @@ export function AIPanel() {
         toast.error('Speech synthesis returned no audio')
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Voiceover generation failed')
+      if ((e as Error)?.name === 'AbortError') toast('Voiceover cancelled')
+      else toast.error(e instanceof Error ? e.message : 'Voiceover generation failed')
     } finally {
+      voiceAbortRef.current = null
       setVoicePhase('')
       setVoiceBusy(false)
     }
@@ -1106,6 +1278,14 @@ export function AIPanel() {
                   {captionBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
                   {captionBusy ? captionPhase : 'Generate captions'}
                 </Button>
+                {captionBusy && (
+                  <AiBusyBar
+                    phase={captionPhase || 'Working…'}
+                    elapsedMs={captionElapsed}
+                    hint="On-device audio prep, then AI transcription — usually 10–30 s"
+                    onCancel={cancelCaptions}
+                  />
+                )}
                 {translatedTranscript && (
                   <div className="space-y-1">
                     <FieldLabel>Translated ({captionLang})</FieldLabel>
@@ -1241,20 +1421,44 @@ export function AIPanel() {
               </Select>
             </div>
             {imageBusy ? (
-              <div className="nc-shimmer relative flex h-28 w-full items-center justify-center overflow-hidden rounded-lg border border-(--nc-line) bg-(--nc-panel)">
-                <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <Loader2 className="size-3.5 animate-spin" />
-                  Painting pixels…
-                </span>
-              </div>
+              <AiBusyBar
+                phase="Painting pixels…"
+                elapsedMs={imageElapsed}
+                hint="AI image jobs usually take 30–90 s — keep this tab open"
+                onCancel={cancelImage}
+              />
             ) : (
-              imagePreview && (
-                <img
-                  src={imagePreview}
-                  alt="Latest AI generated image preview"
-                  className="h-28 w-full rounded-lg border border-(--nc-line) object-cover"
-                />
-              )
+              <>
+                {imageHistory[0] && (
+                  <img
+                    src={imageHistory[0].url}
+                    alt="Latest AI generated image preview"
+                    className="h-28 w-full rounded-lg border border-(--nc-line) object-cover"
+                  />
+                )}
+                {imageHistory.length > 1 && (
+                  <div className="space-y-1.5">
+                    <FieldLabel>Session gallery</FieldLabel>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {imageHistory.map((h, i) => (
+                        <button
+                          key={`${i}-${h.url.slice(-8)}`}
+                          type="button"
+                          title={h.prompt}
+                          aria-label={`Re-add image ${i + 1} to media library`}
+                          onClick={() => reimportImage(h.url, h.prompt)}
+                          className="group relative aspect-video overflow-hidden rounded border border-(--nc-line) transition hover:border-fuchsia-400/60 focus-visible:outline-2 focus-visible:outline-fuchsia-400/60"
+                        >
+                          <img src={h.url} alt="" className="h-full w-full object-cover" />
+                          <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-[9px] font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                            + Add
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             <Button
               type="button"
@@ -1323,6 +1527,14 @@ export function AIPanel() {
               {voiceBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Mic className="size-3.5" />}
               {voiceBusy ? voicePhase : 'Generate voiceover'}
             </Button>
+            {voiceBusy && (
+              <AiBusyBar
+                phase={voicePhase || 'Synthesizing voice…'}
+                elapsedMs={voiceElapsed}
+                hint="Each part usually takes 10–20 s of AI synthesis"
+                onCancel={cancelVoiceover}
+              />
+            )}
             <NoteRow icon={Mic}>Scripts over 900 characters are synthesized in sequential parts.</NoteRow>
           </FeatureCard>
         </>
