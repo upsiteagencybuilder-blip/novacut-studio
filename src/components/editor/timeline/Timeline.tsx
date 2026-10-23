@@ -50,6 +50,9 @@ export function Timeline() {
   const beatMarkers = useEditor((s) => s.beatMarkers)
   const showBeatMarkers = useEditor((s) => s.showBeatMarkers)
   const userMarkers = useEditor((s) => s.userMarkers)
+  const toolMode = useEditor((s) => s.toolMode)
+  const inPoint = useEditor((s) => s.inPoint)
+  const outPoint = useEditor((s) => s.outPoint)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const laneEls = useRef(new Map<string, HTMLDivElement>())
@@ -164,7 +167,7 @@ export function Timeline() {
           <div
             ref={scrollRef}
             id="nc-timeline-scroll"
-            className={cn('absolute inset-0 overflow-auto', dragInfo && 'cursor-grabbing select-none')}
+            className={cn('absolute inset-0 overflow-auto', dragInfo && 'cursor-grabbing select-none', toolMode === 'razor' && 'cursor-crosshair')}
           >
             <div className="relative" style={{ width: contentWidth }}>
               {/* ruler row with sticky add-track corner */}
@@ -240,6 +243,46 @@ export function Timeline() {
                       style={{ left: t * zoom }}
                     />
                   ))}
+                </div>
+              )}
+
+              {/* In/Out work-area band — amber range across the lanes */}
+              {inPoint !== null && outPoint !== null && outPoint > inPoint && (
+                <div
+                  className="pointer-events-none absolute z-[8]"
+                  style={{ left: HEADER_WIDTH, right: 0, top: RULER_HEIGHT, bottom: 0 }}
+                  aria-hidden
+                >
+                  <div
+                    className="absolute inset-y-0 border-x border-amber-400/50 bg-amber-400/[0.07]"
+                    style={{ left: inPoint * zoom, width: Math.max(1, (outPoint - inPoint) * zoom) }}
+                  />
+                </div>
+              )}
+
+              {/* In / Out ruler flags */}
+              {inPoint !== null && (
+                <div
+                  className="pointer-events-none absolute z-[31] flex items-center"
+                  style={{ left: HEADER_WIDTH + inPoint * zoom, top: 0, height: RULER_HEIGHT }}
+                  aria-hidden
+                >
+                  <div className="absolute left-0 top-0 h-full w-px bg-amber-400/70" />
+                  <span className="absolute left-0.5 top-[3px] rounded-sm bg-amber-400 px-1 text-[8px] font-bold leading-[12px] text-amber-950">
+                    IN
+                  </span>
+                </div>
+              )}
+              {outPoint !== null && (
+                <div
+                  className="pointer-events-none absolute z-[31] flex items-center"
+                  style={{ left: HEADER_WIDTH + outPoint * zoom, top: 0, height: RULER_HEIGHT }}
+                  aria-hidden
+                >
+                  <div className="absolute left-0 top-0 h-full w-px bg-amber-400/70" />
+                  <span className="absolute -left-[22px] top-[3px] rounded-sm bg-amber-400 px-1 text-[8px] font-bold leading-[12px] text-amber-950">
+                    OUT
+                  </span>
                 </div>
               )}
 

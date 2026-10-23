@@ -3,8 +3,9 @@ import type { ProTool } from '../types'
 /**
  * Pro Toolkit — timeline section.
  * Industry timeline tools mapped to NovaCut: shortcuts and gestures cited in
- * descriptions are the ones that actually ship (S split, D duplicate,
- * Shift+Delete ripple delete, K keyframe, magnet snap, beat-sync markers).
+ * descriptions are the ones that actually ship (S/Ctrl+K split, B blade tool,
+ * JKL shuttle, I/O in-out + Lift/Extract, Q/W ripple trims, ↑/↓ edit points,
+ * D duplicate, Shift+Delete ripple delete, magnet snap, beat-sync markers).
  */
 
 export const TIMELINE_TOOLS: ProTool[] = [
@@ -14,10 +15,10 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-select-all', name: 'Select All (Ctrl+A)', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Grab every clip at once, Esc deselects' },
   { id: 'timeline-track-select-forward', name: 'Track Select Forward Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Select every clip from the playhead rightward in one gesture' },
   { id: 'timeline-track-select-backward', name: 'Track Select Backward Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Select every clip from the playhead leftward in one gesture' },
-  { id: 'timeline-ripple-edit-tool', name: 'Ripple Edit Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Trim a clip and close the gap automatically across the track' },
+  { id: 'timeline-ripple-edit-tool', name: 'Ripple Edit Tool', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Q trims the straddling clip\'s end to the playhead, W trims its head — same-track followers ripple to close the gap' },
   { id: 'timeline-rolling-edit-tool', name: 'Rolling Edit Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Move the cut point between two clips without changing duration' },
   { id: 'timeline-rate-stretch-tool', name: 'Rate Stretch Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Drag a clip edge to retime it into the available gap' },
-  { id: 'timeline-razor-tool', name: 'Razor Tool (Ctrl+B)', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Press S to split the selected clip at the playhead' },
+  { id: 'timeline-razor-tool', name: 'Razor Tool (B)', section: 'timeline', group: 'Tools & modes', status: 'live', desc: 'Blade tool toggle (B) — click any clip to split it exactly at the click position; S or Ctrl+K splits at the playhead' },
   { id: 'timeline-slip-tool', name: 'Slip Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Shift the source in-point without moving the clip on the timeline' },
   { id: 'timeline-slide-tool', name: 'Slide Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Move a clip while neighbors close the gap around it' },
   { id: 'timeline-pen-tool', name: 'Pen Tool', section: 'timeline', group: 'Tools & modes', status: 'planned', desc: 'Draw or adjust keyframe and mask points directly on clips' },
@@ -40,12 +41,12 @@ export const TIMELINE_TOOLS: ProTool[] = [
 
   // -------- Cutting & trimming --------
   { id: 'timeline-playhead', name: 'Playhead', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Drag the fuchsia handle or scrub the ruler to seek' },
-  { id: 'timeline-in-point-marker', name: 'In Point Marker', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Mark the start of a source or sequence range for edits' },
-  { id: 'timeline-out-point-marker', name: 'Out Point Marker', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Mark the end of a source or sequence range for edits' },
-  { id: 'timeline-clear-in-out', name: 'Clear In/Out Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Remove the marked in and out points in one command' },
-  { id: 'timeline-go-to-in-out', name: 'Go to In/Out Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Jump the playhead to the marked in or out point' },
-  { id: 'timeline-lift-button', name: 'Lift Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Remove the marked range and leave the gap in place' },
-  { id: 'timeline-extract-button', name: 'Extract Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Remove the marked range and ripple everything after closed' },
+  { id: 'timeline-in-point-marker', name: 'In Point Marker (I)', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'I marks the In point at the playhead — amber IN flag on the ruler + work-area band' },
+  { id: 'timeline-out-point-marker', name: 'Out Point Marker (O)', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'O marks the Out point at the playhead — amber OUT flag on the ruler + work-area band' },
+  { id: 'timeline-clear-in-out', name: 'Clear In/Out Tool', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Ctrl+Shift+X or the In/Out menu clears both marks in one command' },
+  { id: 'timeline-go-to-in-out', name: 'Go to In/Out Button', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Shift+I / Shift+O (or the In/Out menu) jump the playhead to either mark' },
+  { id: 'timeline-lift-button', name: 'Lift Button', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Apostrophe (\') or the In/Out menu removes the marked range from every track, leaving the gap in place' },
+  { id: 'timeline-extract-button', name: 'Extract Button', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Semicolon (;) or the In/Out menu removes the marked range and ripples every track closed' },
   { id: 'timeline-insert-button', name: 'Insert Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Push source material into the timeline, shifting later clips' },
   { id: 'timeline-overlay-button', name: 'Overlay Button', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Write source material over the timeline, replacing underneath' },
   { id: 'timeline-replace-edit-tool', name: 'Replace Edit Tool', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Properties → Media → Source dropdown swaps the clip media while keeping position and duration' },
@@ -67,6 +68,7 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-delete-ripple-delete', name: 'Delete / Ripple Delete', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Press Delete to remove clips, Shift Delete ripples the gap' },
 
   // -------- Speed & duration --------
+  { id: 'timeline-jkl-shuttle', name: 'JKL Shuttle Transport', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'J reverses, K pauses, L plays — press again for ±2× / ±4× video+audio shuttle' },
   { id: 'timeline-speed-controls', name: 'Speed Controls (Uniform Speed / Speed Ramping)', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Speed slider and 25 presets change rate with automatic duration compensation' },
   { id: 'timeline-reverse-playback', name: 'Reverse Playback', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Toggle a video clip to play backwards frame-by-frame; audio muted while reversed' },
   { id: 'timeline-freeze-frame', name: 'Freeze Frame', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Toolbar snowflake captures the current frame as a 3s still and ripple-inserts it at the playhead' },
@@ -77,7 +79,7 @@ export const TIMELINE_TOOLS: ProTool[] = [
 
   // -------- Markers & navigation --------
   { id: 'timeline-time-ruler', name: 'Time Ruler', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Click or drag the adaptive ruler to scrub the playhead' },
-  { id: 'timeline-work-area-bar', name: 'Work Area Bar', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Limit preview and render to a marked work area range' },
+  { id: 'timeline-work-area-bar', name: 'Work Area Bar', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'The In–Out range (I/O) draws an amber work-area band across the lanes; Lift/Extract operate on it' },
   { id: 'timeline-zoom-bar', name: 'Zoom Bar', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Zoom buttons and plus minus keys scale pixels per second' },
   { id: 'timeline-safe-margins-guide', name: 'Safe Margins Guide', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Overlay action and title safe guides on the preview' },
   { id: 'timeline-grid-overlays', name: 'Grid Overlays', section: 'timeline', group: 'Markers & navigation', status: 'planned', desc: 'Draw composition grids and thirds guides on the monitor' },
@@ -87,7 +89,9 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-add-marker', name: 'Add Marker (Shift+M)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Bookmark menu or Shift M drops accent markers, click their spot to seek' },
   { id: 'timeline-beat-sync-markers', name: 'Beat-Sync Markers', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Toolbar beat menu detects BPM and draws snap markers on the clip' },
   { id: 'timeline-beat-quantize', name: 'Align Clips to Beats', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Quantize selected clip starts onto the detected beat grid in one tap' },
-  { id: 'timeline-zoom-to-fit', name: 'Zoom to Fit Timeline (Shift+Z)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Click the fit button to frame the whole project' },
+  { id: 'timeline-zoom-to-fit', name: 'Zoom to Fit Timeline (Shift+Z)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Shift+Z or the fit button frames the whole project' },
+  { id: 'timeline-edit-point-navigation', name: 'Edit Point Navigation (↑/↓)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Up/Down arrows (or the toolbar step buttons) jump between clip edges and markers' },
+  { id: 'timeline-nudge-clips', name: 'Nudge Clips (Alt+←/→)', section: 'timeline', group: 'Markers & navigation', status: 'live', desc: 'Alt+arrows slide selected clips one frame (Shift = 1 sec) in a single undo step' },
 
   // -------- Tracks & locking --------
   { id: 'timeline-toggle-track-output', name: 'Toggle Track Output', section: 'timeline', group: 'Tracks & locking', status: 'planned', desc: 'Enable or disable what a track feeds into the composite' },

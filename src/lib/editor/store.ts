@@ -138,6 +138,39 @@ interface EditorStore {
   removeMarkerAtPlayhead: () => boolean
   clearUserMarkers: () => void
 
+  /* ---------- pro tools (blade / in-out / shuttle / ripple trims) ---------- */
+  /** active timeline tool: 'select' (default) or 'razor' — click clips to split at the click position */
+  toolMode: 'select' | 'razor'
+  setToolMode: (mode: 'select' | 'razor') => void
+  /** JKL shuttle rate: 0 = stopped, ±1 / ±2 / ±4 (negative = reverse playback) */
+  jklRate: number
+  /** J / K / L shuttle transport (pro NLE standard) */
+  jklAction: (key: 'j' | 'k' | 'l') => void
+  /** session In point (seconds) — null = unset */
+  inPoint: number | null
+  /** session Out point (seconds) — null = unset */
+  outPoint: number | null
+  /** mark the In point at the playhead (I) — drops a stale Out that sits at/before it */
+  markIn: () => void
+  /** mark the Out point at the playhead (O) — drops a stale In that sits at/after it */
+  markOut: () => void
+  /** clear both In & Out points (Ctrl+Shift+X) */
+  clearInOut: () => void
+  /** jump to the previous/next edit point (clip edges + markers) — returns true when moved */
+  jumpEdit: (dir: 1 | -1) => boolean
+  /** nudge every selected clip's start by `delta` seconds in ONE undo step */
+  nudgeSelected: (delta: number) => void
+  /** Q — trim the clip straddling the playhead to end AT the playhead, ripple same-track followers left */
+  rippleTrimEndToPlayhead: () => boolean
+  /** W — trim the straddling clip's head to the playhead, or pull the next clip's start back to it (ripple) */
+  rippleTrimStartToPlayhead: () => boolean
+  /** Lift — remove the [in,out] range from every track, leaving gaps (needs In & Out marks) */
+  liftInOut: () => boolean
+  /** Extract — Lift + ripple every track's later clips left to close the gap (needs In & Out marks) */
+  extractInOut: () => boolean
+  /** zoom so the whole project fits the visible timeline (Shift+Z) */
+  zoomFit: () => void
+
   /* ---------- keyframes ---------- */
   addKeyframeAtPlayhead: (clipId: string, property: KeyframeProperty) => void
   updateKeyframe: (clipId: string, kfId: string, patch: Partial<Keyframe>, history?: boolean | string) => void
@@ -222,6 +255,76 @@ function normalizeProjectColor(p: Project): Project {
   }
 }
 
+/**
+ * Lift/Extract engine — remove the [from,to) range from every track.
+ * - clips fully inside are deleted
+ * - clips straddling the left edge are trimmed to end at `from`
+ * - clips straddling the right edge are trimmed to start at `to` (source position advanced)
+ * - clips containing the range are split into two around it
+ * extract=true also shifts every same-track clip starting at/after `to` left by `range`
+ * so the hole closes across ALL tracks in one step.
+ */
+function exciseRange(clips: Clip[], from: number, to: number, extract: boolean, range = to - from): Clip[] {
+  const out: Clip[] = []
+  for (const orig of clips) {
+    const c = JSON.parse(JSON.stringify(orig)) as Clip
+    const start = c.start
+    const end = c.start + c.duration
+    if (end <= from + 0.001 || start >= to - 0.001) {
+      // outside the range — only move when extracting and the clip sits after it
+      if (extract && start >= to - 0.001) c.start = Math.max(0, round2(start - range))
+      out.push(c)
+      continue
+    }
+    const fullyInside = start >= from - 0.001 && end <= to + 0.001
+    if (fullyInside) continue // removed entirely
+    const straddlesLeft = start < from - 0.001 && end > from
+    const straddlesRight = start < to && end > to + 0.001
+    if (straddlesLeft && !straddlesRight) {
+      // keep only the head, ending at `from`
+      c.duration = round2(from - start)
+      out.push(c)
+      continue
+    }
+    if (!straddlesLeft && straddlesRight) {
+      // keep only the tail, starting at `to`
+      const cut = to - start
+      c.start = round2(to - (extract ? range : 0))
+      c.duration = round2(end - to)
+      c.trimStart = round2(c.trimStart + cut * c.speed)
+      out.push(c)
+      continue
+    }
+    // the clip spans the whole range — split into head + tail
+    const headDur = round2(from - start)
+    const tail: Clip = { ...c, id: uid('clip_'), start: round2(to - (extract ? range : 0)), duration: round2(end - to), trimStart: round2(c.trimStart + (to - start) * c.speed), fadeIn: 0 }
+    c.duration = headDur
+    c.fadeOut = 0
+    out.push(c, tail)
+  }
+  return out
+}
+
+/**
+ * Pick the clip a playhead-trim (Q/W) should act on.
+ * Selection wins; otherwise a straddling clip — preferring VISUAL tracks over
+ * audio (a full-length music bed must not steal the trim from the clip the
+ * user is visually parked inside). Falls back to audio when it's all there is.
+ */
+function pickTrimTarget(clips: Clip[], selectedIds: string[], t: number): Clip | null {
+  const straddles = (c: Clip) => t > c.start + 0.05 && t < c.start + c.duration - 0.05
+  const isVisual = (c: Clip) => c.kind !== 'audio'
+  const selStraddle = clips.find((c) => selectedIds.includes(c.id) && straddles(c))
+  if (selStraddle) return selStraddle
+  const visual = clips.find((c) => straddles(c) && isVisual(c))
+  if (visual) return visual
+  // playhead sitting ON a visual edit boundary → don't steal the trim for a
+  // full-length music bed; W should pull the next visual clip instead (Q no-ops)
+  const onVisualBoundary = clips.some((c) => isVisual(c) && Math.abs(c.start - t) < 0.06)
+  if (onVisualBoundary) return null
+  return clips.find((c) => straddles(c)) ?? null
+}
+
 function applyClipPatch(project: Project, id: string, patch: ClipPatch): Project {
   return {
     ...project,
@@ -261,6 +364,10 @@ export const useEditor = create<EditorStore>((set, get) => ({
   beatMarkers: [],
   beatBpm: null,
   showBeatMarkers: true,
+  toolMode: 'select',
+  jklRate: 0,
+  inPoint: null,
+  outPoint: null,
   panelTab: 'media',
   aiSubTab: 'assistant',
   activeDialog: null,
@@ -970,6 +1077,174 @@ export const useEditor = create<EditorStore>((set, get) => ({
 
   clearUserMarkers: () => set({ userMarkers: [] }),
 
+  /* ================= pro tools ================= */
+
+  setToolMode: (mode) => set({ toolMode: mode }),
+
+  jklAction: (key) => {
+    const s = get()
+    if (key === 'k') {
+      set({ isPlaying: false, jklRate: 0 })
+      return
+    }
+    if (key === 'l') {
+      // L: play forward — first press 1×, again 2×, again 4× (capped); from reverse restarts at 1×
+      if (!s.isPlaying || s.jklRate <= 0) set({ isPlaying: true, jklRate: 1 })
+      else set({ jklRate: Math.min(4, s.jklRate * 2) })
+      return
+    }
+    // J: reverse — first press -1×, again -2×, again -4×; from forward restarts at -1×
+    if (!s.isPlaying || s.jklRate >= 0) set({ isPlaying: true, jklRate: -1 })
+    else set({ jklRate: Math.max(-4, s.jklRate * 2) })
+  },
+
+  markIn: () => {
+    const t = round2(get().currentTime)
+    set((s) => ({ inPoint: t, outPoint: s.outPoint !== null && s.outPoint <= t ? null : s.outPoint }))
+  },
+
+  markOut: () => {
+    const t = round2(get().currentTime)
+    set((s) => ({ outPoint: t, inPoint: s.inPoint !== null && s.inPoint >= t ? null : s.inPoint }))
+  },
+
+  clearInOut: () => set({ inPoint: null, outPoint: null }),
+
+  jumpEdit: (dir) => {
+    const s = get()
+    const pts = new Set<number>()
+    for (const c of s.project.clips) {
+      pts.add(round2(c.start))
+      pts.add(round2(c.start + c.duration))
+    }
+    for (const m of s.userMarkers) pts.add(round2(m))
+    const t = s.currentTime
+    const candidates = [...pts].filter((p) => (dir === 1 ? p > t + 0.02 : p < t - 0.02)).sort((a, b) => a - b)
+    const target = dir === 1 ? candidates[0] : candidates[candidates.length - 1]
+    if (target === undefined) return false
+    s.setCurrentTime(target)
+    return true
+  },
+
+  nudgeSelected: (delta) => {
+    const s = get()
+    if (!s.selectedClipIds.length || delta === 0) return
+    s.pushHistory()
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: st.project.clips.map((c) =>
+          st.selectedClipIds.includes(c.id) ? { ...c, start: Math.max(0, round2(c.start + delta)) } : c,
+        ),
+      }),
+    }))
+  },
+
+  rippleTrimEndToPlayhead: () => {
+    const s = get()
+    const t = s.currentTime
+    const target = pickTrimTarget(s.project.clips, s.selectedClipIds, t)
+    if (!target) return false
+    const cut = t - target.start
+    const removed = target.duration - cut
+    if (removed < 0.05) return false
+    s.pushHistory()
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: st.project.clips.map((c) => {
+          if (c.id === target.id) return { ...c, duration: round2(cut) }
+          if (c.trackId === target.trackId && c.start >= target.start + target.duration - 0.001) {
+            return { ...c, start: Math.max(0, round2(c.start - removed)) }
+          }
+          return c
+        }),
+      }),
+    }))
+    return true
+  },
+
+  rippleTrimStartToPlayhead: () => {
+    const s = get()
+    const t = s.currentTime
+    const target = pickTrimTarget(s.project.clips, s.selectedClipIds, t)
+    if (target) {
+      const trimmed = t - target.start
+      if (trimmed < 0.05) return false
+      s.pushHistory()
+      set((st) => ({
+        project: withUpdatedAt({
+          ...st.project,
+          clips: st.project.clips.map((c) =>
+            c.id === target.id
+              ? {
+                  ...c,
+                  start: round2(t),
+                  duration: round2(c.duration - trimmed),
+                  trimStart: round2(c.trimStart + trimmed * c.speed),
+                }
+              : c
+          ),
+        }),
+      }))
+      return true
+    }
+    // nothing under the playhead — pull the next clip (selected clip's track when one
+    // is selected, else the earliest VISUAL clip after the playhead, then any track)
+    const sel = s.project.clips.find((c) => s.selectedClipIds.includes(c.id))
+    const after = s.project.clips
+      .filter((c) => c.start > t + 0.02 && (!sel || c.trackId === sel.trackId))
+      .sort((a, b) => a.start - b.start)
+    const first = after.find((c) => c.kind !== 'audio') ?? after[0]
+    if (!first) return false
+    const delta = t - first.start
+    s.pushHistory()
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: st.project.clips.map((c) =>
+          c.trackId === first.trackId && c.start >= first.start - 0.001
+            ? { ...c, start: Math.max(0, round2(c.start + delta)) }
+            : c
+        ),
+      }),
+    }))
+    return true
+  },
+
+  liftInOut: () => {
+    const s = get()
+    const { inPoint, outPoint } = s
+    if (inPoint === null || outPoint === null || outPoint - inPoint < 0.05) return false
+    s.pushHistory()
+    set((st) => ({
+      project: withUpdatedAt({ ...st.project, clips: exciseRange(st.project.clips, inPoint, outPoint, false) }),
+      selectedClipIds: [],
+    }))
+    return true
+  },
+
+  extractInOut: () => {
+    const s = get()
+    const { inPoint, outPoint } = s
+    if (inPoint === null || outPoint === null || outPoint - inPoint < 0.05) return false
+    const range = outPoint - inPoint
+    s.pushHistory()
+    set((st) => ({
+      project: withUpdatedAt({ ...st.project, clips: exciseRange(st.project.clips, inPoint, outPoint, true, range) }),
+      selectedClipIds: [],
+    }))
+    return true
+  },
+
+  zoomFit: () => {
+    if (typeof document === 'undefined') return
+    const el = document.getElementById('nc-timeline-scroll')
+    const dur = projectDuration(get().project)
+    if (!el || dur <= 0) return
+    set({ zoom: clamp((el.clientWidth - 180 - 40) / dur, 8, 400) })
+  },
+
   /* ================= tracks ================= */
 
   addTrack: (kind) => {
@@ -1102,6 +1377,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
 
   setZoom: (z) => set({ zoom: clamp(z, 8, 400) }),
   toggleSnap: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
+  // zoomFit lives with the pro-tools cluster above (needs the project duration)
   setBeatMarkers: (times, bpm) => set({ beatMarkers: times, beatBpm: bpm, showBeatMarkers: true }),
   clearBeatMarkers: () => set({ beatMarkers: [], beatBpm: null }),
   toggleShowBeatMarkers: () => set((s) => ({ showBeatMarkers: !s.showBeatMarkers })),

@@ -146,6 +146,8 @@ class PreviewEngine {
   private lastFrame = 0
   private playing = false
   private time = 0
+  /** JKL shuttle multiplier — ±1/±2/±4 (negative = reverse playback) */
+  private rate = 1
   private masterVolume = 1
   private masterMuted = false
   private fontsLoaded = false
@@ -263,8 +265,11 @@ class PreviewEngine {
     return this.snapshotFn ? projectDuration(this.snapshotFn().project) : 0
   }
 
-  play() {
-    if (this.playing || !this.snapshotFn) return
+  play(rate = 1) {
+    if (!this.snapshotFn) return
+    // pressing L/J while already shuttling just changes the speed/direction
+    this.rate = Number.isFinite(rate) && rate !== 0 ? rate : 1
+    if (this.playing) return
     const dur = this.duration
     if (this.time >= dur - 0.02) this.time = 0
     // build the WebAudio graph on the first user-gesture play — this powers the
@@ -276,8 +281,17 @@ class PreviewEngine {
       if (!this.playing) return
       const dt = Math.min(0.25, (now - this.lastFrame) / 1000)
       this.lastFrame = now
-      this.time += dt
+      this.time += dt * this.rate
       const d = this.duration
+      if (this.rate < 0 && this.time <= 0) {
+        // reverse shuttle reached the start — settle at 0 and stop
+        this.time = 0
+        this.renderFrame()
+        this.playing = false
+        this.cb?.onTimeUpdate(0)
+        this.cb?.onEnded()
+        return
+      }
       if (this.time >= d) {
         this.time = d
         this.renderFrame()
@@ -290,6 +304,16 @@ class PreviewEngine {
       this.raf = requestAnimationFrame(tick)
     }
     this.raf = requestAnimationFrame(tick)
+  }
+
+  /** change the shuttle speed/direction mid-playback (JKL) */
+  setRate(rate: number) {
+    if (!Number.isFinite(rate)) return
+    this.rate = rate === 0 ? 1 : rate
+  }
+
+  get shuttleRate() {
+    return this.rate
   }
 
   pause() {
@@ -688,7 +712,7 @@ class PreviewEngine {
   ) {
     const el = entry.el as HTMLVideoElement
     const expected = clamp(this.expectedSourcePos(clip, tLocal), 0, Math.max(0, (clip.sourceDuration || el.duration || 1) - 0.02))
-    el.playbackRate = clamp(clip.speed, 0.0625, 16)
+    el.playbackRate = clamp(Math.abs(this.rate) * clip.speed, 0.0625, 16)
 
     const vol = audible ? this.effectiveVolume(clip, tLocal, fadeOpts) * volumeScale : 0
     if (entry.gain) {
@@ -702,7 +726,9 @@ class PreviewEngine {
     // pause the element and step currentTime; audio stays muted.
     // Never stack seeks — issuing a new seek while one is in flight starves
     // the decoder (readyState never recovers → black frames).
-    if (clip.reverse) {
+    // Reverse SHUTTLE (J) rides the same seek-driven path — clip.reverse or a
+    // negative transport rate both make the source run backwards.
+    if (clip.reverse || this.rate < 0) {
       if (!el.paused) el.pause()
       el.muted = true
       if (entry.gain) entry.gain.gain.value = 0
@@ -758,7 +784,7 @@ class PreviewEngine {
   ) {
     const el = entry.el as HTMLAudioElement
     const expected = clamp(this.expectedSourcePos(clip, tLocal), 0, Math.max(0, (clip.sourceDuration || el.duration || 1) - 0.02))
-    el.playbackRate = clamp(clip.speed, 0.0625, 16)
+    el.playbackRate = clamp(Math.abs(this.rate) * clip.speed, 0.0625, 16)
 
     const vol = audible ? this.effectiveVolume(clip, tLocal, fadeOpts) * volumeScale : 0
     if (entry.gain) {
@@ -768,6 +794,22 @@ class PreviewEngine {
       el.volume = vol
     }
     el.muted = vol <= 0.001 && !entry.gain
+
+    // reverse SHUTTLE (J): audio elements can't play backwards — park them
+    // muted at the expected source position while the playhead walks left
+    if (this.rate < 0) {
+      if (!el.paused) el.pause()
+      el.muted = true
+      if (entry.gain) entry.gain.gain.value = 0
+      if (!el.seeking && Math.abs(el.currentTime - expected) > 0.05) {
+        try {
+          el.currentTime = expected
+        } catch {
+          /* ignore */
+        }
+      }
+      return
+    }
 
     if (this.playing) {
       if (el.paused) el.play().catch(() => undefined)

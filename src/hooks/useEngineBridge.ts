@@ -39,7 +39,9 @@ export function useEngineBridge(canvasRef: React.RefObject<HTMLCanvasElement | n
         onEnded: () => {
           const s = useEditor.getState()
           s.pause()
-          s.setCurrentTime(projectDuration(s.project))
+          // reverse shuttle ends at t=0 — don't yank the playhead to the end
+          const endedAt = getEngine().currentTime
+          s.setCurrentTime(endedAt <= 0.01 ? 0 : projectDuration(s.project))
         },
       }
     )
@@ -62,10 +64,15 @@ export function useEngineBridge(canvasRef: React.RefObject<HTMLCanvasElement | n
           if (st2.currentTime >= projectDuration(st2.project) - 0.05) {
             useEditor.setState({ currentTime: 0 })
           }
-          engine2.play()
+          engine2.play(st2.jklRate === 0 ? 1 : st2.jklRate)
         } else {
           getEngine().pause()
+          getEngine().setRate(1)
         }
+      }
+      // JKL shuttle speed/direction changes mid-playback
+      else if (state.jklRate !== prev.jklRate && state.isPlaying) {
+        getEngine().setRate(state.jklRate === 0 ? 1 : state.jklRate)
       }
       // external seek while paused
       if (!state.isPlaying && state.currentTime !== prev.currentTime) {

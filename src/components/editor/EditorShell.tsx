@@ -18,7 +18,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
-import { projectDuration, clamp } from '@/lib/editor/utils'
+import { projectDuration, clamp, formatTimecode } from '@/lib/editor/utils'
 import { TopBar } from '@/components/editor/TopBar'
 import { LeftPanel } from '@/components/editor/panels/LeftPanel'
 import { PreviewPane } from '@/components/editor/preview/PreviewPane'
@@ -95,6 +95,15 @@ function useKeyboardShortcuts() {
         }
         return
       }
+      if (mod && e.shiftKey && key === 'x') {
+        // MUST be checked before plain Ctrl+X (cut) — Ctrl+Shift+X clears In & Out
+        e.preventDefault()
+        if (s.inPoint !== null || s.outPoint !== null) {
+          s.clearInOut()
+          toast('In & Out points cleared')
+        }
+        return
+      }
       if (mod && key === 'x') {
         e.preventDefault()
         if (s.selectedClipIds.length) {
@@ -118,6 +127,21 @@ function useKeyboardShortcuts() {
         s.selectAll()
         return
       }
+      if (mod && key === 'k') {
+        // Premiere-style split alias (S also splits)
+        e.preventDefault()
+        const before = s.project.clips.length
+        s.splitAtPlayhead()
+        if (useEditor.getState().project.clips.length > before) toast.success('Clip split ✂️')
+        return
+      }
+      if (mod && key === 'd') {
+        // Premiere-style duplicate alias (D also duplicates)
+        e.preventDefault()
+        const id = s.selectedClipIds[0]
+        if (id) s.duplicateClip(id)
+        return
+      }
       // any other Ctrl/Cmd combination must never fall through to the
       // single-letter shortcuts below (Ctrl+S used to split the clip!)
       if (mod) return
@@ -129,13 +153,23 @@ function useKeyboardShortcuts() {
           break
         case 'ArrowLeft':
           e.preventDefault()
-          if (e.shiftKey) s.setCurrentTime(s.currentTime - 1)
+          if (e.altKey) s.nudgeSelected(-(e.shiftKey ? 1 : 1 / Math.max(1, s.project.fps)))
+          else if (e.shiftKey) s.setCurrentTime(s.currentTime - 1)
           else s.frameStep(-1)
           break
         case 'ArrowRight':
           e.preventDefault()
-          if (e.shiftKey) s.setCurrentTime(s.currentTime + 1)
+          if (e.altKey) s.nudgeSelected(e.shiftKey ? 1 : 1 / Math.max(1, s.project.fps))
+          else if (e.shiftKey) s.setCurrentTime(s.currentTime + 1)
           else s.frameStep(1)
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          if (s.jumpEdit(-1)) toast(`Edit point ${formatTimecode(s.currentTime, s.project.fps)}`, { duration: 1200 })
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          if (s.jumpEdit(1)) toast(`Edit point ${formatTimecode(useEditor.getState().currentTime, s.project.fps)}`, { duration: 1200 })
           break
         case 'Home':
           e.preventDefault()
@@ -144,6 +178,77 @@ function useKeyboardShortcuts() {
         case 'End':
           e.preventDefault()
           s.setCurrentTime(projectDuration(s.project))
+          break
+        case 'j':
+        case 'J':
+          s.jklAction('j')
+          break
+        case 'k':
+        case 'K':
+          s.jklAction('k')
+          break
+        case 'l':
+        case 'L':
+          s.jklAction('l')
+          break
+        case 'i':
+        case 'I':
+          if (e.shiftKey) {
+            // go to In point
+            if (s.inPoint !== null) s.setCurrentTime(s.inPoint)
+          } else {
+            s.markIn()
+            toast(`In ${formatTimecode(useEditor.getState().inPoint ?? 0, s.project.fps)}`, { duration: 1200 })
+          }
+          break
+        case 'o':
+        case 'O':
+          if (e.shiftKey) {
+            if (s.outPoint !== null) s.setCurrentTime(s.outPoint)
+          } else {
+            s.markOut()
+            toast(`Out ${formatTimecode(useEditor.getState().outPoint ?? 0, s.project.fps)}`, { duration: 1200 })
+          }
+          break
+        case 'b':
+        case 'B':
+          s.setToolMode(s.toolMode === 'razor' ? 'select' : 'razor')
+          toast(s.toolMode === 'razor' ? 'Blade tool — click a clip to cut it' : 'Select tool', { duration: 1400 })
+          break
+        case 'v':
+        case 'V':
+          s.setToolMode('select')
+          break
+        case 'q':
+        case 'Q': {
+          const ok = s.rippleTrimEndToPlayhead()
+          toast[ok ? 'success' : 'info'](ok ? 'Trimmed to playhead — gap closed (Q)' : 'No clip under the playhead', { duration: 1600 })
+          break
+        }
+        case 'w':
+        case 'W': {
+          const ok = s.rippleTrimStartToPlayhead()
+          toast[ok ? 'success' : 'info'](ok ? 'Head trimmed / pulled to playhead (W)' : 'Nothing to trim here', { duration: 1600 })
+          break
+        }
+        case "'": {
+          // Premiere: apostrophe = Lift (remove range, keep gap)
+          const ok = s.liftInOut()
+          toast[ok ? 'success' : 'info'](ok ? 'Range lifted — gap kept' : 'Mark In (I) and Out (O) first', { duration: 1800 })
+          break
+        }
+        case ';': {
+          // Premiere: semicolon = Extract (remove range, ripple closed)
+          const ok = s.extractInOut()
+          toast[ok ? 'success' : 'info'](ok ? 'Range extracted — gap closed' : 'Mark In (I) and Out (O) first', { duration: 1800 })
+          break
+        }
+        case 'z':
+        case 'Z':
+          if (e.shiftKey) {
+            e.preventDefault()
+            s.zoomFit()
+          }
           break
         case 's':
         case 'S': {
@@ -169,6 +274,10 @@ function useKeyboardShortcuts() {
           }
           break
         case 'Escape':
+          if (s.toolMode === 'razor') {
+            s.setToolMode('select')
+            break
+          }
           if (s.selectedClipIds.length) s.selectClip(null)
           break
         case 'm':

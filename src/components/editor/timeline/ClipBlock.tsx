@@ -90,6 +90,7 @@ export function ClipBlock({
   const wasSelectedRef = useRef(false)
 
   const asset = useEditor((s) => (clip.mediaId ? s.media.find((m) => m.id === clip.mediaId) : undefined))
+  const razorMode = useEditor((s) => s.toolMode === 'razor')
 
   const isMedia = clip.kind === 'video' || clip.kind === 'audio'
   const widthPx = Math.max(clip.duration * zoom, 8)
@@ -136,6 +137,19 @@ export function ClipBlock({
   }
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    // blade (razor) tool: click splits the clip at the clicked position — no drag
+    const st = useEditor.getState()
+    if (st.toolMode === 'razor') {
+      if (e.button !== 0) return
+      e.preventDefault()
+      e.stopPropagation()
+      const rect = e.currentTarget.getBoundingClientRect()
+      const t = clip.start + (e.clientX - rect.left) / zoom
+      if (t > clip.start + 0.04 && t < clip.start + clip.duration - 0.04) {
+        st.splitClip(clip.id, t)
+      }
+      return
+    }
     const attr = (e.target as HTMLElement).closest('[data-drag]')?.getAttribute('data-drag')
     beginDrag(e, attr === 'trim-start' || attr === 'trim-end' ? attr : 'move')
   }
@@ -256,7 +270,11 @@ export function ClipBlock({
       onPointerCancel={endDrag}
       className={cn(
         'absolute touch-none select-none',
-        track.locked ? 'pointer-events-none cursor-default' : 'cursor-grab',
+        track.locked
+          ? 'pointer-events-none cursor-default'
+          : razorMode
+            ? 'cursor-crosshair'
+            : 'cursor-grab',
         dragMode === 'move' && 'cursor-grabbing',
       )}
       style={{

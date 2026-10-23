@@ -10,6 +10,7 @@ import {
   AudioLines,
   AudioWaveform,
   Bookmark,
+  Braces,
   ChevronDown,
   Clock3,
   Copy,
@@ -23,6 +24,8 @@ import {
   Maximize2,
   Scissors,
   Snowflake,
+  StepBack,
+  StepForward,
   Trash2,
   ZoomIn,
   ZoomOut,
@@ -62,6 +65,9 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
   const beatMarkers = useEditor((s) => s.beatMarkers)
   const beatBpm = useEditor((s) => s.beatBpm)
   const showBeatMarkers = useEditor((s) => s.showBeatMarkers)
+  const toolMode = useEditor((s) => s.toolMode)
+  const inPoint = useEditor((s) => s.inPoint)
+  const outPoint = useEditor((s) => s.outPoint)
   const [detecting, setDetecting] = useState(false)
 
   const duration = projectDuration(project)
@@ -408,6 +414,138 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* ---- pro cluster: blade tool / in-out / edit-point navigation ---- */}
+
+      {/* blade (razor) tool — click a clip to split at the click position */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Toggle
+            size="sm"
+            pressed={toolMode === 'razor'}
+            onPressedChange={() => useEditor.getState().setToolMode(toolMode === 'razor' ? 'select' : 'razor')}
+            aria-label="Blade tool"
+            className={cn(
+              'h-8 w-8 px-0',
+              toolMode === 'razor'
+                ? 'nc-gradient text-white hover:opacity-90'
+                : 'text-foreground/65 hover:bg-(--nc-panel-strong) hover:text-foreground',
+            )}
+          >
+            <Scissors className="size-4" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Blade tool (B) — click a clip to cut it · Esc exits</TooltipContent>
+      </Tooltip>
+
+      {/* In / Out points — mark, go-to, clear, lift, extract */}
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  TOOL_BTN,
+                  'relative w-9',
+                  (inPoint !== null || outPoint !== null) && 'text-amber-300 hover:text-amber-200',
+                )}
+                aria-label="In and Out points"
+              >
+                <Braces className="size-4" />
+                {(inPoint !== null || outPoint !== null) && (
+                  <span className="absolute -right-1.5 -top-1 rounded-full bg-amber-400 px-1 text-[8px] font-bold leading-[13px] text-amber-950 tabular-nums">
+                    {inPoint !== null && outPoint !== null ? 'IO' : inPoint !== null ? 'I' : 'O'}
+                  </span>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">In / Out points (I / O) — range edits</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="start" className="nc-glass-strong border-(--nc-line)">
+          <DropdownMenuItem onClick={() => useEditor.getState().markIn()}>
+            <Braces className="mr-2 size-3.5" />
+            Mark In at playhead (I)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => useEditor.getState().markOut()}>
+            <Braces className="mr-2 size-3.5 opacity-60" />
+            Mark Out at playhead (O)
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={inPoint === null} onClick={() => inPoint !== null && useEditor.getState().setCurrentTime(inPoint)}>
+            <StepBack className="mr-2 size-3.5" />
+            Go to In (Shift+I)
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={outPoint === null} onClick={() => outPoint !== null && useEditor.getState().setCurrentTime(outPoint)}>
+            <StepForward className="mr-2 size-3.5" />
+            Go to Out (Shift+O)
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={inPoint === null || outPoint === null}
+            onClick={() => {
+              if (useEditor.getState().liftInOut()) toast.success('Range lifted — gap kept')
+              else toast('Mark In (I) and Out (O) first')
+            }}
+          >
+            <Scissors className="mr-2 size-3.5 opacity-60" />
+            Lift range — keep gap (')
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={inPoint === null || outPoint === null}
+            onClick={() => {
+              if (useEditor.getState().extractInOut()) toast.success('Range extracted — gap closed')
+              else toast('Mark In (I) and Out (O) first')
+            }}
+          >
+            <Slice className="mr-2 size-3.5" />
+            Extract range — close gap (;)
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={inPoint === null && outPoint === null}
+            className="text-rose-300 focus:text-rose-200"
+            onClick={() => {
+              useEditor.getState().clearInOut()
+              toast('In & Out points cleared')
+            }}
+          >
+            <Trash2 className="mr-2 size-3.5" />
+            Clear In & Out (Ctrl+Shift+X)
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* jump between edit points (clip edges + markers) */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={TOOL_BTN}
+            aria-label="Previous edit point"
+            onClick={() => useEditor.getState().jumpEdit(-1)}
+          >
+            <StepBack className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Previous edit point (↑)</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={TOOL_BTN}
+            aria-label="Next edit point"
+            onClick={() => useEditor.getState().jumpEdit(1)}
+          >
+            <StepForward className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Next edit point (↓)</TooltipContent>
+      </Tooltip>
 
       <div className="flex-1" />
 
