@@ -7,10 +7,13 @@
  */
 import { useState } from 'react'
 import {
+  ArrowLeftRight,
   AudioLines,
   AudioWaveform,
   Bookmark,
   Braces,
+  ChevronsLeftRight,
+  ChevronsRight,
   ChevronDown,
   Clock3,
   Copy,
@@ -22,6 +25,7 @@ import {
   Loader2,
   Magnet,
   Maximize2,
+  MoveHorizontal,
   Scissors,
   Snowflake,
   StepBack,
@@ -436,6 +440,100 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
           </Toggle>
         </TooltipTrigger>
         <TooltipContent side="bottom">Blade tool (B) — click a clip to cut it · Esc exits</TooltipContent>
+      </Tooltip>
+
+      {/* ---- pro trim modes: ripple / roll / slip / slide (G / N / Y / U) ---- */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Toggle
+            size="sm"
+            pressed={toolMode === 'ripple'}
+            onPressedChange={() => {
+              const next = toolMode === 'ripple' ? 'select' : 'ripple'
+              useEditor.getState().setToolMode(next)
+              toast(next === 'ripple' ? 'Ripple edit — drags close the gap' : 'Select tool', { duration: 1400 })
+            }}
+            aria-label="Ripple edit tool"
+            className={cn(
+              'h-8 w-8 px-0',
+              toolMode === 'ripple'
+                ? 'nc-gradient text-white hover:opacity-90'
+                : 'text-foreground/65 hover:bg-(--nc-panel-strong) hover:text-foreground',
+            )}
+          >
+            <ChevronsRight className="size-4" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Ripple edit (G) — move or trim a clip, same-track followers close the gap</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Toggle
+            size="sm"
+            pressed={toolMode === 'roll'}
+            onPressedChange={() => {
+              const next = toolMode === 'roll' ? 'select' : 'roll'
+              useEditor.getState().setToolMode(next)
+              toast(next === 'roll' ? 'Roll edit — drag the cut between adjacent clips' : 'Select tool', { duration: 1400 })
+            }}
+            aria-label="Roll edit tool"
+            className={cn(
+              'h-8 w-8 px-0',
+              toolMode === 'roll'
+                ? 'nc-gradient text-white hover:opacity-90'
+                : 'text-foreground/65 hover:bg-(--nc-panel-strong) hover:text-foreground',
+            )}
+          >
+            <ChevronsLeftRight className="size-4" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Roll edit (N) — drag a cut between adjacent clips; total length unchanged</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Toggle
+            size="sm"
+            pressed={toolMode === 'slip'}
+            onPressedChange={() => {
+              const next = toolMode === 'slip' ? 'select' : 'slip'
+              useEditor.getState().setToolMode(next)
+              toast(next === 'slip' ? 'Slip — drag a clip body to slide its media window' : 'Select tool', { duration: 1400 })
+            }}
+            aria-label="Slip tool"
+            className={cn(
+              'h-8 w-8 px-0',
+              toolMode === 'slip'
+                ? 'nc-gradient text-white hover:opacity-90'
+                : 'text-foreground/65 hover:bg-(--nc-panel-strong) hover:text-foreground',
+            )}
+          >
+            <MoveHorizontal className="size-4" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Slip (Y) — drag a clip body to slide its source in/out without moving the clip</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Toggle
+            size="sm"
+            pressed={toolMode === 'slide'}
+            onPressedChange={() => {
+              const next = toolMode === 'slide' ? 'select' : 'slide'
+              useEditor.getState().setToolMode(next)
+              toast(next === 'slide' ? 'Slide — neighbors absorb the move' : 'Select tool', { duration: 1400 })
+            }}
+            aria-label="Slide tool"
+            className={cn(
+              'h-8 w-8 px-0',
+              toolMode === 'slide'
+                ? 'nc-gradient text-white hover:opacity-90'
+                : 'text-foreground/65 hover:bg-(--nc-panel-strong) hover:text-foreground',
+            )}
+          >
+            <ArrowLeftRight className="size-4" />
+          </Toggle>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Slide (U) — drag a clip between its neighbors; they stretch to absorb it</TooltipContent>
       </Tooltip>
 
       {/* In / Out points — mark, go-to, clear, lift, extract */}

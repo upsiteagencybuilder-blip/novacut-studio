@@ -439,6 +439,31 @@ export function computeHistogram(pixels: Uint8ClampedArray): { r: number[]; g: n
   return { r, g, b }
 }
 
+/**
+ * Magnetic dual-edge snap — the core of the magnetic timeline feel.
+ * A dragged clip hunts for targets with BOTH edges: its start and its end
+ * (start + duration). Whichever edge lands closer to a target wins, so a clip
+ * can drop flush against a neighbor's tail even when its start is nowhere
+ * near a target on its own.
+ */
+export function snapBothEdges(
+  start: number,
+  duration: number,
+  targets: number[],
+  thresholdPx: number,
+  zoom: number,
+): { start: number; snapped: boolean; edge: 'start' | 'end' | null; snapPx: number | null } {
+  const head = snapTime(start, targets, thresholdPx, zoom)
+  const tail = snapTime(start + duration, targets, thresholdPx, zoom)
+  if (head.snapped && (!tail.snapped || Math.abs(head.value - start) <= Math.abs(tail.value - (start + duration)))) {
+    return { start: head.value, snapped: true, edge: 'start', snapPx: head.value * zoom }
+  }
+  if (tail.snapped) {
+    return { start: tail.value - duration, snapped: true, edge: 'end', snapPx: tail.value * zoom }
+  }
+  return { start, snapped: false, edge: null, snapPx: null }
+}
+
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

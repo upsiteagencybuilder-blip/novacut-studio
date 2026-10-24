@@ -922,3 +922,29 @@ Stage Summary:
 - Day 02 COMPLETE: professional multi-selection UX — marquee rubber-band, touch long-press multi-add, group move (pre-existing), one-undo batch duplicate/delete, batch nudge (pre-existing), Escape, and a discoverable floating action badge; catalog honestly extended (+2 live).
 - Key artifacts: store.setSelection + duplicateSelected, Timeline marquee + batch badge, ClipBlock touch gesture state machine, EditorShell Escape/batch-D.
 - Next: Day 03 (Category A — Magnetic timeline + ripple/roll/slip/slide edit modes) on the user's next command.
+
+---
+Task ID: Day-03
+Agent: Z.ai Code (main)
+Task: ROADMAP-90 Category A, Day 3 — Magnetic timeline + ripple/roll/slip/slide edit modes.
+
+Work Log:
+- SURVEY: Q/W ripple-to-playhead trims, Shift+Del ripple delete and Extract already existed; the genuine gaps were (1) snapping only hunted with a clip's START edge, (2) no drag-driven ripple mode, (3) no roll, slip or slide tools at all (catalog had all three as 'planned').
+- MAGNETIC: new utils.snapBothEdges(start, duration, targets, thresholdPx, zoom) — a dragged clip hunts with BOTH edges (start AND end); whichever edge lands closer wins, so drops land flush even when the start is nowhere near a target; move drags now also snap to In/Out points.
+- STORE: toolMode widened to 'select' | 'razor' | 'ripple' | 'roll' | 'slip' | 'slide'.
+- CLIPBLOCK pro modes (all neighbor/follower state frozen at drag start so pointermove never reads half-updated store):
+  * RIPPLE (G): body drag slides the frozen same-track follower train by the identical delta; trim-end grows/shrinks the tail and keeps followers flush (verified gap 0.0000); trim-start pins the clip's start to the previous tail, removes/adds head material and pulls/pushes the train (media-safe via trimStart clamp).
+  * ROLL (N): with an adjacent neighbor, dragging a cut exchanges material between outgoing tail and incoming head (C.duration ± d, R.start ± d, R.trimStart ± d·speed, R.duration ∓ d) under full media/duration clamps on BOTH sides; no neighbor → falls back to plain trim. Track length provably constant.
+  * SLIP (Y): body drag slides the source window (trimStart ± dx·speed, clamped to available source) while start/duration/position never move; non-media shows an honest tooltip instead.
+  * SLIDE (U): body drag moves the clip while frozen left/right neighbors absorb the shift (L.duration + d, R.start + d, R.head ∓ d) under both neighbors' capacity clamps; track length provably constant.
+  * Group multi-move now only engages in select mode; pro modes act on the grabbed clip alone. Slip body cursor = move; refs cleared on endDrag.
+- TOOLBAR: four new toggles after the blade tool — Ripple (ChevronsRight), Roll (ChevronsLeftRight), Slip (MoveHorizontal), Slide (ArrowLeftRight) — aria-labeled, gradient active state, explanatory toasts.
+- KEYBOARD: G/N/Y/U toggle the four modes with toasts (V still returns to select; B blade unchanged).
+- CATALOG honesty: timeline-rolling-edit-tool, timeline-slip-tool, timeline-slide-tool flipped live; timeline-ripple-edit-tool desc extended to the G drag mode; new live entry timeline-magnetic-snapping (dual-edge magnet).
+- E2E receipts (agent-browser, demo project, zoom 70px/s): DESKTOP 1280×800 — MAGNETIC: playhead 6.5s, body drag +87.5px (raw start 3.85) → store start 3.90 EXACTLY, end 6.5 = playhead (END-edge snapped; start target distances were 1.25s, no start snap), one undo → 2.6. RIPPLE body: neon +0.5 & mountains +0.5 identical deltas, audio/text untouched, one undo. RIPPLE trim-end +0.4: dur 3.0, follower 5.6, flushGap 0.0000, one undo. RIPPLE trim-start +0.3: start pinned 2.6, dur 2.3, mountains 4.9, one undo. ROLL trim-end +0.3: neon 2.9 / mountains start 5.5 dur 2.3, cutFlush true, trackSum 7.8 UNCHANGED, one undo. SLIP audio +0.5 drag: start 0, dur 7.8, trimStart clamped to 0.2 (only remaining source), others untouched, one undo → 0. SLIDE +0.4: sunrise 3.0 / neon 3.0 / mountains 5.6·2.2, trackSum 7.8, chain gapless, one undo. Toolbar toggle: aria-pressed true + store 'ripple'. Keyboard G/N/Y/U/V all flip toolMode. MOBILE 390×844: toolbar Ripple toggle tap → 'ripple'; touch drag (pointerType touch) middle clip +35px → +0.5/+0.5 flush train; Slip toggle tap → touch drag audio +0.3s → trim 0.2 clamped, start 0; one undo → 0. Playback regression 0→1.16s clean. Screenshots verify-d3-desktop.png (ripple toggle gradient-active, gapless train visible) / verify-d3-mobile.png (slip active, audio selected). ZERO page errors both viewports; eslint + filtered tsc clean.
+- Note: onboarding 'Try the demo project' reseeds ids (fresh demo) — later receipts use fresh ids; all gestures re-verified on the fresh project.
+
+Stage Summary:
+- Day 03 COMPLETE: the timeline now has real pro-trim mechanics — dual-edge magnetic snapping plus drag-driven Ripple / Roll / Slip / Slide modes with keyboard (G/N/Y/U), toolbar toggles, media-safe clamps, one-undo-per-gesture, and gap-free invariants proven numerically in E2E on desktop + touch on mobile; catalog honestly extended (+3 flipped, +1 new live).
+- Key artifacts: utils.snapBothEdges, store toolMode union, ClipBlock mode-aware drag engine (frozen gesture state), TimelineToolbar pro cluster, EditorShell G/N/Y/U, timeline.ts catalog.
+- Next: Day 04 (Category A — Nested/compound clips: group → single block, double-click to enter) on the user's next command.

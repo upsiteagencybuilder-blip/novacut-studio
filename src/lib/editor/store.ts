@@ -141,9 +141,14 @@ interface EditorStore {
   clearUserMarkers: () => void
 
   /* ---------- pro tools (blade / in-out / shuttle / ripple trims) ---------- */
-  /** active timeline tool: 'select' (default) or 'razor' — click clips to split at the click position */
-  toolMode: 'select' | 'razor'
-  setToolMode: (mode: 'select' | 'razor') => void
+  /**
+   * active timeline tool: 'select' (default), 'razor', or one of the four pro
+   * trim modes — 'ripple' (drags close the gap), 'roll' (move the cut between
+   * adjacent clips), 'slip' (slide the media window under a fixed clip) and
+   * 'slide' (move a clip while its neighbors absorb the shift)
+   */
+  toolMode: 'select' | 'razor' | 'ripple' | 'roll' | 'slip' | 'slide'
+  setToolMode: (mode: 'select' | 'razor' | 'ripple' | 'roll' | 'slip' | 'slide') => void
   /** JKL shuttle rate: 0 = stopped, ±1 / ±2 / ±4 (negative = reverse playback) */
   jklRate: number
   /** J / K / L shuttle transport (pro NLE standard) */

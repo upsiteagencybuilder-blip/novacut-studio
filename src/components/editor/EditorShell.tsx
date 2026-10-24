@@ -225,6 +225,26 @@ function useKeyboardShortcuts() {
         case 'V':
           s.setToolMode('select')
           break
+        case 'g':
+        case 'G':
+          s.setToolMode('ripple')
+          toast('Ripple edit — drags close the gap', { duration: 1400 })
+          break
+        case 'n':
+        case 'N':
+          s.setToolMode('roll')
+          toast('Roll edit — drag the cut between adjacent clips', { duration: 1400 })
+          break
+        case 'y':
+        case 'Y':
+          s.setToolMode('slip')
+          toast('Slip — drag a clip body to slide its media window', { duration: 1400 })
+          break
+        case 'u':
+        case 'U':
+          s.setToolMode('slide')
+          toast('Slide — neighbors absorb the move', { duration: 1400 })
+          break
         case 'q':
         case 'Q': {
           const ok = s.rippleTrimEndToPlayhead()
