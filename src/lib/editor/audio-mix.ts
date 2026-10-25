@@ -14,6 +14,7 @@
  * engine (seek-driven) so the mixdown skips them too.
  */
 import type { Clip, ClipAudioFx, MediaAssetRuntime, Project } from './types'
+import { resolveNestedProject } from './nested'
 import { clamp, projectDuration } from './utils'
 import { decodeSource } from '@/lib/effects/voice'
 
@@ -337,10 +338,13 @@ function duckFactorLocal(project: Project, clip: Clip, t: number): number {
  * Reversed clips are skipped (silent in the engine as well).
  */
 export async function renderProjectAudio(
-  project: Project,
+  rawProject: Project,
   mediaMap: Map<string, MediaAssetRuntime>,
   opts: MixdownOptions
 ): Promise<AudioBuffer> {
+  // compound containers are flattened so their children mix exactly where
+  // the preview engine places them
+  const project = resolveNestedProject(rawProject)
   const sr = opts.sampleRate
   const anySolo = project.tracks.some((tr) => tr.solo)
 

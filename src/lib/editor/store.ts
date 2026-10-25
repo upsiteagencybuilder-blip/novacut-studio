@@ -34,9 +34,15 @@ import {
   createStickerClip,
   createTextClip,
   createTrack,
+  DEFAULT_CHROMA_KEY,
+  DEFAULT_COLOR_GRADE,
+  DEFAULT_FILTERS,
+  DEFAULT_TRANSFORM,
+  MIN_CLIP_DURATION,
   type StickerRequest,
   type TextPreset,
 } from './constants'
+import { isNestedClip, openCompound } from './nested'
 import { baseValueForProperty, clamp, formatTimecode, landingTime, normalizeColorGrade, normalizeFilters, projectDuration, round2, uid } from './utils'
 import * as db from './db'
 
@@ -82,6 +88,18 @@ interface EditorStore {
   hasClipboard: boolean
   /** user-placed timeline markers in seconds (Shift+M) — view state, not project state */
   userMarkers: number[]
+
+  /* ---------- nested (compound) clips ---------- */
+  /** pack every selected clip into a single compound block (Ctrl+G) */
+  groupSelectedClips: () => boolean
+  /** dissolve the selected compound back onto the timeline (Ctrl+Shift+G) */
+  ungroupSelectedClip: () => boolean
+  /** double-click a compound — materialize its children for editing (a session) */
+  enterNestedClip: (id: string) => boolean
+  /** leave the compound session — repack members into the container */
+  exitNestedSession: () => boolean
+  /** session-internal: register newly created clip ids as compound members (no-op outside a session) */
+  joinSession: (ids: string[]) => void
 
   /* ---------- lifecycle ---------- */
   init: () => Promise<void>
@@ -278,6 +296,13 @@ function exciseRange(clips: Clip[], from: number, to: number, extract: boolean, 
     const c = JSON.parse(JSON.stringify(orig)) as Clip
     const start = c.start
     const end = c.start + c.duration
+    // compounds are untouchable containers: never trimmed/split/deleted here —
+    // only the extract shift applies (moving one whole is always safe)
+    if (c.kind === 'nested') {
+      if (extract && start >= to - 0.001) c.start = Math.max(0, round2(start - range))
+      out.push(c)
+      continue
+    }
     if (end <= from + 0.001 || start >= to - 0.001) {
       // outside the range — only move when extracting and the clip sits after it
       if (extract && start >= to - 0.001) c.start = Math.max(0, round2(start - range))
@@ -320,8 +345,8 @@ function exciseRange(clips: Clip[], from: number, to: number, extract: boolean, 
  * user is visually parked inside). Falls back to audio when it's all there is.
  */
 function pickTrimTarget(clips: Clip[], selectedIds: string[], t: number): Clip | null {
-  const straddles = (c: Clip) => t > c.start + 0.05 && t < c.start + c.duration - 0.05
-  const isVisual = (c: Clip) => c.kind !== 'audio'
+  const straddles = (c: Clip) => c.kind !== 'nested' && t > c.start + 0.05 && t < c.start + c.duration - 0.05
+  const isVisual = (c: Clip) => c.kind !== 'audio' && c.kind !== 'nested'
   const selStraddle = clips.find((c) => selectedIds.includes(c.id) && straddles(c))
   if (selStraddle) return selStraddle
   const visual = clips.find((c) => straddles(c) && isVisual(c))
@@ -577,6 +602,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
       project: withUpdatedAt({ ...s.project, clips: [...s.project.clips, clip] }),
       selectedClipIds: opts?.select === false ? s.selectedClipIds : [clip.id],
     }))
+    // a clip added while a compound session is open belongs to the compound
+    get().joinSession([clip.id])
   },
 
   addClipFromMediaId: (mediaId, at) => {
@@ -674,6 +701,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const s = get()
     const clip = s.project.clips.find((c) => c.id === id)
     if (!clip) return
+    if (clip.kind === 'nested') return // compounds split from inside — enter first
     const local = time - clip.start
     if (local <= 0.08 || local >= clip.duration - 0.08) return
     const leftDur = round2(local)
@@ -694,6 +722,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
       }),
       selectedClipIds: [rightClip.id],
     }))
+    // the split's right half stays a compound member when inside a session
+    get().joinSession([rightClip.id])
   },
 
   splitAtPlayhead: () => {
@@ -883,9 +913,13 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
 
   deleteClip: (id) => {
+    const s = get()
+    // the open compound container can't be deleted while its session runs —
+    // exit first (the members are ordinary clips and delete normally)
+    if (s.project.clips.some((c) => c.id === id && c.kind === 'nested' && c.nested?.open)) return
     get().pushHistory()
-    set((s) => ({
-      project: withUpdatedAt({ ...s.project, clips: s.project.clips.filter((c) => c.id !== id) }),
+    set((st) => ({
+      project: withUpdatedAt({ ...st.project, clips: st.project.clips.filter((c) => c.id !== id) }),
       selectedClipIds: s.selectedClipIds.filter((cid) => cid !== id),
     }))
   },
@@ -895,7 +929,10 @@ export const useEditor = create<EditorStore>((set, get) => ({
     if (!s.selectedClipIds.length) return
     s.pushHistory()
     set((st) => ({
-      project: withUpdatedAt({ ...st.project, clips: st.project.clips.filter((c) => !st.selectedClipIds.includes(c.id)) }),
+      project: withUpdatedAt({
+        ...st.project,
+        clips: st.project.clips.filter((c) => !st.selectedClipIds.includes(c.id) && !(c.kind === 'nested' && c.nested?.open)),
+      }),
       selectedClipIds: [],
     }))
   },
@@ -1013,6 +1050,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
     set((st) => ({
       project: withUpdatedAt({ ...st.project, clips: [...st.project.clips, ...clips] }),
     }))
+    get().joinSession(clips.map((c) => c.id))
     return clips.length
   },
 
@@ -1041,6 +1079,173 @@ export const useEditor = create<EditorStore>((set, get) => ({
       project: withUpdatedAt({ ...st.project, clips: [...st.project.clips, ...copies] }),
       selectedClipIds: copies.map((c) => c.id),
     }))
+    get().joinSession(copies.map((c) => c.id))
+  },
+
+  /* ================= nested (compound) clips ================= */
+
+  groupSelectedClips: () => {
+    const s = get()
+    if (openCompound(s.project)) return false // no compounds inside compounds
+    const sel = s.project.clips.filter((c) => s.selectedClipIds.includes(c.id))
+    if (sel.length < 2) return false
+    if (sel.some((c) => c.kind === 'nested')) return false
+    const minStart = Math.min(...sel.map((c) => c.start))
+    const end = Math.max(...sel.map((c) => c.start + c.duration))
+    const span = round2(end - minStart)
+    if (span < MIN_CLIP_DURATION) return false
+    // the container sits on the most prominent selected track (video first)
+    const anchor = sel.find((c) => c.kind === 'video') ?? sel.find((c) => c.kind !== 'audio') ?? sel[0]
+    // children keep their own tracks & styles; starts become relative offsets
+    const children: Clip[] = sel.map((c) => ({
+      ...(JSON.parse(JSON.stringify(c)) as Clip),
+      id: uid('clip_'),
+      start: round2(c.start - minStart),
+    }))
+    const compoundIndex = s.project.clips.filter((c) => c.kind === 'nested').length + 1
+    const compound: Clip = {
+      id: uid('clip_'),
+      trackId: anchor.trackId,
+      kind: 'nested',
+      name: `Compound ${compoundIndex}`,
+      start: minStart,
+      duration: span,
+      trimStart: 0,
+      sourceDuration: 3600,
+      speed: 1,
+      volume: 1,
+      muted: false,
+      fadeIn: 0,
+      fadeOut: 0,
+      transform: { ...DEFAULT_TRANSFORM },
+      filters: { ...DEFAULT_FILTERS },
+      motion: 'none',
+      motionIntensity: 0.35,
+      keyframes: [],
+      blendMode: 'source-over',
+      chromaKey: { ...DEFAULT_CHROMA_KEY },
+      colorGrade: { ...DEFAULT_COLOR_GRADE },
+      nested: { children },
+      color: '#a78bfa',
+    }
+    s.pushHistory()
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: [...st.project.clips.filter((c) => !st.selectedClipIds.includes(c.id)), compound],
+      }),
+      selectedClipIds: [compound.id],
+    }))
+    return true
+  },
+
+  ungroupSelectedClip: () => {
+    const s = get()
+    if (openCompound(s.project)) return false // exit the session first
+    if (s.selectedClipIds.length !== 1) return false
+    const clip = s.project.clips.find((c) => c.id === s.selectedClipIds[0])
+    if (!clip || !isNestedClip(clip)) return false
+    s.pushHistory()
+    const restored: Clip[] = clip.nested!.children.map((ch) => ({
+      ...(JSON.parse(JSON.stringify(ch)) as Clip),
+      start: round2(clip.start + ch.start),
+    }))
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: [...st.project.clips.filter((c) => c.id !== clip.id), ...restored],
+      }),
+      selectedClipIds: restored.map((c) => c.id),
+    }))
+    return true
+  },
+
+  enterNestedClip: (id) => {
+    const s = get()
+    if (openCompound(s.project)) return false // one compound at a time (honest scope)
+    const clip = s.project.clips.find((c) => c.id === id)
+    if (!clip || !isNestedClip(clip)) return false
+    s.pushHistory()
+    const materialized: Clip[] = clip.nested!.children.map((ch) => ({
+      ...(JSON.parse(JSON.stringify(ch)) as Clip),
+      id: uid('clip_'),
+      start: round2(clip.start + ch.start),
+    }))
+    const ids = materialized.map((c) => c.id)
+    const t0 = clip.start
+    const t1 = clip.start + clip.duration
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: [
+          ...st.project.clips.map((c) =>
+            c.id === clip.id ? { ...c, nested: { ...c.nested!, open: true, memberIds: ids } } : c
+          ),
+          ...materialized,
+        ],
+      }),
+      selectedClipIds: [],
+      currentTime: clamp(s.currentTime, t0, Math.max(t0, t1)),
+      isPlaying: false,
+    }))
+    return true
+  },
+
+  exitNestedSession: () => {
+    const s = get()
+    const compound = openCompound(s.project)
+    if (!compound) return false
+    s.pushHistory()
+    const memberIds = compound.nested?.memberIds ?? []
+    const members = s.project.clips.filter((c) => memberIds.includes(c.id))
+    if (!members.length) {
+      // everything inside was deleted — the empty compound goes with it
+      set((st) => ({
+        project: withUpdatedAt({ ...st.project, clips: st.project.clips.filter((c) => c.id !== compound.id) }),
+        selectedClipIds: [],
+      }))
+      return true
+    }
+    const minStart = Math.min(...members.map((c) => c.start))
+    const end = Math.max(...members.map((c) => c.start + c.duration))
+    const span = round2(Math.max(end - minStart, MIN_CLIP_DURATION))
+    const packed: Clip = {
+      ...compound,
+      start: round2(minStart),
+      duration: span,
+      nested: {
+        children: members.map((m) => ({
+          ...(JSON.parse(JSON.stringify(m)) as Clip),
+          start: round2(m.start - minStart),
+        })),
+        open: false,
+        memberIds: [],
+      },
+    }
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: [...st.project.clips.filter((c) => c.id !== compound.id && !memberIds.includes(c.id)), packed],
+      }),
+      selectedClipIds: [packed.id],
+    }))
+    return true
+  },
+
+  joinSession: (ids) => {
+    if (!ids.length) return
+    set((st) => {
+      const compound = openCompound(st.project)
+      if (!compound) return st
+      return {
+        project: withUpdatedAt({
+          ...st.project,
+          clips: st.project.clips.map((c) =>
+            c.id === compound.id ? { ...c, nested: { ...c.nested!, memberIds: [...(c.nested?.memberIds ?? []), ...ids] } } : c
+          ),
+        }),
+      }
+    })
   },
 
   selectClip: (id, additive) => {
@@ -1104,6 +1309,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
       project: withUpdatedAt({ ...st.project, clips: [...st.project.clips, ...clones] }),
       selectedClipIds: clones.map((c) => c.id),
     }))
+    get().joinSession(clones.map((c) => c.id))
   },
 
   selectAll: () => {

@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { AudioLines, Blend, Copy, Eye, EyeOff, Film, Layers, Lock, LockOpen, Plus, Trash2, Volume2, VolumeX, X } from 'lucide-react'
+import { ArrowLeft, AudioLines, Blend, Boxes, Copy, Eye, EyeOff, Film, Layers, Lock, LockOpen, Plus, Trash2, Volume2, VolumeX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +20,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { HEADER_WIDTH, RULER_HEIGHT, TRACK_HEIGHT } from '@/lib/editor/constants'
 import { useEditor } from '@/lib/editor/store'
+import { openCompound } from '@/lib/editor/nested'
 import { transitionPairsForTrack } from '@/lib/editor/transitionBridge'
 import { clipsOnTrack, formatShortTime, projectDuration } from '@/lib/editor/utils'
 import type { Clip, ClipKind, Track } from '@/lib/editor/types'
@@ -38,6 +39,8 @@ const HEADER_BTN =
 /** clip kind → track kind compatibility (locked tracks never accept drops) */
 function isCompatible(kind: ClipKind, track: Track): boolean {
   if (track.locked) return false
+  // a compound carries its own children on their own tracks — any lane takes it
+  if (kind === 'nested') return true
   return kind === 'audio' ? track.kind === 'audio' : track.kind === 'video' || track.kind === 'overlay'
 }
 
@@ -53,6 +56,8 @@ export function Timeline() {
   const toolMode = useEditor((s) => s.toolMode)
   const inPoint = useEditor((s) => s.inPoint)
   const outPoint = useEditor((s) => s.outPoint)
+  // the compound being edited (open = children materialized as top-level clips)
+  const session = useEditor((s) => openCompound(s.project))
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const laneEls = useRef(new Map<string, HTMLDivElement>())
@@ -183,7 +188,10 @@ export function Timeline() {
       const r = el.getBoundingClientRect()
       if (r.left < l + w && r.right > l && r.top < t + h && r.bottom > t) hits.push(el.dataset.clipId!)
     })
-    const merged = m.additive ? Array.from(new Set([...m.base, ...hits])) : hits
+    // inside a compound session only the members are selectable
+    const open = useEditor.getState().project.clips.find((c) => c.kind === 'nested' && c.nested?.open)
+    const selectable = open ? hits.filter((id) => open.nested?.memberIds?.includes(id)) : hits
+    const merged = m.additive ? Array.from(new Set([...m.base, ...selectable])) : selectable
     const st = useEditor.getState()
     if (merged.length !== st.selectedClipIds.length || merged.some((id) => !st.selectedClipIds.includes(id))) {
       st.setSelection(merged)
@@ -204,6 +212,39 @@ export function Timeline() {
     <TooltipProvider delayDuration={350}>
       <div className="flex h-full min-h-0 flex-col">
         <TimelineToolbar />
+
+        {/* compound session breadcrumb — "inside the compound" indicator + exit */}
+        {session && (
+          <div
+            data-nc-compound-bar
+            className="flex h-9 shrink-0 items-center gap-2 border-b border-violet-400/30 bg-violet-950/40 px-3"
+          >
+            <button
+              type="button"
+              data-nc-compound-exit
+              aria-label="Exit compound — back to the main timeline"
+              onClick={() => {
+                const n = session.nested?.memberIds?.length ?? 0
+                const ok = useEditor.getState().exitNestedSession()
+                if (ok) toast.success(`Compound saved — ${n} clip${n === 1 ? '' : 's'} packed inside`)
+              }}
+              className="flex h-6 items-center gap-1 rounded-full border border-violet-400/40 bg-violet-400/10 px-2 text-[11px] font-medium text-violet-200 transition hover:bg-violet-400/20"
+            >
+              <ArrowLeft className="size-3.5" />
+              Main timeline
+            </button>
+            <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-violet-100/90">
+              <Layers className="size-3.5 shrink-0 text-violet-300" />
+              <span className="truncate font-medium">{session.name}</span>
+              <span className="shrink-0 text-violet-200/60">
+                — editing {session.nested?.memberIds?.length ?? 0} clip{(session.nested?.memberIds?.length ?? 0) === 1 ? '' : 's'} inside
+              </span>
+            </span>
+            <span className="ml-auto hidden shrink-0 text-[10px] text-violet-200/50 sm:block">
+              add / split / trim freely — exiting repacks everything
+            </span>
+          </div>
+        )}
 
         <div className="relative min-h-0 flex-1">
           <div
@@ -231,7 +272,8 @@ export function Timeline() {
 
               {/* track rows */}
               {project.tracks.map((track) => {
-                const clips = clipsOnTrack(project, track.id)
+                // the OPEN compound is "away" — its materialized children render instead
+                const clips = clipsOnTrack(project, track.id).filter((c) => !(c.kind === 'nested' && c.nested?.open))
                 const isDropTarget = dragInfo !== null && hoverTrackId === track.id && isCompatible(dragInfo.kind, track)
                 return (
                   <div key={track.id} className="group/trow flex" style={{ height: TRACK_HEIGHT }}>
@@ -244,6 +286,7 @@ export function Timeline() {
                       selectedIds={selectedIds}
                       isDropTarget={isDropTarget}
                       emptyHint={emptyHintTrackId === track.id}
+                      sessionIds={session?.nested?.memberIds ?? null}
                       registerLane={registerLane}
                       findLaneAt={findLaneAt}
                       onDragChange={handleDragChange}
@@ -364,6 +407,21 @@ export function Timeline() {
               className="absolute bottom-2 left-1/2 z-[46] flex -translate-x-1/2 items-center gap-1 rounded-full border border-fuchsia-400/40 bg-(--nc-panel-strong)/95 py-1 pr-1 pl-3 shadow-lg backdrop-blur"
             >
               <span className="text-[11px] font-medium tabular-nums text-fuchsia-200">{selectedIds.length} selected</span>
+              {!session && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 rounded-full px-2 text-[11px] text-violet-200 hover:text-violet-100"
+                  onClick={() => {
+                    const n = selectedIds.length
+                    if (useEditor.getState().groupSelectedClips()) toast.success(`Grouped ${n} clips into a compound`)
+                    else toast('Compounds cannot nest — select plain clips only')
+                  }}
+                >
+                  <Boxes className="size-3" />
+                  Group
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -487,6 +545,8 @@ interface TrackLaneProps {
   selectedIds: string[]
   isDropTarget: boolean
   emptyHint: boolean
+  /** active compound session member ids — non-members render dimmed + inert */
+  sessionIds: string[] | null
   registerLane: (trackId: string, el: HTMLDivElement | null) => void
   findLaneAt: (clientY: number, kind: ClipKind) => { trackId: string } | null
   onDragChange: (d: ClipDragInfo | null) => void
@@ -505,6 +565,7 @@ function TrackLane({
   selectedIds,
   isDropTarget,
   emptyHint,
+  sessionIds,
   registerLane,
   findLaneAt,
   onDragChange,
@@ -537,6 +598,7 @@ function TrackLane({
           zoom={zoom}
           fps={fps}
           selected={selectedIds.includes(clip.id)}
+          interactive={!sessionIds || sessionIds.includes(clip.id)}
           findLaneAt={findLaneAt}
           onDragChange={onDragChange}
           onHoverTrack={onHoverTrack}

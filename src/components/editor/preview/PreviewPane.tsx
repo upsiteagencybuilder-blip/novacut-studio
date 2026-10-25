@@ -101,7 +101,9 @@ export function PreviewPane() {
   const showOverlay = Boolean(
     !isPlaying &&
       selectedClip &&
+      // compounds move/scale from their contents (open one to transform it)
       selectedClip.kind !== 'audio' &&
+      selectedClip.kind !== 'nested' &&
       timeVisible(selectedClip.start, selectedClip.duration, currentTime)
   )
   // Engine bounds reflect the last rendered frame; estimate is the fallback.

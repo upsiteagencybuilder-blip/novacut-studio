@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef } from 'react'
 import { getEngine } from '@/lib/editor/engine'
+import { resolveNestedProject } from '@/lib/editor/nested'
 import { useEditor } from '@/lib/editor/store'
 import { projectDuration } from '@/lib/editor/utils'
 
@@ -24,7 +25,9 @@ export function useEngineBridge(canvasRef: React.RefObject<HTMLCanvasElement | n
       () => {
         const s = useEditor.getState()
         return {
-          project: s.project,
+          // compounds are flattened into absolute-time clips — the engine
+          // (preview render, audio sync, video export) sees a flat timeline
+          project: resolveNestedProject(s.project),
           mediaMap: s.getMediaMap(),
           masterVolume: s.masterVolume,
           masterMuted: s.masterMuted,

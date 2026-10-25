@@ -9,7 +9,8 @@
  */
 import { useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { Type } from 'lucide-react'
+import { Layers, Type } from 'lucide-react'
+import { toast } from 'sonner'
 import { MIN_CLIP_DURATION, TRACK_HEIGHT } from '@/lib/editor/constants'
 import { stickerGlyph, stickerName } from '@/lib/editor/sticker-render'
 import { useEditor } from '@/lib/editor/store'
@@ -36,6 +37,11 @@ interface ClipBlockProps {
   zoom: number
   selected: boolean
   fps: number
+  /**
+   * false = the clip is OUTSIDE the active compound session — rendered dimmed
+   * and non-interactive so "inside" edits can't touch the main timeline
+   */
+  interactive?: boolean
   /** returns the compatible lane under a screen Y coordinate, or null */
   findLaneAt: (clientY: number, kind: ClipKind) => LaneHit | null
   onDragChange: (drag: ClipDragInfo | null) => void
@@ -91,6 +97,7 @@ export function ClipBlock({
   zoom,
   selected,
   fps,
+  interactive = true,
   findLaneAt,
   onDragChange,
   onHoverTrack,
@@ -214,8 +221,14 @@ export function ClipBlock({
   }
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    // blade (razor) tool: click splits the clip at the clicked position — no drag
     const st = useEditor.getState()
+    // compounds don't split on the timeline — their contents do (enter first)
+    if (st.toolMode === 'razor' && clip.kind === 'nested') {
+      toast('Compounds are cut from inside — double-click to enter first')
+      e.preventDefault()
+      return
+    }
+    // blade (razor) tool: click splits the clip at the clicked position — no drag
     if (st.toolMode === 'razor') {
       if (e.button !== 0) return
       e.preventDefault()
@@ -228,7 +241,22 @@ export function ClipBlock({
       return
     }
     const attr = (e.target as HTMLElement).closest('[data-drag]')?.getAttribute('data-drag')
-    beginDrag(e, attr === 'trim-start' || attr === 'trim-end' ? attr : 'move')
+    const mode = attr === 'trim-start' || attr === 'trim-end' ? attr : 'move'
+    // compound edges don't trim — the span is derived from its contents
+    if (clip.kind === 'nested' && mode !== 'move') {
+      e.preventDefault()
+      e.stopPropagation()
+      setTip('Compound edges follow their contents — double-click to enter and trim inside')
+      window.setTimeout(() => setTip(null), 1800)
+      return
+    }
+    beginDrag(e, mode)
+  }
+
+  /** double-click a compound block → materialize its children (edit session) */
+  const onDoubleClick = () => {
+    if (clip.kind !== 'nested') return
+    useEditor.getState().enterNestedClip(clip.id)
   }
 
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -483,26 +511,30 @@ export function ClipBlock({
   /* ---------------- visuals ---------------- */
 
   const kindBorderBg =
-    clip.kind === 'audio'
-      ? 'border-emerald-500/30 bg-emerald-950/60'
-      : clip.kind === 'text'
-        ? 'border-orange-500/30 bg-orange-950/50'
-        : clip.kind === 'sticker'
-          ? 'border-yellow-500/30 bg-yellow-950/40'
-          : 'border-(--nc-line) bg-(--nc-scrim)'
+    clip.kind === 'nested'
+      ? 'border-violet-400/40 bg-gradient-to-br from-violet-950/80 via-(--nc-scrim) to-fuchsia-950/60'
+      : clip.kind === 'audio'
+        ? 'border-emerald-500/30 bg-emerald-950/60'
+        : clip.kind === 'text'
+          ? 'border-orange-500/30 bg-orange-950/50'
+          : clip.kind === 'sticker'
+            ? 'border-yellow-500/30 bg-yellow-950/40'
+            : 'border-(--nc-line) bg-(--nc-scrim)'
 
   return (
     <div
       data-drag="move"
       data-clip-id={clip.id}
+      data-nc-nested={clip.kind === 'nested' || undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      onDoubleClick={onDoubleClick}
       className={cn(
         'absolute touch-none select-none',
-        track.locked
-          ? 'pointer-events-none cursor-default'
+        (!interactive || track.locked)
+          ? 'pointer-events-none cursor-default opacity-40 saturate-50'
           : razorMode
             ? 'cursor-crosshair'
             : toolMode === 'slip'
@@ -548,7 +580,18 @@ export function ClipBlock({
         {clip.kind === 'audio' && <Waveform peaks={asset?.peaks} widthPx={widthPx} />}
 
         {/* label row */}
-        {clip.kind === 'text' ? (
+        {clip.kind === 'nested' ? (
+          <div className="flex items-center gap-1 px-1.5 pt-1">
+            <Layers className="size-3 shrink-0 text-violet-300" />
+            <span className="truncate text-[10px] font-medium text-(--nc-clip-ink)">{clip.name}</span>
+            <span
+              className="ml-auto shrink-0 rounded-full bg-violet-400/20 px-1.5 text-[9px] font-semibold leading-[14px] text-violet-200"
+              aria-label={`${clip.nested?.children.length ?? 0} clips inside compound`}
+            >
+              ⧉ {clip.nested?.children.length ?? 0}
+            </span>
+          </div>
+        ) : clip.kind === 'text' ? (
           <div className="flex items-center gap-1 px-1.5 pt-1">
             <Type className="size-3 shrink-0 text-(--nc-texttrack)" />
             <span className="truncate text-[10px] font-medium text-(--nc-clip-ink)">
@@ -592,15 +635,33 @@ export function ClipBlock({
         {/* label color strip */}
         <div className="absolute inset-x-0 top-0 h-[3px]" style={{ backgroundColor: clip.color }} />
 
-        {/* trim handles (revealed by .nc-clip hover/selected CSS) */}
-        <div
-          data-drag="trim-start"
-          className="nc-clip-handle absolute left-0 top-0 h-full w-2 cursor-ew-resize rounded-l-lg bg-(--nc-clip-handle)"
-        />
-        <div
-          data-drag="trim-end"
-          className="nc-clip-handle absolute right-0 top-0 h-full w-2 cursor-ew-resize rounded-r-lg bg-(--nc-clip-handle)"
-        />
+        {/* compound: stacked-layers bottom edge + hint (double-click to enter) */}
+        {clip.kind === 'nested' && (
+          <>
+            <div className="pointer-events-none absolute inset-x-1.5 bottom-1 h-[3px] rounded-full bg-violet-300/25" />
+            <div className="pointer-events-none absolute inset-x-2.5 bottom-0 h-[3px] rounded-full bg-violet-300/15" />
+            <div
+              className="pointer-events-none absolute bottom-4 right-1.5 text-[8px] font-medium uppercase tracking-wide text-violet-200/70"
+              aria-hidden
+            >
+              dbl-click ⤓
+            </div>
+          </>
+        )}
+
+        {/* trim handles (revealed by .nc-clip hover/selected CSS) — compounds trim from inside */}
+        {clip.kind !== 'nested' && (
+          <>
+            <div
+              data-drag="trim-start"
+              className="nc-clip-handle absolute left-0 top-0 h-full w-2 cursor-ew-resize rounded-l-lg bg-(--nc-clip-handle)"
+            />
+            <div
+              data-drag="trim-end"
+              className="nc-clip-handle absolute right-0 top-0 h-full w-2 cursor-ew-resize rounded-r-lg bg-(--nc-clip-handle)"
+            />
+          </>
+        )}
       </div>
 
       {/* floating drag tooltip */}

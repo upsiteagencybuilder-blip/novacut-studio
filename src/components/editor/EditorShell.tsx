@@ -148,6 +148,28 @@ function useKeyboardShortcuts() {
         }
         return
       }
+      if (mod && e.shiftKey && key === 'g') {
+        // MUST be checked before plain Ctrl+G (group) — Ctrl+Shift+G ungroups
+        e.preventDefault()
+        const open = s.project.clips.find((c) => c.kind === 'nested' && c.nested?.open)
+        if (open) {
+          const n = open.nested?.memberIds?.length ?? 0
+          if (s.exitNestedSession()) toast.success(`Compound saved — ${n} clip${n === 1 ? '' : 's'} packed inside`)
+          return
+        }
+        if (s.ungroupSelectedClip()) toast.success('Compound dissolved back to clips')
+        else toast('Select a single compound clip to ungroup')
+        return
+      }
+      if (mod && key === 'g') {
+        e.preventDefault()
+        if (s.selectedClipIds.length > 1) {
+          const n = s.selectedClipIds.length
+          if (s.groupSelectedClips()) toast.success(`Grouped ${n} clips into a compound`)
+          else toast('Compounds cannot nest — select plain clips only')
+        }
+        return
+      }
       // any other Ctrl/Cmd combination must never fall through to the
       // single-letter shortcuts below (Ctrl+S used to split the clip!)
       if (mod) return

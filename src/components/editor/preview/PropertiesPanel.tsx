@@ -22,6 +22,7 @@ import {
   Gauge,
   Image as ImageIcon,
   Italic,
+  Layers,
   Move,
   Palette,
   Pipette,
@@ -96,6 +97,7 @@ const KIND_META: Record<ClipKind, { label: string; icon: LucideIcon }> = {
   audio: { label: 'Audio', icon: AudioLines },
   text: { label: 'Text', icon: Type },
   sticker: { label: 'Sticker', icon: Sticker },
+  nested: { label: 'Compound', icon: Layers },
 }
 
 const TEXT_ANIMATION_GROUPS: { label: string; items: { value: TextAnimation; label: string }[] }[] = [
@@ -1496,6 +1498,87 @@ function CropSection({ clip }: { clip: Clip }) {
 
 /* ================================================================ single clip editor */
 
+/** Inspector for compound (nested) clips — enter / ungroup, contents list */
+function NestedClipPanel({ clip }: { clip: Clip }) {
+  const children = clip.nested?.children ?? []
+  const span = children.reduce((m, c) => Math.max(m, c.start + c.duration), 0)
+
+  return (
+    <section
+      data-nc-compound-panel
+      className="space-y-3 rounded-xl border border-violet-400/30 bg-violet-950/20 p-3"
+    >
+      <div className="flex items-center gap-1.5">
+        <Layers className="h-[13px] w-[13px] text-violet-300" />
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-violet-200/80">Compound clip</h3>
+        <span className="ml-auto rounded-full bg-violet-400/20 px-1.5 text-[9px] font-semibold leading-[14px] text-violet-200">
+          ⧉ {children.length}
+        </span>
+      </div>
+
+      <div className="space-y-1.5 text-[11px] text-muted-foreground">
+        <div className="flex justify-between gap-2">
+          <span>Duration</span>
+          <span className="font-mono text-foreground">{formatTimecode(clip.duration, 30)}</span>
+        </div>
+        <div className="flex justify-between gap-2">
+          <span>Start</span>
+          <span className="font-mono text-foreground">{formatTimecode(clip.start, 30)}</span>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">Contents</p>
+        <ul className="max-h-40 space-y-1 overflow-y-auto pr-1">
+          {children.map((c) => (
+            <li key={c.id} className="flex items-center gap-1.5 rounded-md bg-(--nc-panel) px-2 py-1 text-[11px]">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: c.color }} />
+              <span className="min-w-0 flex-1 truncate text-foreground/90">{c.name}</span>
+              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{c.duration.toFixed(2)}s</span>
+            </li>
+          ))}
+          {children.length === 0 && <li className="px-2 py-1 text-[11px] text-muted-foreground">Empty compound</li>}
+        </ul>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          data-nc-open-compound
+          className="h-8 flex-1 gap-1.5 bg-violet-600 text-[11px] hover:bg-violet-500"
+          onClick={() => {
+            if (useEditor.getState().enterNestedClip(clip.id)) {
+              toast.success(`Entered ${clip.name} — edits apply to its contents`)
+            } else {
+              toast('Exit the current compound first')
+            }
+          }}
+        >
+          <Layers className="size-3.5" />
+          Open compound
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          data-nc-ungroup
+          className="h-8 flex-1 gap-1.5 text-[11px]"
+          onClick={() => {
+            if (useEditor.getState().ungroupSelectedClip()) toast.success('Compound dissolved back to clips')
+          }}
+        >
+          <X className="size-3.5" />
+          Ungroup
+        </Button>
+      </div>
+
+      <p className="text-[10px] leading-snug text-muted-foreground/60">
+        A compound is one timeline block that plays its {children.length} clip{children.length === 1 ? '' : 's'} ({span.toFixed(2)}s of content).
+        Transform, filters and FX are applied inside — open the compound to edit them.
+      </p>
+    </section>
+  )
+}
+
 function SingleClipEditor({ clip }: { clip: Clip }) {
   const project = useEditor((s) => s.project)
   const media = useEditor((s) => s.media)
@@ -1506,6 +1589,9 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
   const currentTime = useEditor((s) => s.currentTime)
   const addKeyframeAtPlayhead = useEditor((s) => s.addKeyframeAtPlayhead)
   const removeKeyframe = useEditor((s) => s.removeKeyframe)
+
+  // compounds get their own inspector — transform/FX belong to their contents
+  if (clip.kind === 'nested') return <NestedClipPanel clip={clip} />
 
   const meta = KIND_META[clip.kind]
   const KindIcon = meta.icon

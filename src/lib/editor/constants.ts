@@ -441,6 +441,8 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: "' / ;", action: 'Lift / Extract the In–Out range' },
   { keys: 'Ctrl + Shift + X', action: 'Clear In & Out points' },
   { keys: 'D / Ctrl + D', action: 'Duplicate selected clip' },
+  { keys: 'Ctrl + G', action: 'Group selected clips into a compound (double-click to enter)' },
+  { keys: 'Ctrl + Shift + G', action: 'Ungroup compound / exit the compound session' },
   { keys: 'Ctrl + C', action: 'Copy selected clips' },
   { keys: 'Ctrl + X', action: 'Cut selected clips' },
   { keys: 'Ctrl + V', action: 'Paste at playhead' },

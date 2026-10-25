@@ -3,7 +3,7 @@
  * This file is THE contract for the whole editor. Do not break existing shapes.
  */
 
-export type ClipKind = 'video' | 'image' | 'audio' | 'text' | 'sticker'
+export type ClipKind = 'video' | 'image' | 'audio' | 'text' | 'sticker' | 'nested'
 export type TrackKind = 'video' | 'overlay' | 'audio'
 export type MediaKind = 'video' | 'image' | 'audio' | 'lut'
 
@@ -297,6 +297,25 @@ export interface ClipAudioFx {
   modAmount?: number
 }
 
+/**
+ * Compound (nested) clip payload — embedded child clips.
+ * Children keep their own absolute `trackId` but their `start` values are
+ * RELATIVE to the compound clip's start (0 = at the compound's left edge).
+ * Playback/export/audio resolve compounds through lib/editor/nested.ts.
+ *
+ * `open` marks an ACTIVE editing session: the children are materialized as
+ * top-level clips (ids listed in memberIds) and the compound itself is
+ * skipped by the resolver. Because this lives INSIDE the project, undo/redo
+ * history carries session state for free. Exit sets open=false and repacks.
+ */
+export interface NestedClipData {
+  children: Clip[]
+  /** editing session active — children live as top-level clips while true */
+  open?: boolean
+  /** materialized child clip ids while open (membership for the session) */
+  memberIds?: string[]
+}
+
 export interface Clip {
   id: string
   trackId: string
@@ -364,6 +383,8 @@ export interface Clip {
   wipe?: WipeShape | null
   /** created by AI auto-captions — included in .srt sidecar export */
   isCaption?: boolean
+  /** compound (nested) container payload — set only when kind is 'nested' */
+  nested?: NestedClipData | null
   /** label color chip on the timeline */
   color: string
 }
