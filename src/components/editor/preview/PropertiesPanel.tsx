@@ -104,6 +104,7 @@ const KIND_META: Record<ClipKind, { label: string; icon: LucideIcon }> = {
   text: { label: 'Text', icon: Type },
   sticker: { label: 'Sticker', icon: Sticker },
   nested: { label: 'Compound', icon: Layers },
+  adjustment: { label: 'Adjustment', icon: SlidersHorizontal },
 }
 
 const TEXT_ANIMATION_GROUPS: { label: string; items: { value: TextAnimation; label: string }[] }[] = [
@@ -186,7 +187,7 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform'
+export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform' | 'adjustment'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
@@ -2074,6 +2075,113 @@ function NestedClipPanel({ clip }: { clip: Clip }) {
   )
 }
 
+/**
+ * Day 11 — Adjustment layer inspector: the FX carrier's own controls.
+ * Filters / grade / LUT set here apply to every visible clip BELOW the
+ * adjustment's track while its time range is active (documented scope).
+ */
+function AdjustmentPanel({ clip }: { clip: Clip }) {
+  const updateClip = useEditor((s) => s.updateClip)
+  const patchFilter = (key: keyof Filters, v: number) => updateClip(clip.id, { filters: { [key]: v } }, `adj-${key}`)
+  const isDefault =
+    clip.filters.brightness === 1 &&
+    clip.filters.contrast === 1 &&
+    clip.filters.saturation === 1 &&
+    clip.filters.hue === 0 &&
+    clip.filters.blur === 0 &&
+    clip.filters.sepia === 0 &&
+    clip.filters.grayscale === 0 &&
+    clip.filters.invert === 0 &&
+    (() => {
+      const g = clip.colorGrade ?? DEFAULT_COLOR_GRADE
+      return g.temperature === 0 && g.tint === 0 && g.shadows === 0 && g.highlights === 0 && g.vibrance === 1
+    })()
+  return (
+    <>
+      <Section
+        title="Adjustment Layer"
+        icon={SlidersHorizontal}
+        sectionId="adjustment"
+        onReset={
+          isDefault
+            ? undefined
+            : () =>
+                updateClip(
+                  clip.id,
+                  { filters: { ...DEFAULT_FILTERS }, colorGrade: { ...DEFAULT_COLOR_GRADE }, lutId: null },
+                  true,
+                )
+        }
+      >
+        <p className="text-[10px] leading-snug text-amber-300/80">
+          Every effect below is applied to ALL clips under this layer while it is active — grade once, affect the whole
+          range.
+        </p>
+        <SliderRow
+          label="Brightness"
+          min={0}
+          max={2}
+          step={0.01}
+          value={clip.filters.brightness}
+          onChange={(v) => patchFilter('brightness', v)}
+          format={fmtX}
+        />
+        <SliderRow
+          label="Contrast"
+          min={0}
+          max={2}
+          step={0.01}
+          value={clip.filters.contrast}
+          onChange={(v) => patchFilter('contrast', v)}
+          format={fmtX}
+        />
+        <SliderRow
+          label="Saturation"
+          min={0}
+          max={2}
+          step={0.01}
+          value={clip.filters.saturation}
+          onChange={(v) => patchFilter('saturation', v)}
+          format={fmtX}
+        />
+        <SliderRow
+          label="Hue"
+          min={-180}
+          max={180}
+          step={1}
+          value={clip.filters.hue}
+          onChange={(v) => patchFilter('hue', v)}
+          format={fmtDeg}
+        />
+        <SliderRow
+          label="Blur"
+          min={0}
+          max={20}
+          step={0.1}
+          value={clip.filters.blur}
+          onChange={(v) => patchFilter('blur', v)}
+          format={fmtPx}
+        />
+      </Section>
+      <GradeSection clip={clip} />
+      <LutSection clip={clip} />
+      <ScopesSection />
+      <Section title="Duration" icon={Timer}>
+        <SliderRow
+          label="Length"
+          min={0.5}
+          max={30}
+          step={0.1}
+          value={clip.duration}
+          onChange={(v) => updateClip(clip.id, { duration: v }, 'adj-dur')}
+          format={fmtSec}
+        />
+      </Section>
+      <ClipActionsRow clipId={clip.id} />
+    </>
+  )
+}
+
 function SingleClipEditor({ clip }: { clip: Clip }) {
   const project = useEditor((s) => s.project)
   const media = useEditor((s) => s.media)
@@ -2087,6 +2195,8 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
 
   // compounds get their own inspector — transform/FX belong to their contents
   if (clip.kind === 'nested') return <NestedClipPanel clip={clip} />
+  // adjustment layers: FX-carrier inspector (Day 11)
+  if (clip.kind === 'adjustment') return <AdjustmentPanel clip={clip} />
 
   const meta = KIND_META[clip.kind]
   const KindIcon = meta.icon

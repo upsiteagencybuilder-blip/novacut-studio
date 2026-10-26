@@ -10,13 +10,13 @@ import type { OverlayDraw, VisionDraw } from '@/lib/effects/types'
 import { getEffect, getOverlayDraw } from '@/lib/effects/registry'
 import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
 import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
-import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, formatTimecode, projectDuration, rampSourceFraction } from './utils'
+import { applyPixelEffects, buildFilterString, clamp, composeFilters, composeGrades, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, formatTimecode, projectDuration, rampSourceFraction } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
 import { applyClipFx, buildFxChain, makeImpulse, rebuildModulation } from './audio-mix'
 import { ensurePitchModule, getPitchError } from './pitch-worklet'
 import type { AudioFxChain } from './audio-mix'
 import { drawStickerArt } from './sticker-render'
-import { CANVAS_FONT_LOAD_LIST, MIN_CLIP_DURATION } from './constants'
+import { CANVAS_FONT_LOAD_LIST, DEFAULT_COLOR_GRADE, MIN_CLIP_DURATION } from './constants'
 
 export interface EngineSnapshot {
   project: Project
@@ -907,9 +907,12 @@ class PreviewEngine {
     dh: number,
     clip: Clip,
     mediaMap: Map<string, MediaAssetRuntime>,
-    src?: { sx: number; sy: number; sw: number; sh: number }
+    src?: { sx: number; sy: number; sw: number; sh: number },
+    force = false,
+    adjLut?: LutData | null,
+    adjLutIntensity = 1
   ): HTMLCanvasElement | null {
-    if (!this.needsPixelFx(clip) || srcW <= 0 || srcH <= 0) return null
+    if ((!this.needsPixelFx(clip) && !force) || srcW <= 0 || srcH <= 0) return null
     // cap fx resolution for performance; exports render at full quality so the
     // grade / LUT / chroma pass is never sub-resolution in the recorded file
     const maxDim = this.exportScaleOverride !== null ? 3840 : 1600
@@ -935,6 +938,8 @@ class PreviewEngine {
       grade: this.hasGrade(clip) ? clip.colorGrade : undefined,
       lut: this.getLut(clip, mediaMap),
       lutIntensity: clip.lutIntensity ?? 1,
+      lut2: adjLut ?? null,
+      lut2Intensity: adjLutIntensity,
     })
     if (changed) fx.putImageData(img, 0, 0)
     return c
@@ -1037,6 +1042,13 @@ class PreviewEngine {
 
     // draw bottom track first (tracks[0] is visually topmost)
     const tracks = project.tracks
+    // ---- adjustment layers (Day 11): invisible FX carriers applied to every
+    // visible clip on a track BELOW theirs while their time range is active
+    const trackIndex = new Map<string, number>()
+    tracks.forEach((tr, i) => trackIndex.set(tr.id, i))
+    const activeAdjustments = project.clips.filter(
+      (c) => c.kind === 'adjustment' && t >= c.start - 0.0001 && t < c.start + c.duration,
+    )
     for (let i = tracks.length - 1; i >= 0; i--) {
       const track = tracks[i]
       if (track.kind === 'audio' || track.hidden) continue
@@ -1044,6 +1056,7 @@ class PreviewEngine {
         .filter((c) => c.trackId === track.id && t >= c.start - 0.0001 && t < c.start + c.duration)
         .sort((a, b) => a.start - b.start)
       for (const clip of active) {
+        const adj = activeAdjustments.filter((a) => (trackIndex.get(a.trackId) ?? 99) < i)
         // ---- transition bridge (two phases, one continuous curve):
         // TAIL  — while the outgoing clip is still active with an armed
         //         successor, its own fadeOut is SKIPPED so it holds full
@@ -1062,9 +1075,9 @@ class PreviewEngine {
           const progress = clamp((t - clip.start) / window, 0, 1)
           // wipe bridges hold the outgoing at FULL alpha (the mask does the
           // reveal over untouched pixels); fade bridges ramp (1 − progress)
-          if (progress < 1) this.drawClip(ctx, bridgeOut, t, W, H, mediaMap, project, { progress, hold: !!clip.wipe })
+          if (progress < 1) this.drawClip(ctx, bridgeOut, t, W, H, mediaMap, project, { progress, hold: !!clip.wipe }, adj)
         }
-        this.drawClip(ctx, clip, t, W, H, mediaMap, project, bridgedSuccessor ? { progress: 0 } : undefined)
+        this.drawClip(ctx, clip, t, W, H, mediaMap, project, bridgedSuccessor ? { progress: 0 } : undefined, adj)
       }
     }
 
@@ -1202,8 +1215,37 @@ class PreviewEngine {
    * crossfade under the incoming clip. `hold` keeps full alpha instead (wipe
    * bridges: the animated mask reveals over untouched outgoing pixels).
    */
-  private drawClip(ctx: CanvasRenderingContext2D, clip: Clip, t: number, W: number, H: number, mediaMap: Map<string, MediaAssetRuntime>, project: Project, bridge?: { progress: number; hold?: boolean }) {
+  private drawClip(ctx: CanvasRenderingContext2D, clip: Clip, t: number, W: number, H: number, mediaMap: Map<string, MediaAssetRuntime>, project: Project, bridge?: { progress: number; hold?: boolean }, adj: Clip[] = []) {
+    // adjustment layers draw nothing — they only carry FX for the clips below
+    if (clip.kind === 'adjustment') return
     const tLocal = t - clip.start
+
+    // ---- adjustment-layer composition (Day 11): the effective filters / grade
+    // are the clip's own PLUS every active adjustment above its track; LUTs
+    // chain (clip's own first, then the topmost adjustment that carries one)
+    let effFilters = clip.filters
+    let effGrade = clip.colorGrade
+    let adjLut: LutData | null = null
+    let adjLutIntensity = 1
+    if (adj.length) {
+      let f = clip.filters
+      let g = clip.colorGrade
+      for (const a of adj) {
+        f = composeFilters(f, a.filters)
+        g = g ? composeGrades(g, a.colorGrade ?? DEFAULT_COLOR_GRADE) : a.colorGrade
+        if (!adjLut && a.lutId) {
+          const asset = mediaMap.get(a.lutId)
+          if (asset?.lutData) {
+            adjLut = asset.lutData
+            adjLutIntensity = a.lutIntensity ?? 1
+          }
+        }
+      }
+      effFilters = f
+      effGrade = g
+    }
+    const effClip: Clip = adj.length ? { ...clip, filters: effFilters, colorGrade: effGrade } : clip
+    const needsFx = adj.length > 0 || this.needsPixelFx(clip)
 
     // ---- keyframe-driven transform (falls back to static transform) ----
     const kfX = evaluateKeyframeProperty(clip, 'x', tLocal)
@@ -1258,7 +1300,7 @@ class PreviewEngine {
     // Vision applies to MEDIA clips' pixels only; text/sticker draw straight to
     // the main canvas and intentionally skip vision (documented limitation).
     let vis: ActiveVision | null = null
-    if (clip.vision && (clip.kind === 'video' || clip.kind === 'image')) {
+    if (clip.vision && (clip.kind === 'video' || clip.kind === 'image') && !adj.length) {
       const vi = clamp(clip.vision.intensity, 0, 1)
       if (vi > 0.001) {
         try {
@@ -1293,7 +1335,7 @@ class PreviewEngine {
 
     ctx.save()
     ctx.globalAlpha = clamp(alpha, 0, 1)
-    ctx.filter = buildFilterString(clip.filters)
+    ctx.filter = buildFilterString(effFilters)
     if (clip.blendMode && clip.blendMode !== 'source-over') {
       ctx.globalCompositeOperation = clip.blendMode
     }
@@ -1395,7 +1437,7 @@ class PreviewEngine {
         const s = tscale * motionScale * overlayZoom
         ctx.scale(s, s)
         const g = this.mediaDrawGeometry(clip, img.naturalWidth, img.naturalHeight, W, H)
-        const fxc = this.drawThroughFx(img, img.naturalWidth, img.naturalHeight, g.dw, g.dh, clip, mediaMap, g)
+        const fxc = this.drawThroughFx(img, img.naturalWidth, img.naturalHeight, g.dw, g.dh, effClip, mediaMap, g, needsFx, adjLut, adjLutIntensity)
         if (vis && this.drawVisionProcessed(ctx, fxc ?? img, g.dw, g.dh, vis, tLocal)) {
           // vision post-FX replaced the plain draw (clip filters are baked into
           // the vision source; ctx.filter was reset for the composite)
@@ -1411,7 +1453,7 @@ class PreviewEngine {
         const s = tscale * motionScale * overlayZoom
         ctx.scale(s, s)
         const g = this.mediaDrawGeometry(clip, el.videoWidth, el.videoHeight, W, H)
-        const fxc = this.drawThroughFx(el, el.videoWidth, el.videoHeight, g.dw, g.dh, clip, mediaMap, g)
+        const fxc = this.drawThroughFx(el, el.videoWidth, el.videoHeight, g.dw, g.dh, effClip, mediaMap, g, needsFx, adjLut, adjLutIntensity)
         if (vis && this.drawVisionProcessed(ctx, fxc ?? el, g.dw, g.dh, vis, tLocal)) {
           // vision post-FX replaced the plain draw (clip filters are baked into
           // the vision source; ctx.filter was reset for the composite)

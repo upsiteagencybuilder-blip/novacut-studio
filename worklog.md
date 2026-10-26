@@ -1097,3 +1097,27 @@ Stage Summary:
 - CATEGORY A (Core Editing Engine, Days 1–10) COMPLETE: keyframes v2 + curve editor, multi-select/batch, magnetic + ripple/roll/slip/slide, nested compounds, speed ramps, per-effect controls (pitch+mix), favorites/recents everywhere, timeline markers, paste attributes, transform presets — all E2E-verified on desktop+mobile, catalog honest (+1 live today; timeline section now 56 live / 48 planned).
 - Session-level: Days 05–10 shipped as commits b7f3054(+hygiene), ae0f9a2, 219cbb9, 919308a, d19abf9, Day-10 this commit. GitHub push BLOCKED all session: remote token returns 401 Bad Credentials (expired/revoked); commits are safe locally; push pending fresh credentials.
 - Next: Category B Day 11 — color grading wheels/scopes upgrade.
+
+---
+Task ID: Day-11
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 11 — Adjustment layers: FX applied over a track range.
+
+Work Log:
+- Session start: new GitHub token installed (user-provided); pending Day 01–10 commits pushed successfully (8761dd8..9148ff2) — push had been blocked all of Days 05–10 by the expired token.
+- types.ts: ClipKind += 'adjustment' (invisible FX carrier: filters + colorGrade + lutId apply to every visible clip BELOW its track while its time range is active).
+- utils.ts: composeFilters (multiplicative offsets add, additive sum, per-field clamps) + composeGrades (add-clamp channels, vibrance 1-neutral) + applyPixelEffects gains lut2/lut2Intensity for chained LUTs (clip's own first, then the topmost adjustment carrying one).
+- engine.ts renderFrame: per-frame activeAdjustments + trackIndex map; each drawn clip receives the adjustments ABOVE its track (same-track overlay clips are NOT affected — documented scope). drawClip: kind==='adjustment' returns early (draws nothing); composes effFilters/effGrade via composeFilters/composeGrades; drawThroughFx(force=needsFx, adjLut) so a clip with no own pixel FX still routes through the grade/LUT pass when an adjustment is active; vision post-FX skipped while adjustments are active (composing both would double-process pixels).
+- store.ts: addAdjustmentLayer() — 4s amber clip at the playhead on the FIRST overlay track (auto-creates one, unshifted to top), neutral filters/grade, selected, one undo; returns false during an open compound session; groupSelectedClips rejects adjustment members (their FX resolve against TOP-LEVEL tracks — nesting would silently change scope).
+- PropertiesPanel: KIND_META + adjustment (SlidersHorizontal); AdjustmentPanel inspector (scope explainer, brightness/contrast/saturation/hue/blur, reusable GradeSection + LutSection + ScopesSection, duration, reset-all, Copy/Paste FX row) — SingleClipEditor early-returns into it; PropsSectionId += 'adjustment'.
+- ClipBlock: amber gradient identity + SlidersHorizontal icon + "FX↓" badge (tooltip: applies to every clip below).
+- TimelineToolbar: SlidersHorizontal button (data-nc-add-adjustment) with success/guard toasts.
+- Catalog: +1 live timeline-adjustment-layers (deep link open-properties-adjustment wired through tools/types + ProToolkitPanel).
+- E2E desktop 1280×800: toolbar button → adj clip 0.8s/4s on overlay track, selected, amber DOM block; neutral layer = pixel-identical (avg 123.9 = baseline); real slider drag brightness→2 → avg 200.5 (same frame A/B via undo/redo); undo×2 → clip gone (6 clips), redo×2 → restored exact (200.5); Color Grade temp drag → 0.78, r−b 15.5→76.3 (warm shift through the adjustment pipeline); playback across the range clean; zero page errors.
+- E2E mobile 390×844: amber block renders (278px); bottom-nav Edit sheet shows Adjustment Panel (grade + scopes); hue drag → 90° with channel shift [108,82,53]; bonus receipt: adjustment + brightness persisted across page reload (autosave rides the project); playback smoke clean.
+- Debug note: agent-browser `set viewport 390 844` (not `viewport`); Radix slider drags need scrollIntoView first (panel header covers off-screen thumbs); `const s` collides across evals in a persistent session.
+
+Stage Summary:
+- Adjustment layers shipped end-to-end: data model, composition math, engine pass (preview + export share it), timeline identity, dedicated inspector, honest catalog entry with deep link. Compounds honestly excluded (group guard + session guard).
+- Category B Day 11 complete. Files: types.ts, utils.ts, engine.ts, store.ts, PropertiesPanel.tsx, ClipBlock.tsx, TimelineToolbar.tsx, tools/types.ts, sections/timeline.ts, ProToolkitPanel.tsx.
+- Next: Day 12 — RGB curves editor.

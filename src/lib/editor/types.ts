@@ -3,7 +3,12 @@
  * This file is THE contract for the whole editor. Do not break existing shapes.
  */
 
-export type ClipKind = 'video' | 'image' | 'audio' | 'text' | 'sticker' | 'nested'
+/**
+ * 'adjustment' — an invisible FX layer: everything it carries (filters, color
+ * grade, LUT) is applied to every visible clip BELOW its track while its time
+ * range is active. Drawn as a distinct amber block on the timeline.
+ */
+export type ClipKind = 'video' | 'image' | 'audio' | 'text' | 'sticker' | 'nested' | 'adjustment'
 export type TrackKind = 'video' | 'overlay' | 'audio'
 export type MediaKind = 'video' | 'image' | 'audio' | 'lut'
 

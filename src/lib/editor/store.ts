@@ -125,6 +125,8 @@ interface EditorStore {
   addClipFromMediaId: (mediaId: string, at?: number) => void
   addTextClip: (preset?: TextPreset, at?: { x: number; y: number }) => void
   addStickerClip: (req: StickerRequest) => void
+  /** Day 11 — insert an adjustment layer (invisible FX carrier) at the playhead on the top overlay track */
+  addAdjustmentLayer: () => boolean
   updateClip: (id: string, patch: ClipPatch, history?: boolean | string) => void
   /** strip a transition between two adjacent clips (fades + wipe mask + iris keys), one undo step */
   removeTransition: (outgoingId: string, incomingId: string) => void
@@ -645,6 +647,51 @@ export const useEditor = create<EditorStore>((set, get) => ({
     s.addClip(clip)
   },
 
+  /**
+   * Day 11 — adjustment layer: an invisible clip that carries filters / color
+   * grade / LUT and applies them to every visible clip BELOW its track while
+   * its time range is active. Placed at the playhead on the FIRST overlay
+   * track (topmost), 4s long. Returns false when a compound session is open
+   * (adjustment layers cannot live inside compounds — preview limitation).
+   */
+  addAdjustmentLayer: () => {
+    const s = get()
+    if (s.project.clips.some((c) => c.kind === 'nested' && c.nested?.open)) return false
+    let tracks = s.project.tracks
+    let trackId = tracks.find((t) => t.kind === 'overlay')?.id
+    if (!trackId) {
+      get().addTrack('overlay')
+      tracks = get().project.tracks
+      trackId = tracks.find((t) => t.kind === 'overlay')?.id
+      // addTrack pushed its own history entry — drop the duplicate by
+      // piggybacking on it (no extra push before addClip below)
+    }
+    if (!trackId) return false
+    const clip: Clip = {
+      id: uid('clip_'),
+      trackId,
+      kind: 'adjustment',
+      name: 'Adjustment',
+      start: round2(s.currentTime),
+      duration: 4,
+      trimStart: 0,
+      sourceDuration: 3600,
+      speed: 1,
+      volume: 0,
+      muted: true,
+      fadeIn: 0,
+      fadeOut: 0,
+      transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      filters: { ...DEFAULT_FILTERS },
+      motion: 'none',
+      motionIntensity: 0.5,
+      colorGrade: { ...DEFAULT_COLOR_GRADE },
+      color: '#f97316',
+    }
+    s.addClip(clip)
+    return true
+  },
+
   updateClip: (id, patch, history) => {
     if (history === true) get().pushHistory()
     else if (typeof history === 'string') get().pushHistory(history)
@@ -1102,6 +1149,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const sel = s.project.clips.filter((c) => s.selectedClipIds.includes(c.id))
     if (sel.length < 2) return false
     if (sel.some((c) => c.kind === 'nested')) return false
+    // adjustment layers cannot live inside compounds (their FX resolve against
+    // TOP-LEVEL tracks at render time; nesting would silently change scope)
+    if (sel.some((c) => c.kind === 'adjustment')) return false
     const minStart = Math.min(...sel.map((c) => c.start))
     const end = Math.max(...sel.map((c) => c.start + c.duration))
     const span = round2(end - minStart)

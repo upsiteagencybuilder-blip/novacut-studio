@@ -122,6 +122,7 @@ function useToolAction() {
       'open-properties-speed-ramp': () => openPropsSection('speed-ramp'),
       'open-properties-audiofx': () => openPropsSection('audiofx'),
       'open-properties-transform': () => openPropsSection('transform'),
+      'open-properties-adjustment': () => openPropsSection('adjustment'),
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])

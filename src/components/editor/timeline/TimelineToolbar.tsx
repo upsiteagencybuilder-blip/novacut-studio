@@ -29,6 +29,7 @@ import {
   Maximize2,
   MoveHorizontal,
   Scissors,
+  SlidersHorizontal,
   Snowflake,
   StepBack,
   StepForward,
@@ -228,6 +229,27 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
           </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">Extract audio from video</TooltipContent>
+      </Tooltip>
+
+      {/* adjustment layer — invisible FX carrier that grades everything below it (Day 11) */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={TOOL_BTN}
+            aria-label="Add adjustment layer at playhead"
+            data-nc-add-adjustment
+            onClick={() => {
+              const ok = useEditor.getState().addAdjustmentLayer()
+              if (ok) toast.success('Adjustment layer added — its FX apply to every clip below it')
+              else toast.error('Finish the compound editing session first')
+            }}
+          >
+            <SlidersHorizontal className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Adjustment layer (grade a whole range)</TooltipContent>
       </Tooltip>
 
       <Tooltip>

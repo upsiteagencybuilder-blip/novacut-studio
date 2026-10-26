@@ -9,7 +9,7 @@
  */
 import { useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { Gauge, Layers, Type } from 'lucide-react'
+import { Gauge, Layers, SlidersHorizontal, Type } from 'lucide-react'
 import { toast } from 'sonner'
 import { MIN_CLIP_DURATION, TRACK_HEIGHT } from '@/lib/editor/constants'
 import { stickerGlyph, stickerName } from '@/lib/editor/sticker-render'
@@ -513,13 +513,15 @@ export function ClipBlock({
   const kindBorderBg =
     clip.kind === 'nested'
       ? 'border-violet-400/40 bg-gradient-to-br from-violet-950/80 via-(--nc-scrim) to-fuchsia-950/60'
-      : clip.kind === 'audio'
-        ? 'border-emerald-500/30 bg-emerald-950/60'
-        : clip.kind === 'text'
-          ? 'border-orange-500/30 bg-orange-950/50'
-          : clip.kind === 'sticker'
-            ? 'border-yellow-500/30 bg-yellow-950/40'
-            : 'border-(--nc-line) bg-(--nc-scrim)'
+      : clip.kind === 'adjustment'
+        ? 'border-amber-400/50 bg-gradient-to-br from-amber-950/70 via-(--nc-scrim) to-orange-950/50'
+        : clip.kind === 'audio'
+          ? 'border-emerald-500/30 bg-emerald-950/60'
+          : clip.kind === 'text'
+            ? 'border-orange-500/30 bg-orange-950/50'
+            : clip.kind === 'sticker'
+              ? 'border-yellow-500/30 bg-yellow-950/40'
+              : 'border-(--nc-line) bg-(--nc-scrim)'
 
   return (
     <div
@@ -580,7 +582,18 @@ export function ClipBlock({
         {clip.kind === 'audio' && <Waveform peaks={asset?.peaks} widthPx={widthPx} />}
 
         {/* label row */}
-        {clip.kind === 'nested' ? (
+        {clip.kind === 'adjustment' ? (
+          <div className="flex items-center gap-1 px-1.5 pt-1" data-nc-adjustment={clip.id}>
+            <SlidersHorizontal className="size-3 shrink-0 text-amber-300" />
+            <span className="truncate text-[10px] font-medium text-amber-100">{clip.name}</span>
+            <span
+              className="ml-auto shrink-0 rounded-full bg-amber-400/20 px-1.5 text-[9px] font-semibold leading-[14px] text-amber-200"
+              title="FX on this layer apply to every clip below it"
+            >
+              FX↓
+            </span>
+          </div>
+        ) : clip.kind === 'nested' ? (
           <div className="flex items-center gap-1 px-1.5 pt-1">
             <Layers className="size-3 shrink-0 text-violet-300" />
             <span className="truncate text-[10px] font-medium text-(--nc-clip-ink)">{clip.name}</span>

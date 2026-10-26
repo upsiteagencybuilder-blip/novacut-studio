@@ -325,14 +325,24 @@ function hexToRgb(hex: string): [number, number, number] {
  */
 export function applyPixelEffects(
   img: ImageData,
-  opts: { chroma?: ChromaKey; grade?: ColorGrade; lut?: LutData | null; lutIntensity?: number }
+  opts: {
+    chroma?: ChromaKey
+    grade?: ColorGrade
+    lut?: LutData | null
+    lutIntensity?: number
+    /** second LUT chained AFTER the first (adjustment-layer stack, Day 11) */
+    lut2?: LutData | null
+    lut2Intensity?: number
+  }
 ): boolean {
   const chroma = opts.chroma?.enabled ? opts.chroma : null
   const grade = opts.grade
   const hasGrade = !!grade && (grade.temperature !== 0 || grade.tint !== 0 || grade.shadows !== 0 || grade.highlights !== 0 || grade.vibrance !== 1)
   const lut = opts.lut && opts.lut.table.length ? opts.lut : null
   const lutMix = lut ? clamp(opts.lutIntensity ?? 1, 0, 1) : 0
-  if (!chroma && !hasGrade && !lut) return false
+  const lut2 = opts.lut2 && opts.lut2.table.length ? opts.lut2 : null
+  const lut2Mix = lut2 ? clamp(opts.lut2Intensity ?? 1, 0, 1) : 0
+  if (!chroma && !hasGrade && !lut && !lut2) return false
 
   const d = img.data
   const keyRgb = chroma ? hexToRgb(chroma.color) : [0, 255, 0]
@@ -349,6 +359,9 @@ export function applyPixelEffects(
   const lutSize = lut?.size ?? 0
   const lutMax = lutSize - 1
   const lutTable = lut?.table
+  const lut2Size = lut2?.size ?? 0
+  const lut2Max = lut2Size - 1
+  const lut2Table = lut2?.table
 
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue
@@ -418,11 +431,55 @@ export function applyPixelEffects(
       b = clamp(b + (lutTable![idx + 2] * 255 - b) * lutMix, 0, 255)
     }
 
+    if (lut2 && lut2Size >= 2) {
+      // chained second LUT (adjustment layer on top of the clip's own)
+      const ri2 = Math.round((r / 255) * lut2Max)
+      const gi2 = Math.round((g / 255) * lut2Max)
+      const bi2 = Math.round((b / 255) * lut2Max)
+      const idx2 = (bi2 * lut2Size * lut2Size + gi2 * lut2Size + ri2) * 3
+      r = clamp(r + (lut2Table![idx2] * 255 - r) * lut2Mix, 0, 255)
+      g = clamp(g + (lut2Table![idx2 + 1] * 255 - g) * lut2Mix, 0, 255)
+      b = clamp(b + (lut2Table![idx2 + 2] * 255 - b) * lut2Mix, 0, 255)
+    }
+
     d[i] = r
     d[i + 1] = g
     d[i + 2] = b
   }
   return true
+}
+
+/* ---------------- FX composition (adjustment layers, Day 11) ---------------- */
+
+/**
+ * Compose the base clip's CSS filters with an adjustment layer's filters.
+ * Multiplicative params (1 = neutral) add offsets; additive params sum.
+ */
+export function composeFilters(a: Filters, b: Filters): Filters {
+  return {
+    brightness: clamp(a.brightness + b.brightness - 1, 0, 2),
+    contrast: clamp(a.contrast + b.contrast - 1, 0, 2),
+    saturation: clamp(a.saturation + b.saturation - 1, 0, 2),
+    hue: clamp(a.hue + b.hue, -180, 180),
+    blur: clamp(a.blur + b.blur, 0, 20),
+    sepia: clamp(a.sepia + b.sepia, 0, 1),
+    grayscale: clamp(a.grayscale + b.grayscale, 0, 1),
+    invert: clamp(a.invert + b.invert, 0, 1),
+  }
+}
+
+/**
+ * Compose the base clip's pro grade with an adjustment layer's grade.
+ * Every channel adds and clamps into its own range (1 = neutral vibrance).
+ */
+export function composeGrades(a: ColorGrade, b: ColorGrade): ColorGrade {
+  return {
+    temperature: clamp(a.temperature + b.temperature, -1, 1),
+    tint: clamp(a.tint + b.tint, -1, 1),
+    shadows: clamp(a.shadows + b.shadows, -1, 1),
+    highlights: clamp(a.highlights + b.highlights, -1, 1),
+    vibrance: clamp(a.vibrance + b.vibrance - 1, 0, 2),
+  }
 }
 
 /** RGB channel histogram (256 bins per channel) from sampled pixels */
