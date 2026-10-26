@@ -119,6 +119,7 @@ function useToolAction() {
       'open-properties-lut': () => openPropsSection('lut'),
       'open-properties-scopes': () => openPropsSection('scopes'),
       'open-properties-animation': () => openPropsSection('animation'),
+      'open-properties-speed-ramp': () => openPropsSection('speed-ramp'),
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])

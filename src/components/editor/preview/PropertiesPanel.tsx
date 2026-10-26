@@ -58,7 +58,7 @@ import {
   EASING_OPTIONS,
   TEXT_FONTS,
 } from '@/lib/editor/constants'
-import { clamp, computeHistogram, formatTimecode, KEYFRAME_PROPERTIES } from '@/lib/editor/utils'
+import { clamp, computeHistogram, defaultSpeedRamp, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS } from '@/lib/editor/utils'
 import { KeyframeCurveEditor } from '@/components/editor/preview/KeyframeCurve'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -82,6 +82,8 @@ import type {
   Filters,
   Keyframe,
   KeyframeProperty,
+  RampEase,
+  SpeedRampPoint,
   StickerAnimation,
   StickerStyle,
   TextAnimation,
@@ -180,7 +182,7 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation'
+export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation' | 'speed-ramp'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
@@ -914,6 +916,283 @@ function KeyframePropertyCard({
       {keys.map((kf) => (
         <KeyframeRow key={kf.id} clipId={clip.id} kf={kf} meta={meta} fps={fps} />
       ))}
+    </div>
+  )
+}
+
+/* ================================================================ speed ramping (Day 05) */
+
+const RAMP_MIN = 0.25
+const RAMP_MAX = 4
+const RAMP_EASES: { id: RampEase; label: string }[] = [
+  { id: 'linear', label: 'Linear' },
+  { id: 'easeIn', label: 'Ease In' },
+  { id: 'easeOut', label: 'Ease Out' },
+  { id: 'easeInOut', label: 'Smooth' },
+]
+
+const fmtRampX = (m: number) => `${m.toFixed(2).replace(/\.00$/, '')}×`
+
+function SpeedRampSection({ clip }: { clip: Clip }) {
+  const updateClip = useEditor((s) => s.updateClip)
+  const pushHistory = useEditor((s) => s.pushHistory)
+  const ramp = clip.speedRamp && clip.speedRamp.length >= 2 ? clip.speedRamp : null
+  const [sel, setSel] = useState(0)
+  const dragIdx = useRef<number | null>(null)
+  const svgRef = useRef<SVGSVGElement | null>(null)
+
+  const W = 264
+  const H = 104
+  const PAD = 11
+
+  // sqrt scale so 1× sits at the middle and slow/fast extremes stay reachable
+  const multToY = (m: number) => {
+    const y01 = (Math.sqrt(clamp(m, RAMP_MIN, RAMP_MAX)) - 0.5) / 1.5
+    return H - PAD - y01 * (H - 2 * PAD)
+  }
+  const yToMult = (y: number) => {
+    const y01 = clamp((H - PAD - y) / (H - 2 * PAD), 0, 1)
+    return (0.5 + 1.5 * y01) ** 2
+  }
+  const posToX = (p: number) => PAD + p * (W - 2 * PAD)
+  const xToPos = (x: number) => clamp((x - PAD) / (W - 2 * PAD), 0, 1)
+
+  const selIdx = Math.min(sel, (ramp?.length ?? 1) - 1)
+  const selPoint = ramp ? ramp[selIdx] : undefined
+
+  const writeRamp = (points: SpeedRampPoint[], history: boolean | string) =>
+    updateClip(clip.id, { speedRamp: points }, history)
+
+  const pointFromEvent = (e: React.PointerEvent | React.MouseEvent) => {
+    const svg = svgRef.current
+    if (!svg) return null
+    const rect = svg.getBoundingClientRect()
+    const sx = W / rect.width
+    const sy = H / rect.height
+    return {
+      pos: xToPos((e.clientX - rect.left) * sx),
+      mult: yToMult((e.clientY - rect.top) * sy),
+    }
+  }
+
+  const curvePath = useMemo(() => {
+    if (!ramp) return ''
+    const N = 48
+    const pts: string[] = []
+    for (let i = 0; i <= N; i++) {
+      const u = i / N
+      pts.push(`${posToX(u).toFixed(1)},${multToY(rampMultAt(ramp, u)).toFixed(1)}`)
+    }
+    return pts.join(' ')
+  }, [ramp])
+
+  if (!ramp) return null
+
+  const addPointAt = (pos: number) => {
+    const mult = rampMultAt(ramp, pos)
+    const next = [...ramp].sort((a, b) => a.pos - b.pos)
+    let gapI = 0
+    let gap = -1
+    for (let i = 0; i < next.length - 1; i++) {
+      const g = next[i + 1].pos - next[i].pos
+      if (g > gap) {
+        gap = g
+        gapI = i
+      }
+    }
+    const inserted = { pos: round2(pos), mult: round2(Math.max(RAMP_MIN, mult)), ease: next[gapI].ease }
+    const merged = [...next, inserted].sort((a, b) => a.pos - b.pos)
+    writeRamp(merged, 'ramp-add')
+    setSel(merged.findIndex((p) => p === inserted))
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-fuchsia-500/25 bg-fuchsia-500/5 p-2.5">
+      <div className="flex items-center gap-1.5">
+        <Activity className="h-3 w-3 text-fuchsia-300" />
+        <span className="text-[11px] font-medium text-fuchsia-200/90">Speed ramping</span>
+        <button
+          type="button"
+          data-nc-ramp-add
+          title="Add point in the widest gap"
+          onClick={() => {
+            let gapI = 0
+            let gap = -1
+            for (let i = 0; i < ramp.length - 1; i++) {
+              const g = ramp[i + 1].pos - ramp[i].pos
+              if (g > gap) {
+                gap = g
+                gapI = i
+              }
+            }
+            addPointAt((ramp[gapI].pos + ramp[gapI + 1].pos) / 2)
+          }}
+          className="ml-auto flex h-6 w-6 items-center justify-center rounded-md border border-(--nc-line) text-muted-foreground transition-colors hover:border-fuchsia-400/40 hover:text-fuchsia-300"
+        >
+          <DiamondPlus className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          data-nc-ramp-clear
+          title="Remove ramp — back to uniform speed"
+          onClick={() => {
+            pushHistory('ramp-clear')
+            updateClip(clip.id, { speedRamp: null }, false)
+          }}
+          className="flex h-6 w-6 items-center justify-center rounded-md border border-(--nc-line) text-muted-foreground transition-colors hover:border-rose-400/40 hover:text-rose-300"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <svg
+        ref={svgRef}
+        data-nc-ramp-svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full touch-none select-none rounded-md bg-(--nc-panel)"
+        role="img"
+        aria-label="Speed ramp curve editor"
+        onDoubleClick={(e) => {
+          const p = pointFromEvent(e)
+          if (p) addPointAt(p.pos)
+        }}
+      >
+        {/* 1× midline + 2× gridline */}
+        <line x1={PAD} x2={W - PAD} y1={multToY(1)} y2={multToY(1)} stroke="rgba(255,255,255,0.14)" strokeDasharray="3 4" />
+        <text x={W - PAD - 2} y={multToY(1) - 3} textAnchor="end" fontSize={7.5} fill="rgba(255,255,255,0.35)">1×</text>
+        <line x1={PAD} x2={W - PAD} y1={multToY(2)} y2={multToY(2)} stroke="rgba(255,255,255,0.07)" strokeDasharray="2 5" />
+        <text x={W - PAD - 2} y={multToY(2) - 3} textAnchor="end" fontSize={7.5} fill="rgba(255,255,255,0.3)">2×</text>
+        <text x={W - PAD - 2} y={multToY(RAMP_MIN) - 3} textAnchor="end" fontSize={7.5} fill="rgba(255,255,255,0.3)">0.25×</text>
+        <text x={W - PAD - 2} y={multToY(RAMP_MAX) + 8} textAnchor="end" fontSize={7.5} fill="rgba(255,255,255,0.3)">4×</text>
+
+        <polyline
+          points={curvePath}
+          fill="none"
+          stroke="rgb(232 121 249)"
+          strokeWidth={2}
+          strokeLinejoin="round"
+        />
+
+        {ramp.map((pt, i) => {
+          const isSel = i === selIdx
+          return (
+            <circle
+              key={`${pt.pos}-${i}`}
+              cx={posToX(pt.pos)}
+              cy={multToY(pt.mult)}
+              r={isSel ? 5.5 : 4}
+              data-nc-ramp-dot={i}
+              fill={isSel ? 'rgb(240 171 252)' : 'rgb(232 121 249)'}
+              stroke={isSel ? '#fff' : 'rgba(0,0,0,0.45)'}
+              strokeWidth={isSel ? 1.6 : 1}
+              className="cursor-grab active:cursor-grabbing"
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                e.preventDefault()
+                ;(e.target as SVGElement).setPointerCapture?.(e.pointerId)
+                setSel(i)
+                pushHistory('ramp-drag')
+                dragIdx.current = i
+              }}
+              onPointerMove={(e) => {
+                if (dragIdx.current !== i) return
+                const p = pointFromEvent(e)
+                if (!p) return
+                const minPos = i === 0 ? 0 : ramp[i - 1].pos + 0.02
+                const maxPos = i === ramp.length - 1 ? 1 : ramp[i + 1].pos - 0.02
+                const pos = clamp(p.pos, minPos, maxPos)
+                const next = ramp.map((q, qi) =>
+                  qi === i ? { ...q, pos: round2(pos), mult: round2(Math.max(RAMP_MIN, Math.min(RAMP_MAX, p.mult))) } : q
+                )
+                writeRamp(next, false)
+              }}
+              onPointerUp={() => {
+                dragIdx.current = null
+              }}
+              onPointerCancel={() => {
+                dragIdx.current = null
+              }}
+            >
+              <title>{`${fmtRampX(pt.mult)} at ${(pt.pos * 100).toFixed(0)}% of clip · drag to retime`}</title>
+            </circle>
+          )
+        })}
+      </svg>
+
+      {/* selected point readout + segment easing + delete */}
+      {selPoint && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="rounded-md border border-(--nc-line) bg-(--nc-panel) px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-fuchsia-200">
+            {fmtRampX(selPoint.mult)} @ {(selPoint.pos * 100).toFixed(0)}%
+          </span>
+          {ramp.length > 2 && selIdx > 0 && selIdx < ramp.length - 1 && (
+            <button
+              type="button"
+              data-nc-ramp-del
+              onClick={() => {
+                pushHistory('ramp-del')
+                writeRamp(ramp.filter((_, i) => i !== selIdx), false)
+                setSel(Math.max(0, selIdx - 1))
+              }}
+              className="flex h-6 items-center gap-1 rounded-md border border-rose-500/30 px-1.5 text-[10px] text-rose-400 transition-colors hover:bg-rose-500/10"
+            >
+              <Trash2 className="h-3 w-3" /> Point
+            </button>
+          )}
+          <span className="ml-auto text-[9px] uppercase tracking-wide text-muted-foreground/70">
+            {selIdx === ramp.length - 1 ? 'segment into this point:' : 'segment after this point:'}
+          </span>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1" role="group" aria-label="Segment easing">
+        {RAMP_EASES.map((o) => {
+          const targetIdx = selIdx === ramp.length - 1 ? selIdx - 1 : selIdx
+          const active = ramp[targetIdx]?.ease === o.id
+          return (
+            <button
+              key={o.id}
+              type="button"
+              data-nc-ramp-ease={o.id}
+              onClick={() => {
+                pushHistory('ramp-ease')
+                writeRamp(ramp.map((q, qi) => (qi === targetIdx ? { ...q, ease: o.id } : q)), false)
+              }}
+              className={cn(
+                'rounded-md border px-1.5 py-0.5 text-[9.5px] transition-colors',
+                active
+                  ? 'border-fuchsia-400/50 bg-fuchsia-500/15 text-fuchsia-200'
+                  : 'border-(--nc-line) text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {o.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* curated presets */}
+      <div className="flex flex-wrap gap-1" role="group" aria-label="Speed ramp presets">
+        {SPEED_RAMP_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            data-nc-ramp-preset={p.id}
+            onClick={() => {
+              pushHistory('ramp-preset')
+              writeRamp(p.points.map((q) => ({ ...q })), false)
+              setSel(0)
+            }}
+            className="rounded-md border border-(--nc-line) px-1.5 py-0.5 text-[9.5px] text-muted-foreground transition-colors hover:border-fuchsia-400/40 hover:text-fuchsia-300"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-[9px] leading-snug text-muted-foreground/60">
+        Drag points to shape velocity · double-click the graph to add a point · multipliers self-balance so the clip
+        keeps its length and source span (fast parts borrow from slow parts)
+      </p>
     </div>
   )
 }
@@ -1822,7 +2101,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
 
       {/* media — video / audio */}
       {(clip.kind === 'video' || clip.kind === 'audio') && (
-        <Section title="Media" icon={Gauge}>
+        <Section title="Media" icon={Gauge} sectionId="speed-ramp">
           <SliderRow
             label="Speed"
             min={0.25}
@@ -1832,6 +2111,23 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             onChange={changeSpeed}
             format={fmtX}
           />
+          {/* speed ramping — video only (audio export uses uniform rate) */}
+          {clip.kind === 'video' && (
+            <div className="flex items-center gap-2">
+              <span className="flex flex-1 items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Activity className="h-3 w-3" />
+                Speed ramping
+              </span>
+              <Switch
+                checked={!!clip.speedRamp && clip.speedRamp.length >= 2}
+                onCheckedChange={(on) =>
+                  updateClip(clip.id, { speedRamp: on ? defaultSpeedRamp() : null }, 'ramp-toggle')
+                }
+                aria-label="Enable speed ramping"
+              />
+            </div>
+          )}
+          {clip.kind === 'video' && <SpeedRampSection clip={clip} />}
           <SliderRow
             label="Volume"
             min={0}

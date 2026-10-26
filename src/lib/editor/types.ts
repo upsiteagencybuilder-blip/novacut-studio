@@ -258,6 +258,19 @@ export interface StickerStyle {
   strokeWidth?: number
 }
 
+/** Easing applied from a speed-ramp point to the NEXT point's segment. */
+export type RampEase = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut'
+
+/** One control point of a clip's speed-ramp curve (normalized clip space). */
+export interface SpeedRampPoint {
+  /** normalized position along the clip timeline, 0..1 (sorted, endpoints pinned) */
+  pos: number
+  /** raw speed multiplier at this point (relative; mean-normalized at evaluation) */
+  mult: number
+  /** easing shape of the segment that starts at this point */
+  ease: RampEase
+}
+
 /**
  * Per-clip audio FX recipe — interpreted by the engine's WebAudio chain.
  * All fields optional; every omitted/neutral field is bypassed so the chain
@@ -332,6 +345,14 @@ export interface Clip {
   /** full source length in seconds (limits trimming) — Infinity-ish for images/text */
   sourceDuration: number
   speed: number
+  /**
+   * Speed ramp — piecewise speed-multiplier curve over the clip's timeline span.
+   * Points are { pos: 0..1, mult: relative multiplier, ease into next segment }.
+   * The curve is mean-normalized at evaluation time so the total consumed source
+   * span stays exactly `duration × speed` (timeline layout never reflows).
+   * null/undefined = uniform speed (no ramp). Video clips only.
+   */
+  speedRamp?: SpeedRampPoint[] | null
   /** play this video clip backwards (frame-stepped, audio muted) */
   reverse?: boolean
   /** how the source fills the canvas — default cover */

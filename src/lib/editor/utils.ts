@@ -1,4 +1,4 @@
-import type { ChromaKey, Clip, ColorGrade, EasingType, Filters, Keyframe, KeyframeProperty, LutData, Project } from './types'
+import type { ChromaKey, Clip, ColorGrade, EasingType, Filters, Keyframe, KeyframeProperty, LutData, Project, RampEase, SpeedRampPoint } from './types'
 
 export function uid(prefix = ''): string {
   return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`
@@ -511,6 +511,159 @@ export function mediaKindFromType(mime: string, name: string): 'video' | 'image'
   if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) return 'audio'
   return null
 }
+
+/* ---------------------------------------------- speed ramps (Day 05) */
+
+const RAMP_EASE_FNS: Record<RampEase, (x: number) => number> = {
+  linear: (x) => x,
+  easeIn: (x) => x * x,
+  easeOut: (x) => 1 - (1 - x) * (1 - x),
+  easeInOut: (x) => (x < 0.5 ? 2 * x * x : 1 - 2 * (1 - x) * (1 - x)),
+}
+
+/**
+ * Speed multiplier at normalized clip position `u` (0..1), evaluated on the
+ * piecewise-eased ramp curve. Falls back to 1 for empty/invalid ramps.
+ */
+export function rampMultAt(ramp: SpeedRampPoint[], u: number): number {
+  if (!ramp || ramp.length === 0) return 1
+  if (ramp.length === 1) return Math.max(0.1, ramp[0].mult)
+  const t = clamp(u, 0, 1)
+  // before first / after last points clamp to endpoint multipliers
+  if (t <= ramp[0].pos) return Math.max(0.1, ramp[0].mult)
+  const last = ramp[ramp.length - 1]
+  if (t >= last.pos) return Math.max(0.1, last.mult)
+  for (let i = 0; i < ramp.length - 1; i++) {
+    const a = ramp[i]
+    const b = ramp[i + 1]
+    if (t >= a.pos && t <= b.pos) {
+      const span = Math.max(1e-6, b.pos - a.pos)
+      const x = (t - a.pos) / span
+      const e = RAMP_EASE_FNS[a.ease] ?? RAMP_EASE_FNS.linear
+      return Math.max(0.1, a.mult + (b.mult - a.mult) * e(x))
+    }
+  }
+  return Math.max(0.1, last.mult)
+}
+
+/**
+ * Integral of the ramp curve over 0..1 (its mean, since the domain is width 1).
+ * Used to mean-normalize so a ramp never changes the clip's consumed source span.
+ */
+export function rampMean(ramp: SpeedRampPoint[]): number {
+  if (!ramp || ramp.length === 0) return 1
+  const STEPS = 64
+  let sum = 0
+  for (let i = 0; i < STEPS; i++) {
+    const u = (i + 0.5) / STEPS
+    sum += rampMultAt(ramp, u)
+  }
+  return sum / STEPS
+}
+
+/**
+ * Normalized cumulative source fraction consumed by timeline position `u`
+ * (0..1). Multiplied by the clip's `duration × speed` it gives the absolute
+ * source offset — identical total span to uniform playback because the curve
+ * is mean-normalized (faster sections borrow time from slower ones).
+ */
+export function rampSourceFraction(ramp: SpeedRampPoint[], u: number): number {
+  const mean = rampMean(ramp)
+  if (mean <= 0) return clamp(u, 0, 1)
+  const t = clamp(u, 0, 1)
+  if (t <= 0) return 0
+  if (t >= 1) return 1
+  // midpoint Simpson-ish accumulation, 48 strips is plenty for playback smoothness
+  const STEPS = 48
+  const step = t / STEPS
+  let acc = 0
+  for (let i = 0; i < STEPS; i++) {
+    acc += rampMultAt(ramp, (i + 0.5) * step) * step
+  }
+  return clamp(acc / mean, 0, 1)
+}
+
+/**
+ * Instantaneous effective speed (units: source seconds per timeline second) at
+ * timeline-local time `tLocal` — base speed × mean-normalized ramp multiplier.
+ * Drives both <video>.playbackRate during preview and the source-time mapping.
+ */
+export function effectiveSpeedAt(clip: Clip, tLocal: number): number {
+  const base = clamp(clip.speed || 1, 0.0625, 16)
+  const ramp = clip.speedRamp
+  if (!ramp || ramp.length < 2) return base
+  const u = tLocal / Math.max(0.001, clip.duration)
+  const mult = rampMultAt(ramp, u)
+  const mean = rampMean(ramp)
+  return clamp(base * (mult / mean), 0.0625, 16)
+}
+
+/** Build the default flat ramp (uniform) used when ramping is first enabled. */
+export function defaultSpeedRamp(): SpeedRampPoint[] {
+  return [
+    { pos: 0, mult: 1, ease: 'linear' },
+    { pos: 1, mult: 1, ease: 'linear' },
+  ]
+}
+
+/** Curated ramp presets — multipliers are raw; evaluation mean-normalizes. */
+export const SPEED_RAMP_PRESETS: { id: string; label: string; points: SpeedRampPoint[] }[] = [
+  {
+    id: 'hero',
+    label: 'Hero',
+    points: [
+      { pos: 0, mult: 0.5, ease: 'easeInOut' },
+      { pos: 0.5, mult: 2.5, ease: 'easeInOut' },
+      { pos: 1, mult: 0.5, ease: 'linear' },
+    ],
+  },
+  {
+    id: 'bullet',
+    label: 'Bullet',
+    points: [
+      { pos: 0, mult: 3, ease: 'easeOut' },
+      { pos: 0.35, mult: 0.4, ease: 'easeInOut' },
+      { pos: 1, mult: 2, ease: 'linear' },
+    ],
+  },
+  {
+    id: 'montage',
+    label: 'Montage',
+    points: [
+      { pos: 0, mult: 1.8, ease: 'easeInOut' },
+      { pos: 0.5, mult: 0.6, ease: 'easeInOut' },
+      { pos: 1, mult: 1.8, ease: 'linear' },
+    ],
+  },
+  {
+    id: 'pulse',
+    label: 'Pulse',
+    points: [
+      { pos: 0, mult: 1, ease: 'easeInOut' },
+      { pos: 0.35, mult: 0.45, ease: 'easeInOut' },
+      { pos: 0.65, mult: 2.2, ease: 'easeInOut' },
+      { pos: 1, mult: 1, ease: 'linear' },
+    ],
+  },
+  {
+    id: 'flash-in',
+    label: 'Flash In',
+    points: [
+      { pos: 0, mult: 3.5, ease: 'easeOut' },
+      { pos: 0.25, mult: 0.6, ease: 'easeInOut' },
+      { pos: 1, mult: 1, ease: 'linear' },
+    ],
+  },
+  {
+    id: 'flash-out',
+    label: 'Flash Out',
+    points: [
+      { pos: 0, mult: 1, ease: 'easeInOut' },
+      { pos: 0.75, mult: 0.6, ease: 'easeInOut' },
+      { pos: 1, mult: 3.5, ease: 'linear' },
+    ],
+  },
+]
 
 /** HH:MM:SS,mmm — the SRT timestamp format */
 function srtTimestamp(t: number): string {

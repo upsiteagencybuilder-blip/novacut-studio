@@ -36,6 +36,7 @@ export type ToolAction =
   | 'open-properties-lut'
   | 'open-properties-scopes'
   | 'open-properties-animation'
+  | 'open-properties-speed-ramp'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

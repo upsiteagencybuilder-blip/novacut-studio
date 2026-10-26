@@ -10,7 +10,7 @@ import type { OverlayDraw, VisionDraw } from '@/lib/effects/types'
 import { getEffect, getOverlayDraw } from '@/lib/effects/registry'
 import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
 import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
-import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, evaluateKeyframeProperty, formatTimecode, projectDuration } from './utils'
+import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, formatTimecode, projectDuration, rampSourceFraction } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
 import { applyClipFx, buildFxChain, makeImpulse, rebuildModulation } from './audio-mix'
 import type { AudioFxChain } from './audio-mix'
@@ -678,6 +678,18 @@ class PreviewEngine {
   }
 
   private expectedSourcePos(clip: Clip, tLocal: number): number {
+    // speed ramp: walk the mean-normalized integral of the multiplier curve.
+    // Total consumed span stays duration × speed, so endpoints match uniform.
+    if (clip.speedRamp && clip.speedRamp.length >= 2) {
+      const u = clamp(tLocal / Math.max(0.001, clip.duration), 0, 1)
+      const frac = rampSourceFraction(clip.speedRamp, u)
+      const span = clip.duration * clip.speed
+      if (clip.reverse) {
+        const end = clip.trimStart + span
+        return end - frac * span
+      }
+      return clip.trimStart + frac * span
+    }
     if (clip.reverse) {
       // play backwards: source position runs from the clip's out-point down to its in-point
       const end = clip.trimStart + clip.duration * clip.speed
@@ -712,7 +724,7 @@ class PreviewEngine {
   ) {
     const el = entry.el as HTMLVideoElement
     const expected = clamp(this.expectedSourcePos(clip, tLocal), 0, Math.max(0, (clip.sourceDuration || el.duration || 1) - 0.02))
-    el.playbackRate = clamp(Math.abs(this.rate) * clip.speed, 0.0625, 16)
+    el.playbackRate = clamp(Math.abs(this.rate) * effectiveSpeedAt(clip, tLocal), 0.0625, 16)
 
     const vol = audible ? this.effectiveVolume(clip, tLocal, fadeOpts) * volumeScale : 0
     if (entry.gain) {
@@ -784,7 +796,7 @@ class PreviewEngine {
   ) {
     const el = entry.el as HTMLAudioElement
     const expected = clamp(this.expectedSourcePos(clip, tLocal), 0, Math.max(0, (clip.sourceDuration || el.duration || 1) - 0.02))
-    el.playbackRate = clamp(Math.abs(this.rate) * clip.speed, 0.0625, 16)
+    el.playbackRate = clamp(Math.abs(this.rate) * effectiveSpeedAt(clip, tLocal), 0.0625, 16)
 
     const vol = audible ? this.effectiveVolume(clip, tLocal, fadeOpts) * volumeScale : 0
     if (entry.gain) {

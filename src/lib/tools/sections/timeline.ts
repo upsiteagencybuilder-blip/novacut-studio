@@ -73,7 +73,8 @@ export const TIMELINE_TOOLS: ProTool[] = [
 
   // -------- Speed & duration --------
   { id: 'timeline-jkl-shuttle', name: 'JKL Shuttle Transport', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'J reverses, K pauses, L plays — press again for ±2× / ±4× video+audio shuttle' },
-  { id: 'timeline-speed-controls', name: 'Speed Controls (Uniform Speed / Speed Ramping)', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Speed slider and 25 presets change rate with automatic duration compensation' },
+  { id: 'timeline-speed-controls', name: 'Speed Controls (Uniform Speed)', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Speed slider (0.25×–4×) changes rate with automatic duration compensation — source span preserved' },
+  { id: 'timeline-speed-ramping', name: 'Speed Ramping (Curve Editor)', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Draggable multiplier curve over the clip — segment easings, six presets (Hero, Bullet, Montage…), mean-normalized so length and source span never reflow; mini-curve badge on the timeline block', action: 'open-properties-speed-ramp' },
   { id: 'timeline-reverse-playback', name: 'Reverse Playback', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Toggle a video clip to play backwards frame-by-frame; audio muted while reversed' },
   { id: 'timeline-freeze-frame', name: 'Freeze Frame', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Toolbar snowflake captures the current frame as a 3s still and ripple-inserts it at the playhead' },
   { id: 'timeline-fit-modes', name: 'Fit Modes (Cover / Contain / Stretch)', section: 'timeline', group: 'Speed & duration', status: 'live', desc: 'Choose how each video or image fills the canvas in Properties → Transform → Fit' },

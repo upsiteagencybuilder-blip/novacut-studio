@@ -974,3 +974,26 @@ Stage Summary:
 - Day 04 COMPLETE: real compound clips — Ctrl+G packs any selection into one violet block that PLAYS its contents everywhere (preview, export, mixdown) via a zero-cost resolver, double-click opens a guarded editing session (breadcrumb bar, dimmed outside, auto-joining new clips, span-recomputing repack), and the session state lives inside the project so undo/redo is consistent by construction; honest catalog +1 live.
 - Key artifacts: nested.ts (resolver), types.NestedClipData, store group/ungroup/enter/exit/join + nested-aware guards, engine-bridge + audio-mix wiring, ClipBlock nested identity + dblclick, Timeline session bar + dimming + badge Group, NestedClipPanel inspector, Ctrl+G/Ctrl+Shift+G, catalog timeline-nested-clips.
 - Next: Day 05 (Category A — next roadmap row) on the user's next command.
+
+---
+Task ID: Day-05
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category A Day 5 — Speed ramps: per-segment speed with smooth curves.
+
+Work Log:
+- Verified state first: git log confirmed Day 02/03/04 shipped (commits 7d88cfc/6407993/56062ef); proceeded to Day 5 row.
+- types.ts: RampEase + SpeedRampPoint {pos 0..1, mult, ease} + Clip.speedRamp (video-only feature, null = uniform).
+- utils.ts: ramp math core — rampMultAt (piecewise-eased interpolation, 4 easings), rampMean (64-step integral), rampSourceFraction (mean-normalized cumulative source fraction, 48 strips), effectiveSpeedAt (base × normalized mult, clamped 0.0625..16), defaultSpeedRamp(), SPEED_RAMP_PRESETS (Hero/Bullet/Montage/Pulse/FlashIn/FlashOut).
+- KEY DESIGN: mean-normalization at evaluation time — the curve self-balances so total consumed source span stays exactly duration × speed; timeline never reflows, no source overrun freezes; fast parts borrow time from slow parts.
+- engine.ts: expectedSourcePos walks rampSourceFraction (forward AND reverse); both syncVideo/syncAudio playbackRate now use effectiveSpeedAt → instantaneous rate follows the curve. Export (real-time playback recording) inherits automatically; audio clips honestly excluded (offline mixdown uses uniform rate).
+- PropertiesPanel: SpeedRampSection — SVG curve editor (sqrt y-scale so 1× midline, 0.25×–4×), draggable dots (pointer capture, neighbors-clamped pos, endpoints pinned, one undo per gesture), double-click adds point at curve value, insert-in-widest-gap + delete interior points, per-segment ease chips (Linear/EaseIn/EaseOut/Smooth), 6 preset chips, selected-point readout "2.50× @ 50%", X to remove ramp; Media section gains "Speed ramping" Switch (video only) + sectionId speed-ramp deep-link.
+- ClipBlock: mini fuchsia ramp polyline + Gauge badge bottom-right of ramped video clips.
+- Catalog honesty: NEW live tool timeline-speed-ramping with action open-properties-speed-ramp (types + ProToolkitPanel map + PropsSectionId 'speed-ramp'); CORRECTED timeline-speed-controls desc — removed untruthful "25 presets" claim, now "Speed slider (0.25×–4×) with automatic duration compensation".
+- E2E desktop 1280×800 (ffmpeg-generated 6s test video imported via real file input): toggle→default flat ramp + SVG visible; Hero preset [0.5,2.5,0.5] duration unchanged 6s; one-undo→flat, redo→hero; dot drag 2.5→4.0 (pos pinned 0.5) one-undo; dblclick add point at curve value (pos .28 mult 1.72); easeOut chip applied; point delete; ENGINE RECEIPTS EXACT: u=0.25→src 0.833s (predicted 0.833), u=0.5→3.000s (predicted 3.0), u=0.9→5.779s (predicted 5.7786), playbackRate 1.0/0.44 exact vs analytic; playback smoke 2.2s clean.
+- E2E mobile 390×844: real import → Edit sheet → toggle → Bullet preset [3,0.4,2]; engine receipt u=0.9: src 5.031s (pred 5.061, within 0.03s pause tolerance), rate 1.573 EXACT vs predicted 1.573; timeline badge visible; undo restores; zero page errors both viewports.
+
+Stage Summary:
+- Speed ramping shipped end-to-end (data model → engine mapping → curve editor UI → presets → deep link → timeline badge), mathematically verified against hand-computed integrals on both viewports.
+- Catalog +1 live (timeline-speed-ramping); 1 dishonest desc fixed.
+- Files: types.ts, utils.ts, engine.ts, PropertiesPanel.tsx, ClipBlock.tsx, tools/types.ts, tools/sections/timeline.ts, ProToolkitPanel.tsx.
+- Next: Day 6 — per-effect custom controls (pitch slider, mix knob).

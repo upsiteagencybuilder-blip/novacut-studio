@@ -9,12 +9,12 @@
  */
 import { useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { Layers, Type } from 'lucide-react'
+import { Gauge, Layers, Type } from 'lucide-react'
 import { toast } from 'sonner'
 import { MIN_CLIP_DURATION, TRACK_HEIGHT } from '@/lib/editor/constants'
 import { stickerGlyph, stickerName } from '@/lib/editor/sticker-render'
 import { useEditor } from '@/lib/editor/store'
-import { clamp, formatShortTime, formatTimecode, round2, snapBothEdges } from '@/lib/editor/utils'
+import { clamp, formatShortTime, formatTimecode, rampMultAt, round2, snapBothEdges } from '@/lib/editor/utils'
 import type { Clip, ClipKind, Track } from '@/lib/editor/types'
 import { cn } from '@/lib/utils'
 
@@ -611,6 +611,29 @@ export function ClipBlock({
         <div className="absolute bottom-0.5 left-1.5 text-[9px] tabular-nums text-(--nc-clip-ink-soft)">
           {formatShortTime(clip.duration)}
         </div>
+
+        {/* speed ramp mini-curve (video only) */}
+        {clip.kind === 'video' && clip.speedRamp && clip.speedRamp.length >= 2 && (
+          <div
+            className="pointer-events-none absolute bottom-0.5 right-1.5 flex items-center gap-0.5 rounded bg-black/45 px-1 py-px"
+            aria-label="Speed ramped"
+          >
+            <Gauge className="size-2.5 shrink-0 text-fuchsia-300" />
+            <svg viewBox="0 0 26 10" className="h-2.5 w-[26px]" aria-hidden>
+              <polyline
+                points={Array.from({ length: 13 }, (_, i) => {
+                  const u = i / 12
+                  const m = Math.min(4, Math.max(0.25, rampMultAt(clip.speedRamp!, u)))
+                  const y01 = (Math.sqrt(m) - 0.5) / 1.5
+                  return `${(u * 26).toFixed(1)},${(9 - y01 * 8).toFixed(1)}`
+                }).join(' ')}
+                fill="none"
+                stroke="rgb(240 171 252)"
+                strokeWidth="1.4"
+              />
+            </svg>
+          </div>
+        )}
 
         {/* fade in / out overlays */}
         {clip.fadeIn > 0 && (
