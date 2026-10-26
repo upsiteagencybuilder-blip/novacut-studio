@@ -88,6 +88,8 @@ interface EditorStore {
   importing: boolean
   /** true once copy/cut has stashed at least one clip (enables Paste UI) */
   hasClipboard: boolean
+  /** stashed look/feel of a source clip for Paste Attributes (Day 09) — null until copied */
+  copiedAttributes: { attrs: Partial<Clip>; from: string } | null
   /* ---------- nested (compound) clips ---------- */
   /** pack every selected clip into a single compound block (Ctrl+G) */
   groupSelectedClips: () => boolean
@@ -145,6 +147,10 @@ interface EditorStore {
   setSelection: (ids: string[]) => void
   /** copy selected clips to the internal clipboard (Ctrl+C) */
   copySelected: () => void
+  /** stash FX/motion/transform of a clip (default: first selection) for Paste Attributes (Ctrl+Alt+V) */
+  copyAttributes: (id?: string) => boolean
+  /** apply stashed attributes onto one or many clips (default: selection) — returns target count */
+  pasteAttributes: (id?: string) => number
   /** copy then delete in one history step (Ctrl+X) */
   cutSelected: () => void
   /** paste clipboard clips starting at the playhead (Ctrl+V) */
@@ -415,6 +421,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
   past: [],
   future: [],
   hasClipboard: false,
+  copiedAttributes: null,
   importing: false,
 
   /* ================= lifecycle ================= */
@@ -1282,6 +1289,89 @@ export const useEditor = create<EditorStore>((set, get) => ({
       .map((c) => JSON.parse(JSON.stringify(c)) as Clip)
       .sort((a, b) => a.start - b.start)
     if (clipboardClips.length) set({ hasClipboard: true })
+  },
+
+  copyAttributes: (id) => {
+    const s = get()
+    const sourceId = id ?? s.selectedClipIds[0]
+    if (!sourceId) return false
+    const clip = s.project.clips.find((c) => c.id === sourceId)
+    if (!clip) return false
+    // pick every look/feel group — paste filters by target kind
+    const attrs: Partial<Clip> = JSON.parse(
+      JSON.stringify({
+        transform: clip.transform,
+        filters: clip.filters,
+        colorGrade: clip.colorGrade,
+        lutId: clip.lutId,
+        lutIntensity: clip.lutIntensity,
+        motion: clip.motion,
+        motionIntensity: clip.motionIntensity,
+        blendMode: clip.blendMode,
+        chromaKey: clip.chromaKey,
+        crop: clip.crop,
+        fit: clip.fit,
+        overlay: clip.overlay,
+        vision: clip.vision,
+        audioFx: clip.audioFx,
+        fadeIn: clip.fadeIn,
+        fadeOut: clip.fadeOut,
+        keyframes: clip.keyframes,
+        textStyle: clip.textStyle,
+        sticker: clip.sticker,
+      }),
+    )
+    set({ copiedAttributes: { attrs, from: clip.name } })
+    return true
+  },
+
+  pasteAttributes: (id) => {
+    const s = get()
+    const stash = s.copiedAttributes
+    if (!stash) return 0
+    const targets = (id ? [id] : s.selectedClipIds).filter(Boolean)
+    if (!targets.length) return 0
+    s.pushHistory('paste-attrs')
+    let count = 0
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        clips: st.project.clips.map((c) => {
+          if (!targets.includes(c.id)) return c
+          count++
+          const a = stash.attrs
+          const next: Clip = { ...c }
+          // universal groups
+          if (a.transform) next.transform = { ...a.transform }
+          if (a.filters) next.filters = { ...a.filters }
+          if (a.colorGrade !== undefined) next.colorGrade = a.colorGrade ? { ...a.colorGrade } : undefined
+          if (a.lutId !== undefined) next.lutId = a.lutId
+          if (a.lutIntensity !== undefined) next.lutIntensity = a.lutIntensity
+          if (a.motion !== undefined) next.motion = a.motion
+          if (a.motionIntensity !== undefined) next.motionIntensity = a.motionIntensity
+          if (a.blendMode !== undefined) next.blendMode = a.blendMode
+          if (a.overlay !== undefined) next.overlay = a.overlay ? { ...a.overlay } : null
+          if (a.vision !== undefined) next.vision = a.vision ? { ...a.vision } : null
+          if (a.audioFx !== undefined) next.audioFx = a.audioFx ? { ...a.audioFx } : null
+          if (a.fadeIn !== undefined) next.fadeIn = a.fadeIn
+          if (a.fadeOut !== undefined) next.fadeOut = a.fadeOut
+          if (a.keyframes) next.keyframes = JSON.parse(JSON.stringify(a.keyframes)).map((k: Keyframe) => ({ ...k, id: uid('kf_') }))
+          // kind-gated groups — text style only onto text, sticker art only onto stickers
+          if (a.textStyle && c.kind === 'text') next.textStyle = { ...a.textStyle }
+          if (a.sticker && c.kind === 'sticker') next.sticker = { ...a.sticker }
+          // crop/fit are meaningless for audio
+          if (c.kind !== 'audio') {
+            if (a.crop !== undefined) next.crop = a.crop ? { ...a.crop } : null
+            if (a.fit !== undefined) next.fit = a.fit
+          }
+          if (a.chromaKey !== undefined && (c.kind === 'video' || c.kind === 'image')) {
+            next.chromaKey = a.chromaKey ? { ...a.chromaKey } : undefined
+          }
+          return next
+        }),
+      }),
+    }))
+    return count
   },
 
   cutSelected: () => {

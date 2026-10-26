@@ -456,6 +456,7 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'Shift + M', action: 'Add marker at playhead' },
   { keys: '[ / ]', action: 'Jump to previous / next marker' },
   { keys: 'Ctrl + Z', action: 'Undo' },
+  { keys: 'Ctrl + Alt + V', action: 'Paste attributes (FX/motion/transform) onto selection' },
   { keys: 'Ctrl + Shift + Z / Ctrl + Y', action: 'Redo' },
   { keys: '+ / - / Shift + Z', action: 'Zoom timeline in / out / fit' },
   { keys: 'Ctrl + E', action: 'Open export dialog' },

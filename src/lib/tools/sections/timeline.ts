@@ -68,6 +68,7 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-reverse-match-frame', name: 'Reverse Match Frame', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Jump from the source monitor back to the timeline clip' },
   { id: 'timeline-find-panel', name: 'Find Panel', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Search the project for clips by name or metadata' },
   { id: 'timeline-replace-clip-tool', name: 'Replace Clip Tool', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Swap one media asset for another from clip properties — speed, reverse and crop reset clean' },
+  { id: 'timeline-paste-attributes', name: 'Paste Attributes (Ctrl+Alt+V)', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Copy FX & motion from any clip — transform, filters, grade, LUT, blend, chroma, crop, motion presets, audio FX, fades, keyframes — and paste onto one or many clips in one undo; text/sticker styling stays kind-gated' },
   { id: 'timeline-make-subclip', name: 'Make Subclip', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Save a marked source range as its own subclip asset' },
   { id: 'timeline-delete-ripple-delete', name: 'Delete / Ripple Delete', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Press Delete to remove clips, Shift Delete ripples the gap' },
 

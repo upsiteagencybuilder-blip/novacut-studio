@@ -1060,3 +1060,21 @@ Stage Summary:
 - Markers are first-class project data: colored labeled draggable pins, click/drag/dblclick interactions, [ ] jump keys, menu jump list, snap integration, undo everywhere.
 - Catalog: +1 live (timeline-marker-navigation), 1 desc corrected. Files: types.ts, store.ts, constants.ts, Timeline.tsx, TimelineToolbar.tsx, ClipBlock.tsx, EditorShell.tsx, ShortcutsDialog.tsx (via SHORTCUTS), timeline.ts.
 - Next: Day 9 — paste attributes between clips.
+
+---
+Task ID: Day-09
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category A Day 9 — Paste attributes: copy FX/motion/transform between clips.
+
+Work Log:
+- store.ts: copiedAttributes stash {attrs, from} + copyAttributes(id?) (deep-clones transform, filters, colorGrade, lutId/lutIntensity, motion+intensity, blendMode, chromaKey, crop, fit, overlay, vision, audioFx, fades, keyframes, textStyle, sticker) + pasteAttributes(id?) — applies to the whole selection in ONE undo, deep-clones per target, keyframe ids regenerated (no shared-keyframe corruption), kind gates: textStyle only onto text, sticker only onto stickers, crop/fit skipped for audio, chroma only video/image.
+- PropertiesPanel: ClipActionsRow rebuilt — Copy FX + Paste FX (disabled until stash, shows source name) with multi-select hint "hits every selected clip in one undo"; renders in single-clip and multi-select inspector modes (desktop) and the mobile Edit sheet.
+- EditorShell: Ctrl+Alt+V paste-attributes (checked before plain Ctrl+V) with toasts; ShortcutsDialog +1 row; catalog +1 live timeline-paste-attributes with honest kind-gating disclosure.
+- E2E desktop: styled sunrise (transform x.2/y-.1/scale1.4/rot12/op.9/flipX, motion kenburns 0.7, fadeIn .4, brightness→clamp-max 2); Copy FX via inspector button → stash verified (from "sunrise.jpg"); selected neon+mountains → Paste FX → BOTH carry identical transform/motion/fade/brightness; one-undo reverts both (motion panRight, scale 1, fade 0), redo re-applies; keyframe (scale @0.5→1.8) clones to mountains with FRESH id; textStyle does NOT leak onto video; text→text carries content "Styled!" + #ff00ff + bold; Ctrl+Alt+V keyboard path pastes (resets neon to text-source's neutral attrs — correct replace semantics).
+- E2E mobile 390×844: Edit sheet shows Copy FX + "Paste FX (Your text he…)" — tap applies; playback smoke clean; zero page errors.
+- E2E gotcha log: bare-number eval returns display as {}; stale captured `s` after actions in the same eval yields old values — all receipts re-verified with fresh getState reads.
+
+Stage Summary:
+- Full paste-attributes workflow (copy → inspect stash → single/multi paste → one-undo) shipped with kind-gated safety.
+- Catalog +1 live. Files: store.ts, PropertiesPanel.tsx, EditorShell.tsx, constants.ts (SHORTCUTS), timeline.ts.
+- Next: Day 10 — transform presets library + Category A audit & stress E2E.

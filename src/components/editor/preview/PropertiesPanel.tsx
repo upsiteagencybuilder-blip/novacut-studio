@@ -26,6 +26,8 @@ import {
   Move,
   Palette,
   Pipette,
+  Paintbrush,
+  PaintbrushVertical,
   Rewind,
   RotateCcw,
   RotateCw,
@@ -424,29 +426,71 @@ function Section({
   )
 }
 
-function ClipActionsRow({ duplicateId }: { duplicateId: string }) {
+function ClipActionsRow({ clipId, multi }: { clipId: string; multi?: boolean }) {
   const deleteSelected = useEditor((s) => s.deleteSelected)
   const duplicateClip = useEditor((s) => s.duplicateClip)
+  const copyAttributes = useEditor((s) => s.copyAttributes)
+  const pasteAttributes = useEditor((s) => s.pasteAttributes)
+  const copied = useEditor((s) => s.copiedAttributes)
+  const selectedCount = useEditor((s) => s.selectedClipIds.length)
   return (
-    <div className="flex gap-2 pt-1">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-9 flex-1 border border-rose-500/30 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
-        onClick={deleteSelected}
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-        Delete
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-9 flex-1 border border-(--nc-line) text-xs text-muted-foreground hover:bg-(--nc-panel) hover:text-foreground"
-        onClick={() => duplicateClip(duplicateId)}
-      >
-        <Copy className="h-3.5 w-3.5" />
-        Duplicate
-      </Button>
+    <div className="space-y-2 pt-1">
+      {/* paste attributes — Day 09 (Ctrl+Alt+V) */}
+      <div className="flex gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          data-nc-copy-fx
+          className="h-8 flex-1 border border-(--nc-line) text-[11px] text-muted-foreground hover:bg-(--nc-panel) hover:text-foreground"
+          onClick={() => {
+            if (copyAttributes(clipId)) toast.success(`Copied FX & motion from “${useEditor.getState().copiedAttributes?.from}” — select clips and Paste FX`)
+          }}
+        >
+          <Paintbrush className="h-3.5 w-3.5" />
+          Copy FX
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          data-nc-paste-fx
+          disabled={!copied}
+          title={copied ? `Paste look & motion from “${copied.from}”` : 'Copy FX from a clip first'}
+          className="h-8 flex-1 border border-fuchsia-500/30 text-[11px] text-fuchsia-300 hover:bg-fuchsia-500/10 disabled:opacity-40"
+          onClick={() => {
+            const n = pasteAttributes()
+            if (n > 0) toast.success(`Pasted attributes onto ${n} clip${n > 1 ? 's' : ''}`)
+            else toast('Select a clip to paste onto')
+          }}
+        >
+          <PaintbrushVertical className="h-3.5 w-3.5" />
+          Paste FX{copied ? ` (${copied.from.slice(0, 12)})` : ''}
+        </Button>
+      </div>
+      {multi && selectedCount > 1 && (
+        <p className="text-[9.5px] text-muted-foreground/70">
+          {selectedCount} clips selected — Paste FX hits every selected clip in one undo.
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-9 flex-1 border border-rose-500/30 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+          onClick={deleteSelected}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-9 flex-1 border border-(--nc-line) text-xs text-muted-foreground hover:bg-(--nc-panel) hover:text-foreground"
+          onClick={() => duplicateClip(clipId)}
+        >
+          <Copy className="h-3.5 w-3.5" />
+          Duplicate
+        </Button>
+      </div>
     </div>
   )
 }
@@ -2441,7 +2485,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
         </Section>
       )}
 
-      <ClipActionsRow duplicateId={clip.id} />
+      <ClipActionsRow clipId={clip.id} />
     </>
   )
 }
@@ -2480,7 +2524,7 @@ function MultiSelectPanel({ count, firstId }: { count: number; firstId: string |
           Select a single clip to edit its properties.
         </p>
       </div>
-      {firstId && <ClipActionsRow duplicateId={firstId} />}
+      {firstId && <ClipActionsRow clipId={firstId} multi />}
     </>
   )
 }

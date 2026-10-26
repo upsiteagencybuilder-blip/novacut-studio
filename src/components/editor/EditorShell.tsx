@@ -112,6 +112,18 @@ function useKeyboardShortcuts() {
         }
         return
       }
+      if (mod && e.altKey && key === 'v') {
+        // paste attributes BEFORE plain Ctrl+V — applies look & motion to the selection
+        e.preventDefault()
+        if (!s.copiedAttributes) {
+          toast('Copy FX from a clip first (Properties → Copy FX)')
+          return
+        }
+        const n = s.pasteAttributes()
+        if (n > 0) toast.success(`Attributes pasted onto ${n} clip${n > 1 ? 's' : ''}`)
+        else toast('Select a clip to paste onto')
+        return
+      }
       if (mod && key === 'v') {
         e.preventDefault()
         if (s.hasClipboard) {
