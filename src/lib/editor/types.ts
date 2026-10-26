@@ -308,6 +308,13 @@ export interface ClipAudioFx {
   modKind?: 'none' | 'chorus' | 'flanger' | 'phaser'
   /** modulation amount 0..1 (depth/wet) */
   modAmount?: number
+  /**
+   * Pitch shift in semitones -12..12 — granular, tempo preserved (preview AND
+   * offline mixdown ride the same AudioWorklet). 0/undefined = off.
+   */
+  pitch?: number
+  /** pitch wet/dry blend 0..1 — 1 = fully shifted, 0.5 = parallel harmony (default 1) */
+  pitchMix?: number
 }
 
 /**

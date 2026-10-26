@@ -37,6 +37,7 @@ export type ToolAction =
   | 'open-properties-scopes'
   | 'open-properties-animation'
   | 'open-properties-speed-ramp'
+  | 'open-properties-audiofx'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

@@ -120,6 +120,7 @@ function useToolAction() {
       'open-properties-scopes': () => openPropsSection('scopes'),
       'open-properties-animation': () => openPropsSection('animation'),
       'open-properties-speed-ramp': () => openPropsSection('speed-ramp'),
+      'open-properties-audiofx': () => openPropsSection('audiofx'),
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])

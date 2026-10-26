@@ -17,6 +17,7 @@ import type { Clip, ClipAudioFx, MediaAssetRuntime, Project } from './types'
 import { resolveNestedProject } from './nested'
 import { clamp, projectDuration } from './utils'
 import { decodeSource } from '@/lib/effects/voice'
+import { createPitchNode, ensurePitchModule, pitchModuleReady } from './pitch-worklet'
 
 /* ---------------- chain types + builder (shared with the engine) ---------------- */
 
@@ -45,10 +46,15 @@ export interface AudioFxChain {
   hp: BiquadFilterNode
   lp: BiquadFilterNode
   comp: DynamicsCompressorNode
+  pitchIn: GainNode
+  pitchDry: GainNode
+  pitchSum: GainNode
   modIn: GainNode
   modOut: GainNode
   dry: GainNode
   sum: GainNode
+  pitch?: AudioWorkletNode
+  pitchWet?: GainNode
   mod?: ModNodes
   modKind?: string
   delay?: DelayNode
@@ -88,6 +94,13 @@ export function buildFxChain(ctx: BaseAudioContext): AudioFxChain {
   comp.ratio.value = 1
   comp.attack.value = 0.01
   comp.release.value = 0.25
+  // pitch stage — bypassed (dry-only) until the worklet module is ready
+  const pitchIn = ctx.createGain()
+  const pitchDry = ctx.createGain()
+  pitchDry.gain.value = 1
+  const pitchSum = ctx.createGain()
+  pitchIn.connect(pitchDry)
+  pitchDry.connect(pitchSum)
   const modIn = ctx.createGain()
   const modOut = ctx.createGain()
   const dry = ctx.createGain()
@@ -102,8 +115,63 @@ export function buildFxChain(ctx: BaseAudioContext): AudioFxChain {
   eqHigh.connect(hp)
   hp.connect(lp)
   lp.connect(comp)
-  comp.connect(modIn)
-  return { pan, eqLow, eqMid, eqHigh, hp, lp, comp, modIn, modOut, dry, sum, modKind: 'none' }
+  comp.connect(pitchIn)
+  pitchSum.connect(modIn)
+  return { pan, eqLow, eqMid, eqHigh, hp, lp, comp, pitchIn, pitchDry, pitchSum, modIn, modOut, dry, sum, modKind: 'none' }
+}
+
+/**
+ * Wire (or unwire) the granular pitch stage inside a chain. The worklet node
+ * is created lazily — only once the module has loaded for this context.
+ * Called from applyClipFx; preview re-applies on fx-signature change and the
+ * offline mixdown preloads the module before building chains.
+ */
+function syncPitchStage(ctx: BaseAudioContext, chain: AudioFxChain, semis: number, mix: number): void {
+  const want = Math.abs(semis) > 0.01
+  const t = ctx.currentTime
+  const setNow = (param: AudioParam, v: number) => {
+    try {
+      param.setTargetAtTime(v, t, 0.02)
+    } catch {
+      param.value = v
+    }
+  }
+  if (!want) {
+    // bypass: dry straight through, worklet edge dropped if it exists
+    setNow(chain.pitchDry.gain, 1)
+    if (chain.pitchWet) setNow(chain.pitchWet.gain, 0)
+    if (chain.pitch) {
+      try {
+        chain.pitchIn.disconnect(chain.pitch)
+        chain.pitch.disconnect()
+      } catch {
+        /* already unwired */
+      }
+      chain.pitch = undefined
+      chain.pitchWet = undefined
+    }
+    return
+  }
+  if (!chain.pitch) {
+    if (!pitchModuleReady(ctx)) {
+      // kick a load; bypassed until a later applyClipFx call finds it ready
+      void ensurePitchModule(ctx)
+      return
+    }
+    const node = createPitchNode(ctx)
+    if (!node) return
+    const wet = ctx.createGain()
+    wet.gain.value = 0
+    chain.pitchIn.connect(node)
+    node.connect(wet)
+    wet.connect(chain.pitchSum)
+    chain.pitch = node
+    chain.pitchWet = wet
+  }
+  const p = chain.pitch!.parameters.get('semitones')
+  if (p) setNow(p, clamp(semis, -12, 12))
+  setNow(chain.pitchDry.gain, clamp(1 - mix, 0, 1))
+  setNow(chain.pitchWet!.gain, clamp(mix, 0, 1))
 }
 
 /** (Re)wire the modulation sub-graph for the requested flavor. */
@@ -234,6 +302,8 @@ export function applyClipFx(ctx: BaseAudioContext, chain: AudioFxChain, fx: Clip
   const ca = clamp(f.compAmount ?? 0.5, 0, 1)
   set(chain.comp.threshold, compOn ? -(6 + 26 * ca) : 0)
   set(chain.comp.ratio, compOn ? 2 + 8 * ca : 1)
+  // granular pitch (tempo-preserving) + wet/dry blend
+  syncPitchStage(ctx, chain, clamp(f.pitch ?? 0, -12, 12), clamp(f.pitchMix ?? 1, 0, 1))
   // modulation
   const kind = f.modKind ?? 'none'
   const amount = clamp(f.modAmount ?? 0.5, 0, 1)
@@ -369,6 +439,11 @@ export async function renderProjectAudio(
       : (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext
   if (!OfflineCtor) throw new Error('OfflineAudioContext is not supported in this browser')
   const ctx = new OfflineCtor(opts.channels, Math.ceil(total * sr), sr)
+
+  // pitch-shifting clips need the granular worklet inside the offline context
+  if (audibleClips.some((c) => Math.abs(c.audioFx?.pitch ?? 0) > 0.01)) {
+    await ensurePitchModule(ctx)
+  }
 
   // decode every needed asset once (faster-than-real-time offline decode)
   const bufferCache = new Map<string, AudioBuffer>()

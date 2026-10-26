@@ -182,7 +182,7 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation' | 'speed-ramp'
+export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
@@ -1510,6 +1510,9 @@ const AUDIO_FX_PRESETS: { id: string; label: string; patch: Partial<ClipAudioFx>
   { id: 'hallecho', label: 'Hall Echo', patch: { delayMix: 0.4, delayTime: 0.45, delayFeedback: 0.5, reverbMix: 0.3 } },
   { id: 'chorus', label: 'Chorus Thick', patch: { modKind: 'chorus', modAmount: 0.6 } },
   { id: 'flanger', label: 'Jet Flanger', patch: { modKind: 'flanger', modAmount: 0.7 } },
+  { id: 'chipmunk', label: 'Chipmunk +5st', patch: { pitch: 5, pitchMix: 1 } },
+  { id: 'deepvoice', label: 'Deep Voice −5st', patch: { pitch: -5, pitchMix: 1 } },
+  { id: 'harmony', label: 'Octave Harmony', patch: { pitch: -12, pitchMix: 0.5 } },
   { id: 'panl', label: 'Pan Left', patch: { pan: -0.75 } },
   { id: 'panr', label: 'Pan Right', patch: { pan: 0.75 } },
 ]
@@ -1539,6 +1542,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
     <Section
       title="Audio FX"
       icon={AudioLines}
+      sectionId="audiofx"
       onReset={clip.audioFx ? () => updateClip(clip.id, { audioFx: null }, true) : undefined}
     >
       {!hasFx && (
@@ -1613,6 +1617,33 @@ function AudioFxSection({ clip }: { clip: Clip }) {
           onChange={(v) => patch({ compAmount: v })}
           format={fmtPct}
         />
+      )}
+
+      {/* granular pitch — tempo-preserving (preview + export) */}
+      <SliderRow
+        label="Pitch"
+        min={-12}
+        max={12}
+        step={1}
+        value={fx.pitch ?? 0}
+        onChange={(v) => patch({ pitch: v }, 'pitch')}
+        format={(v) => (v === 0 ? 'Off' : `${v > 0 ? '+' : ''}${v} st`)}
+      />
+      {(fx.pitch ?? 0) !== 0 && (
+        <>
+          <SliderRow
+            label="Pitch Mix"
+            min={0}
+            max={1}
+            step={0.05}
+            value={fx.pitchMix ?? 1}
+            onChange={(v) => patch({ pitchMix: v }, 'pitch-mix')}
+            format={fmtPct}
+          />
+          <p className="text-[9px] leading-snug text-muted-foreground/60">
+            Granular shift — tempo stays put. Blend below 100% for parallel-harmony layers.
+          </p>
+        </>
       )}
 
       {/* reverb */}

@@ -997,3 +997,25 @@ Stage Summary:
 - Catalog +1 live (timeline-speed-ramping); 1 dishonest desc fixed.
 - Files: types.ts, utils.ts, engine.ts, PropertiesPanel.tsx, ClipBlock.tsx, tools/types.ts, tools/sections/timeline.ts, ProToolkitPanel.tsx.
 - Next: Day 6 — per-effect custom controls (pitch slider, mix knob).
+
+---
+Task ID: Day-06
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category A Day 6 — Per-effect custom controls (pitch slider, mix knob) — woven backlog item.
+
+Work Log:
+- types.ts: ClipAudioFx.pitch (-12..+12 semitones) + pitchMix (0..1 wet/dry blend).
+- NEW src/lib/editor/pitch-worklet.ts: AudioWorklet granular pitch shifter ('nc-pitch-shifter') — dual Hann-windowed read heads chase the write pointer at 2^(st/12), re-anchor on window wrap (masked at zero window), 2048-sample grain, 16384 buffer, anchor 4608 (reads always 512+ behind write head for ratio ≤ 2); ships as Blob-URL module string; ensurePitchModule (idempotent per-context, error surfaced), pitchModuleReady, createPitchNode; diagnostics getPitchError.
+- audio-mix.ts: chain topology now comp → pitchIn → [dry + worklet→wet] → pitchSum → modIn; syncPitchStage lazily creates the node once the module is ready, sets semitones param + dry/wet gains, fully unwires on bypass; applyClipFx calls it every sync; offline renderProjectAudio awaits ensurePitchModule when any clip has pitch → preview AND audio/video exports hear the same shift.
+- engine.ts: AudioContext creation paths preload the pitch module and reset every chain's fxSig when it lands (nodes can only be created post-load); pitchStatus diagnostic + console.warn on failure (observed during dev: stale HMR engine instance was the culprit, fixed by full reload).
+- PropertiesPanel AudioFx: Pitch slider (−12..+12 st, Off/±N st format) + conditional Pitch Mix knob (0..100%, parallel-harmony note); presets +3: Chipmunk +5st, Deep Voice −5st, Octave Harmony (−12st @ 50% mix); sectionId audiofx deep link (PropsSectionId + ToolAction 'open-properties-audiofx' + ProToolkitPanel map).
+- Catalog honesty: sound-pitch-shifter beta→live with real desc; NEW live sound-per-effect-controls; both deep-link to Properties → Audio FX.
+- E2E desktop 1280×800 (ffmpeg 440Hz-sine test video): store patch pitch 12 → worklet 'ready', chain.pitch AudioWorkletNode wired, semitones param 12.0 exact, dry 0/wet 1; SPECTRAL RECEIPT via chain analyser centroid: baseline 448Hz → shifted 866Hz at +12 st (expected 880, 1.6% off) with tempo preserved (real-time transport); Chipmunk preset via real UI click → pitch 5, one-undo → 12; Pitch Mix knob keyboard-drag 1→0.8 (4×0.05 steps).
+- E2E mobile 390×844: Edit sheet → Audio FX → Chipmunk tap → store pitch 5; trusted play tap → pitchStatus ready, node semitones 5.0, playback running; spectral receipt 581Hz vs expected 587 (1%); zero page errors.
+- Notes: eval-driven store.play() has no user gesture → AudioContext stays suspended; all playback measurements use trusted UI clicks. HMR keeps the old engine singleton alive — full reload needed after engine class changes.
+
+Stage Summary:
+- Per-clip tempo-preserving pitch shift shipped end-to-end (worklet DSP → chain wiring → UI slider/knob/presets → deep link → catalog), proven by spectral analysis on both viewports; offline mixdown rides the same worklet.
+- Catalog: +1 live (sound-per-effect-controls), 1 flip beta→live (sound-pitch-shifter).
+- Files: pitch-worklet.ts (new), audio-mix.ts, engine.ts, types.ts, PropertiesPanel.tsx, tools/types.ts, sound.ts, ProToolkitPanel.tsx.
+- Next: Day 7 — Favorites + Recents extended to ALL FX panels.

@@ -46,7 +46,8 @@ export const SOUND_TOOLS: ProTool[] = [
   { id: 'sound-phaser', name: 'Phaser', section: 'sound', group: 'Modulation', status: 'live', desc: 'Cascaded allpass sweeps for swooshy texture (Audio FX Modulate: Phaser)' },
 
   // -------- Pitch & time --------
-  { id: 'sound-pitch-shifter', name: 'Pitch Shifter', section: 'sound', group: 'Pitch & time', status: 'beta', desc: 'Granular pitch shift ships inside the voice FX processor' },
+  { id: 'sound-pitch-shifter', name: 'Pitch Shifter', section: 'sound', group: 'Pitch & time', status: 'live', desc: 'Per-clip granular pitch shift −12..+12 semitones with tempo preserved and a wet/dry mix knob — heard in preview, baked into audio + video exports', action: 'open-properties-audiofx' },
+  { id: 'sound-per-effect-controls', name: 'Per-Effect Custom Controls', section: 'sound', group: 'Pitch & time', status: 'live', desc: 'Every audio FX owns its parameters — pitch semitones + blend, reverb room size, delay time/repeat, comp amount, mod depth, 3-band EQ — all inline in Properties → Audio FX', action: 'open-properties-audiofx' },
   { id: 'sound-time-stretch', name: 'Time Stretch (Audio)', section: 'sound', group: 'Pitch & time', status: 'live', desc: 'Speed slider and presets retime audio clips with duration compensation', action: 'open-effects' },
 
   // -------- Mixing & routing --------

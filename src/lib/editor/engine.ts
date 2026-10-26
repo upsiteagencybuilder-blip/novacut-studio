@@ -13,6 +13,7 @@ import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
 import { applyPixelEffects, buildFilterString, clamp, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, formatTimecode, projectDuration, rampSourceFraction } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
 import { applyClipFx, buildFxChain, makeImpulse, rebuildModulation } from './audio-mix'
+import { ensurePitchModule, getPitchError } from './pitch-worklet'
 import type { AudioFxChain } from './audio-mix'
 import { drawStickerArt } from './sticker-render'
 import { CANVAS_FONT_LOAD_LIST, MIN_CLIP_DURATION } from './constants'
@@ -153,6 +154,9 @@ class PreviewEngine {
   private fontsLoaded = false
 
   private audioCtx: AudioContext | null = null
+  private pitchPreloaded = false
+  /** diagnostics: pitch worklet load status ('ready' | 'failed: …' | undefined) */
+  pitchStatus: string | undefined = undefined
   private exportDest: MediaStreamAudioDestinationNode | null = null
   private masterAnalyser: AnalyserNode | null = null
   private analyserData: Uint8Array | null = null
@@ -370,6 +374,7 @@ class PreviewEngine {
     try {
       if (!this.audioCtx) this.audioCtx = new AudioContext()
       if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
+      this.preloadPitchModule()
       if (!this.exportDest) this.exportDest = this.audioCtx.createMediaStreamDestination()
       // route existing + future elements through their FX chains
       this.ensureAnalyser()
@@ -462,6 +467,7 @@ class PreviewEngine {
     try {
       if (!this.audioCtx) this.audioCtx = new AudioContext()
       if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
+      this.preloadPitchModule()
       this.ensureAnalyser()
       const project = this.snapshotFn?.().project
       if (!project) return
@@ -525,6 +531,26 @@ class PreviewEngine {
   private updateAudioChain(clip: Clip, chain: AudioFxChain) {
     if (!this.audioCtx) return
     applyClipFx(this.audioCtx, chain, clip.audioFx ?? undefined)
+  }
+
+  /**
+   * Load the granular pitch worklet once the graph exists; when it lands,
+   * invalidate every chain's fx signature so the next frame wires the
+   * pitch nodes in (they can only be created after the module is ready).
+   */
+  private preloadPitchModule() {
+    if (!this.audioCtx || this.pitchPreloaded) return
+    this.pitchPreloaded = true
+    void ensurePitchModule(this.audioCtx).then((ok) => {
+      if (!ok) {
+        this.pitchStatus = `failed: ${getPitchError(this.audioCtx!) ?? 'unavailable'}`
+        console.warn('[novacut] pitch worklet unavailable — pitch FX stay bypassed:', this.pitchStatus)
+        return
+      }
+      this.pitchStatus = 'ready'
+      for (const entry of this.videos.values()) entry.fxSig = undefined
+      for (const entry of this.audios.values()) entry.fxSig = undefined
+    })
   }
 
   /** Deterministic noise-decay impulse response, cached per 0.1s bucket. */
