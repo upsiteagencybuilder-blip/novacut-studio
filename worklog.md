@@ -1019,3 +1019,23 @@ Stage Summary:
 - Catalog: +1 live (sound-per-effect-controls), 1 flip beta→live (sound-pitch-shifter).
 - Files: pitch-worklet.ts (new), audio-mix.ts, engine.ts, types.ts, PropertiesPanel.tsx, tools/types.ts, sound.ts, ProToolkitPanel.tsx.
 - Next: Day 7 — Favorites + Recents extended to ALL FX panels.
+
+---
+Task ID: Day-07
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category A Day 7 — Favorites + Recents extended to ALL FX panels (video effects, transitions, text).
+
+Work Log:
+- Survey: EffectsPanel (video effects/transitions/filters) + SoundBrowser (recents) + AudioPanel (favorites) already covered; TextPanel and StickerPanel were the gaps.
+- favorites.ts: new shared keys TEXT_FAVORITES/TEXT_RECENT + STICKER_FAVORITES/STICKER_RECENT (same localStorage contract).
+- TextPanel rebuilt: star overlay on all 14 title presets (data-nc-text-star), All/⭐/🕐 filter chips with live counts (data-nc-text-filter), recents auto-record on preset use, empty states; grid scrolls (max-h-72).
+- StickerPanel: star overlays on every emoji AND shape/social/vlog item (ids emoji:<g> / sticker:<def>), ⭐/🕐 toggle-filters (data-nc-sticker-filter) that compose with search + family tabs, recents recorded on add; empty-state copy.
+- BUG fixed pre-emptively: saves originally ran inside setState updaters (side effects React may double-invoke — observed a dropped save with two rapid star clicks); refactored both panels to ref-mirrored deterministic saves (toggle → ref → setState → save).
+- Catalog: +2 live (library-text-favorites, library-sticker-favorites) with deep links open-text/open-stickers.
+- E2E desktop: star 2 text presets → localStorage [caption,title] + count chip 2; ⭐ filter shows exactly those 2; use "neon" preset → recents [neon] + text clip added; reload → both lists persist; stickers: star 2 emoji → saved [😱,🤩], ⭐ filter exact, add emoji → recents [😍] + sticker clip on timeline, 🕐 filter exact, Shapes tab star circle → cross-family favorites [sticker:circle, 😱, 🤩], ⭐ in Shapes shows only circle.
+- E2E mobile 390×844: bottom-nav Text → star handwrite → ⭐ filter shows [title, caption, handwrite]; Stickers → star 😍 → stored list grows cross-family; playback smoke clean; zero page errors.
+
+Stage Summary:
+- Every FX browser (effects/transitions/filters/audio/music/SFX/text/stickers) now has persisted favorites + recents under one contract.
+- Catalog +2 live. Files: favorites.ts, TextPanel.tsx, StickerPanel.tsx, libraries.ts.
+- Next: Day 8 — timeline markers (colored pins, labels, jump navigation).

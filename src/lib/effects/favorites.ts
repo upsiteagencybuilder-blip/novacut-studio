@@ -10,6 +10,11 @@
 export const FAVORITES_KEY = 'novacut.fx.favorites.v1'
 export const RECENT_KEY = 'novacut.fx.recent.v1'
 export const RECENT_CAP = 24
+/** Day 07 — favorites/recents extended to every FX browser */
+export const TEXT_FAVORITES_KEY = 'novacut.text.favorites.v1'
+export const TEXT_RECENT_KEY = 'novacut.text.recent.v1'
+export const STICKER_FAVORITES_KEY = 'novacut.sticker.favorites.v1'
+export const STICKER_RECENT_KEY = 'novacut.sticker.recent.v1'
 
 export function loadIdList(key: string, cap = 200): string[] {
   if (typeof window === 'undefined') return []
