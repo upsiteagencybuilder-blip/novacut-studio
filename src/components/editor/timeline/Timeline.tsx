@@ -18,12 +18,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { HEADER_WIDTH, RULER_HEIGHT, TRACK_HEIGHT } from '@/lib/editor/constants'
+import { HEADER_WIDTH, MARKER_COLORS, RULER_HEIGHT, TRACK_HEIGHT } from '@/lib/editor/constants'
 import { useEditor } from '@/lib/editor/store'
 import { openCompound } from '@/lib/editor/nested'
 import { transitionPairsForTrack } from '@/lib/editor/transitionBridge'
-import { clipsOnTrack, formatShortTime, projectDuration } from '@/lib/editor/utils'
-import type { Clip, ClipKind, Track } from '@/lib/editor/types'
+import { clamp, clipsOnTrack, formatShortTime, formatTimecode, projectDuration } from '@/lib/editor/utils'
+import type { Clip, ClipKind, TimelineMarker, Track } from '@/lib/editor/types'
 import { cn } from '@/lib/utils'
 import { ClipBlock, type ClipDragInfo } from './ClipBlock'
 import { TimelineToolbar } from './TimelineToolbar'
@@ -52,7 +52,7 @@ export function Timeline() {
   const selectedIds = useEditor((s) => s.selectedClipIds)
   const beatMarkers = useEditor((s) => s.beatMarkers)
   const showBeatMarkers = useEditor((s) => s.showBeatMarkers)
-  const userMarkers = useEditor((s) => s.userMarkers)
+  const markers = useEditor((s) => s.project.markers)
   const toolMode = useEditor((s) => s.toolMode)
   const inPoint = useEditor((s) => s.inPoint)
   const outPoint = useEditor((s) => s.outPoint)
@@ -266,7 +266,7 @@ export function Timeline() {
                   width={laneWidth}
                   onScrubDown={beginScrub}
                   beatMarkers={showBeatMarkers ? beatMarkers : EMPTY_BEATS}
-                  userMarkers={userMarkers}
+                  markers={markers ?? []}
                 />
               </div>
 
@@ -317,18 +317,18 @@ export function Timeline() {
                 </div>
               )}
 
-              {/* user markers — accent guides across the lanes */}
-              {userMarkers.length > 0 && (
+              {/* project markers — colored guides across the lanes */}
+              {(markers ?? []).length > 0 && (
                 <div
                   className="pointer-events-none absolute z-[7]"
                   style={{ left: HEADER_WIDTH, right: 0, top: RULER_HEIGHT, bottom: 0 }}
                   aria-hidden
                 >
-                  {userMarkers.map((t, i) => (
+                  {(markers ?? []).map((m) => (
                     <div
-                      key={i}
-                      className="absolute bottom-0 top-0 w-px bg-(--nc-accent-400)/20 shadow-[0_0_4px_var(--nc-accent-glow)]"
-                      style={{ left: t * zoom }}
+                      key={m.id}
+                      className="absolute bottom-0 top-0 w-px"
+                      style={{ left: m.t * zoom, backgroundColor: `${m.color}33`, boxShadow: `0 0 4px ${m.color}22` }}
                     />
                   ))}
                 </div>
@@ -694,15 +694,18 @@ function Ruler({
   width,
   onScrubDown,
   beatMarkers,
-  userMarkers,
+  markers,
 }: {
   zoom: number
   width: number
   onScrubDown: (e: ReactPointerEvent<HTMLDivElement>) => void
   beatMarkers: number[]
-  userMarkers: number[]
+  markers: TimelineMarker[]
 }) {
   const step = RULER_STEPS.find((s) => s * zoom >= 64) ?? 60
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [labelDraft, setLabelDraft] = useState('')
+  const dragRef = useRef<{ id: string; startX: number; origT: number; moved: boolean } | null>(null)
 
   const ticks = useMemo(() => {
     const out: { x: number; major: boolean; label: string }[] = []
@@ -724,10 +727,26 @@ function Ruler({
     [beatMarkers, zoom, width],
   )
 
-  const visibleUserMarkers = useMemo(
-    () => userMarkers.filter((t) => t * zoom <= width + 8),
-    [userMarkers, zoom, width],
+  const visibleMarkers = useMemo(
+    () => markers.filter((m) => m.t * zoom <= width + 8),
+    [markers, zoom, width],
   )
+
+  const editing = editingId ? markers.find((m) => m.id === editingId) : undefined
+
+  const openEditor = (m: TimelineMarker) => {
+    setEditingId(m.id)
+    setLabelDraft(m.label)
+    useEditor.getState().pushHistory('marker-edit')
+  }
+
+  const commitLabel = () => {
+    if (!editing) return
+    const trimmed = labelDraft.trim()
+    if (trimmed && trimmed !== editing.label) {
+      useEditor.getState().updateMarker(editing.id, { label: trimmed }, false)
+    }
+  }
 
   return (
     <div
@@ -755,17 +774,128 @@ function Ruler({
         />
       ))}
 
-      {/* user markers: accent bookmark flags hanging from the ruler top */}
-      {visibleUserMarkers.map((t, i) => (
+      {/* project markers: colored draggable pins hanging from the ruler top.
+          click = jump the playhead · drag = retime · double-click = rename/recolor */}
+      {visibleMarkers.map((m) => (
         <div
-          key={`marker-${i}`}
-          className="absolute top-0 -translate-x-1/2"
-          style={{ left: t * zoom }}
+          key={m.id}
+          className="absolute top-0 z-10 -translate-x-1/2"
+          style={{ left: m.t * zoom }}
         >
-          <div className="size-[7px] rotate-45 rounded-[1px] bg-(--nc-accent-400) shadow-[0_0_6px_var(--nc-accent-glow)]" />
-          <div className="mx-auto h-[9px] w-px bg-(--nc-accent-400)/70" />
+          <button
+            type="button"
+            data-nc-marker-pin={m.id}
+            title={`${m.label} — ${formatTimecode(m.t, useEditor.getState().project.fps)} · click to jump, double-click to edit`}
+            aria-label={`Marker ${m.label} at ${formatTimecode(m.t, 30)}. Click to jump, double-click to edit.`}
+            className="flex cursor-pointer flex-col items-center"
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+              dragRef.current = { id: m.id, startX: e.clientX, origT: m.t, moved: false }
+            }}
+            onPointerMove={(e) => {
+              const d = dragRef.current
+              if (!d || d.id !== m.id) return
+              const dx = e.clientX - d.startX
+              if (!d.moved && Math.abs(dx) > 3) {
+                d.moved = true
+                useEditor.getState().pushHistory('marker-drag')
+              }
+              if (d.moved) {
+                useEditor.getState().updateMarker(m.id, { t: Math.max(0, d.origT + dx / zoom) }, false)
+              }
+            }}
+            onPointerUp={(e) => {
+              const d = dragRef.current
+              dragRef.current = null
+              if (!d || d.id !== m.id) return
+              if (!d.moved) {
+                // plain click — jump the playhead to the pin
+                useEditor.getState().setCurrentTime(d.origT)
+              }
+              ;(e.target as HTMLElement).releasePointerCapture?.(e.pointerId)
+            }}
+            onPointerCancel={() => {
+              dragRef.current = null
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              openEditor(m)
+            }}
+          >
+            <span
+              className="size-[9px] rounded-full border border-black/30 shadow-sm"
+              style={{ backgroundColor: m.color, boxShadow: `0 0 6px ${m.color}66` }}
+            />
+            <span className="h-[9px] w-px" style={{ backgroundColor: `${m.color}b3` }} />
+          </button>
         </div>
       ))}
+
+      {/* marker editor popover — rename / recolor / delete */}
+      {editing && (
+        <div
+          data-nc-marker-editor
+          className="absolute top-4 z-50 w-48 rounded-lg border border-(--nc-line) bg-(--nc-chrome) p-2 shadow-xl"
+          style={{ left: clamp(editing.t * zoom - 88, 0, Math.max(0, width - 200)) }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          <input
+            value={labelDraft}
+            onChange={(e) => setLabelDraft(e.target.value)}
+            onBlur={commitLabel}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+            autoFocus
+            aria-label="Marker label"
+            className="h-6 w-full rounded-md border border-(--nc-line) bg-(--nc-panel) px-1.5 text-[11px] outline-none focus:border-(--nc-accent)"
+          />
+          <div className="mt-1.5 flex items-center gap-1" role="group" aria-label="Marker color">
+            {MARKER_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                data-nc-marker-color={c}
+                aria-label={`Set marker color ${c}`}
+                onClick={() => useEditor.getState().updateMarker(editing.id, { color: c }, 'marker-edit')}
+                className={cn(
+                  'size-4 rounded-full transition hover:scale-110',
+                  editing.color === c && 'ring-2 ring-white/80 ring-offset-1 ring-offset-(--nc-chrome)',
+                )}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+            <span className="ml-auto font-mono text-[9px] tabular-nums text-muted-foreground">
+              {formatTimecode(editing.t, useEditor.getState().project.fps)}
+            </span>
+          </div>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <button
+              type="button"
+              data-nc-marker-delete
+              onClick={() => {
+                useEditor.getState().removeMarker(editing.id)
+                setEditingId(null)
+              }}
+              className="flex h-5 items-center gap-1 rounded-md border border-rose-500/30 px-1.5 text-[9.5px] text-rose-400 transition-colors hover:bg-rose-500/10"
+            >
+              <Trash2 className="size-2.5" /> Delete
+            </button>
+            <button
+              type="button"
+              data-nc-marker-close
+              onClick={() => setEditingId(null)}
+              className="ml-auto flex h-5 items-center gap-1 rounded-md border border-(--nc-line) px-1.5 text-[9.5px] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <X className="size-2.5" /> Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

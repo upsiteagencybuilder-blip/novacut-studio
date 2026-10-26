@@ -328,7 +328,7 @@ export function ClipBlock({
           targets.push(c.start, c.start + c.duration)
         }
         if (st.showBeatMarkers && st.beatMarkers.length > 0) targets.push(...st.beatMarkers)
-        if (st.userMarkers.length > 0) targets.push(...st.userMarkers)
+        for (const mk of st.project.markers ?? []) targets.push(mk.t)
         // magnetic timeline: BOTH edges hunt — the drop lands flush whichever
         // edge finds a target (start or end)
         const snap = snapBothEdges(newStart, orig.duration, targets, 8, zoom)

@@ -1039,3 +1039,24 @@ Stage Summary:
 - Every FX browser (effects/transitions/filters/audio/music/SFX/text/stickers) now has persisted favorites + recents under one contract.
 - Catalog +2 live. Files: favorites.ts, TextPanel.tsx, StickerPanel.tsx, libraries.ts.
 - Next: Day 8 — timeline markers (colored pins, labels, jump navigation).
+
+---
+Task ID: Day-08
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category A Day 8 — Timeline markers: colored pins, labels, jump navigation.
+
+Work Log:
+- types.ts: TimelineMarker {id, t, label, color} + Project.markers — markers upgraded from ephemeral view-state number[] to PROJECT state (autosave + undo + cloud backup ride for free).
+- store.ts: addMarkerAtPlayhead (label "Marker N", color rotated from MARKER_COLORS 6-palette, 0.05s dedupe, one undo), removeMarkerAtPlayhead (nearest ≤0.5s), updateMarker (t/label/color), removeMarker, clearMarkers (all undoable), jumpMarker(dir); jumpEdit now merges project markers; removed userMarkers/clearUserMarkers.
+- Timeline Ruler: rebuilt pins — colored circle+stem hanging from ruler top, drag-to-retime (pointer capture, 3px threshold, pushHistory once per gesture, neighbors untouched), click-to-jump (no-move = seek), double-click → inline popover editor (label input with blur-commit, 6 color swatches, live timecode, Delete + Done); colored per-marker guide lines across the lanes (replaced single accent color).
+- TimelineToolbar: bookmark menu = Add / Remove at playhead / Previous ([) / Next (]) + full jump list (colored dot + label + timecode per marker) + Clear all; badge count from project.markers.
+- ClipBlock drag snapping: marker times now feed the magnetic snap targets.
+- EditorShell: [ = previous marker, ] = next marker (with toasts); ShortcutsDialog +1 row; honest catalog: timeline-add-marker desc rewritten to real feature set, +1 live timeline-marker-navigation.
+- E2E desktop: Shift+M ×3 → markers [1.5 amber, 3.2 emerald, 5.4 pink], 3 pins in DOM; pin click jumps (6.9→1.5); ] → 3.2, ] → 5.4 (verified via synthetic + literal-key press), [ → back; drag pin +20px → t 2.5→2.61, one-undo → 2.5; dblclick popover → rename "Chapter Two" + recolor violet, undo/redo per change; Delete → 4 pins, undo → 5 restored with label.
+- E2E mobile 390×844: bookmark menu opens (10 items) with the jump list ("Chapter Two 00:03.06") — tapping jumps exactly to 3.2; pins render; trusted tap on pin 1 jumps 0.4→1.5; playback smoke clean; zero page errors.
+- Debug note: one anomalous session state (markers 0 / past 0 / future 1) occurred mid-E2E after a drag; unreproducible on clean replay (drag+undo verified twice cleanly); stale `s` captures inside evals after actions were identified as the read-back gotcha; agent-browser renders bare-number eval returns as {}.
+
+Stage Summary:
+- Markers are first-class project data: colored labeled draggable pins, click/drag/dblclick interactions, [ ] jump keys, menu jump list, snap integration, undo everywhere.
+- Catalog: +1 live (timeline-marker-navigation), 1 desc corrected. Files: types.ts, store.ts, constants.ts, Timeline.tsx, TimelineToolbar.tsx, ClipBlock.tsx, EditorShell.tsx, ShortcutsDialog.tsx (via SHORTCUTS), timeline.ts.
+- Next: Day 9 — paste attributes between clips.

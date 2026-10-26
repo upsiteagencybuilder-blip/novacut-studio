@@ -20,6 +20,8 @@ import {
   CopyPlus,
   Eye,
   EyeOff,
+  ChevronLeft,
+  ChevronRight,
   ClipboardPaste,
   Slice,
   Loader2,
@@ -65,7 +67,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
   const snapEnabled = useEditor((s) => s.snapEnabled)
   const selectedIds = useEditor((s) => s.selectedClipIds)
   const hasClipboard = useEditor((s) => s.hasClipboard)
-  const userMarkers = useEditor((s) => s.userMarkers)
+  const userMarkers = useEditor((s) => s.project.markers) ?? []
   const beatMarkers = useEditor((s) => s.beatMarkers)
   const beatBpm = useEditor((s) => s.beatBpm)
   const showBeatMarkers = useEditor((s) => s.showBeatMarkers)
@@ -347,12 +349,54 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             <Bookmark className="mr-2 size-3.5 opacity-50" />
             Remove marker at playhead
           </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={userMarkers.length === 0}
+            onClick={() => {
+              if (useEditor.getState().jumpMarker(-1)) {
+                const t = useEditor.getState().currentTime
+                toast(`Jumped to marker ${formatTimecode(t, project.fps)}`, { duration: 1200 })
+              }
+            }}
+          >
+            <ChevronLeft className="mr-2 size-3.5" />
+            Previous marker ([)
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={userMarkers.length === 0}
+            onClick={() => {
+              if (useEditor.getState().jumpMarker(1)) {
+                const t = useEditor.getState().currentTime
+                toast(`Jumped to marker ${formatTimecode(t, project.fps)}`, { duration: 1200 })
+              }
+            }}
+          >
+            <ChevronRight className="mr-2 size-3.5" />
+            Next marker (])
+          </DropdownMenuItem>
+          {/* jump list — every marker with its color + label */}
+          {userMarkers.length > 0 && <DropdownMenuSeparator />}
+          {userMarkers.map((m) => (
+            <DropdownMenuItem
+              key={m.id}
+              onClick={() => useEditor.getState().setCurrentTime(m.t)}
+            >
+              <span
+                className="mr-2 size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: m.color, boxShadow: `0 0 5px ${m.color}66` }}
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate">{m.label}</span>
+              <span className="ml-2 font-mono text-[10px] tabular-nums text-muted-foreground">
+                {formatTimecode(m.t, project.fps)}
+              </span>
+            </DropdownMenuItem>
+          ))}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={userMarkers.length === 0}
             className="text-rose-300 focus:text-rose-200"
             onClick={() => {
-              useEditor.getState().clearUserMarkers()
+              useEditor.getState().clearMarkers()
               toast('All markers cleared')
             }}
           >

@@ -271,6 +271,16 @@ export interface SpeedRampPoint {
   ease: RampEase
 }
 
+/** Timeline marker — a colored, labeled pin on the ruler (Day 08). */
+export interface TimelineMarker {
+  id: string
+  /** seconds from timeline start */
+  t: number
+  label: string
+  /** pin color (hex) */
+  color: string
+}
+
 /**
  * Per-clip audio FX recipe — interpreted by the engine's WebAudio chain.
  * All fields optional; every omitted/neutral field is bypassed so the chain
@@ -439,6 +449,8 @@ export interface Project {
   backgroundColor: string
   tracks: Track[]
   clips: Clip[]
+  /** colored labeled ruler pins — persists with the project (undoable) */
+  markers?: TimelineMarker[]
   createdAt: number
   updatedAt: number
 }

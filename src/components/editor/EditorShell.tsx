@@ -350,6 +350,16 @@ function useKeyboardShortcuts() {
           }
           break
         }
+        case '[':
+          e.preventDefault()
+          if (s.jumpMarker(-1)) toast(`Marker ${formatTimecode(s.currentTime, s.project.fps)}`, { duration: 1100 })
+          else toast('No previous marker', { duration: 900 })
+          break
+        case ']':
+          e.preventDefault()
+          if (s.jumpMarker(1)) toast(`Marker ${formatTimecode(s.currentTime, s.project.fps)}`, { duration: 1100 })
+          else toast('No next marker', { duration: 900 })
+          break
         case '+':
         case '=':
           s.setZoom(s.zoom * 1.25)

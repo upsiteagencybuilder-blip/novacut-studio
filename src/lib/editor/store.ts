@@ -22,6 +22,7 @@ import type {
   Project,
   StickerStyle,
   TextStyle,
+  TimelineMarker,
   Track,
   TrackKind,
   Transform,
@@ -39,6 +40,7 @@ import {
   DEFAULT_FILTERS,
   DEFAULT_TRANSFORM,
   MIN_CLIP_DURATION,
+  MARKER_COLORS,
   type StickerRequest,
   type TextPreset,
 } from './constants'
@@ -86,9 +88,6 @@ interface EditorStore {
   importing: boolean
   /** true once copy/cut has stashed at least one clip (enables Paste UI) */
   hasClipboard: boolean
-  /** user-placed timeline markers in seconds (Shift+M) — view state, not project state */
-  userMarkers: number[]
-
   /* ---------- nested (compound) clips ---------- */
   /** pack every selected clip into a single compound block (Ctrl+G) */
   groupSelectedClips: () => boolean
@@ -152,11 +151,18 @@ interface EditorStore {
   pasteAtPlayhead: () => void
   /** select every clip in the project (Ctrl+A) */
   selectAll: () => void
-  /** drop a user marker at the playhead (Shift+M) — returns true when a new marker was added */
+  /** drop a colored labeled marker at the playhead (Shift+M) — returns true when a new marker was added */
   addMarkerAtPlayhead: () => boolean
-  /** remove the user marker nearest the playhead (within 0.5s) — returns true when removed */
-  removeMarkerAtPlayhead: () => boolean
-  clearUserMarkers: () => void
+  /** remove the marker nearest the playhead (within 0.5s) — returns true when removed */
+  removeMarkerAtPlayhead: () => void
+  /** rename/recolor/move a marker by id (history: label defaults true) */
+  updateMarker: (id: string, patch: { t?: number; label?: string; color?: string }, history?: boolean | string) => void
+  /** delete one marker by id (undoable) */
+  removeMarker: (id: string) => void
+  /** clear every marker (undoable) */
+  clearMarkers: () => void
+  /** jump to the previous/next MARKER only ([ / ] keys) — returns true when moved */
+  jumpMarker: (dir: 1 | -1) => boolean
 
   /* ---------- pro tools (blade / in-out / shuttle / ripple trims) ---------- */
   /**
@@ -409,7 +415,6 @@ export const useEditor = create<EditorStore>((set, get) => ({
   past: [],
   future: [],
   hasClipboard: false,
-  userMarkers: [],
   importing: false,
 
   /* ================= lifecycle ================= */
@@ -1317,32 +1322,73 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
 
   addMarkerAtPlayhead: () => {
-    const t = round2(get().currentTime)
-    let added = false
-    set((s) => {
-      if (s.userMarkers.some((m) => Math.abs(m - t) < 0.05)) return s
-      added = true
-      return { userMarkers: [...s.userMarkers, t].sort((a, b) => a - b) }
-    })
-    return added
+    const s = get()
+    const t = round2(s.currentTime)
+    const existing = s.project.markers ?? []
+    if (existing.some((m) => Math.abs(m.t - t) < 0.05)) return false
+    s.pushHistory('marker-add')
+    const marker: TimelineMarker = {
+      id: uid('mk_'),
+      t,
+      label: `Marker ${existing.length + 1}`,
+      color: MARKER_COLORS[existing.length % MARKER_COLORS.length],
+    }
+    set((st) => ({ project: withUpdatedAt({ ...st.project, markers: [...(st.project.markers ?? []), marker] }) }))
+    return true
   },
 
   removeMarkerAtPlayhead: () => {
-    const t = get().currentTime
-    let removed = false
-    set((s) => {
-      if (!s.userMarkers.length) return s
-      const nearest = s.userMarkers.reduce((best, m) =>
-        Math.abs(m - t) < Math.abs(best - t) ? m : best,
-      )
-      if (Math.abs(nearest - t) > 0.5) return s
-      removed = true
-      return { userMarkers: s.userMarkers.filter((m) => m !== nearest) }
-    })
-    return removed
+    const s = get()
+    const existing = s.project.markers ?? []
+    if (!existing.length) return
+    const t = s.currentTime
+    const nearest = existing.reduce((best, m) => (Math.abs(m.t - t) < Math.abs(best.t - t) ? m : best))
+    if (Math.abs(nearest.t - t) > 0.5) return
+    s.pushHistory('marker-del')
+    set((st) => ({ project: withUpdatedAt({ ...st.project, markers: (st.project.markers ?? []).filter((m) => m.id !== nearest.id) }) }))
   },
 
-  clearUserMarkers: () => set({ userMarkers: [] }),
+  updateMarker: (id, patch, history = 'marker-edit') => {
+    if (history === true) get().pushHistory()
+    else if (typeof history === 'string') get().pushHistory(history)
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        markers: (st.project.markers ?? []).map((m) =>
+          m.id === id
+            ? {
+                ...m,
+                ...(patch.t !== undefined ? { t: Math.max(0, round2(patch.t)) } : null),
+                ...(patch.label !== undefined ? { label: patch.label } : null),
+                ...(patch.color !== undefined ? { color: patch.color } : null),
+              }
+            : m,
+        ),
+      }),
+    }))
+  },
+
+  removeMarker: (id) => {
+    get().pushHistory('marker-del')
+    set((st) => ({ project: withUpdatedAt({ ...st.project, markers: (st.project.markers ?? []).filter((m) => m.id !== id) }) }))
+  },
+
+  clearMarkers: () => {
+    if (!(get().project.markers ?? []).length) return
+    get().pushHistory('marker-clear')
+    set((st) => ({ project: withUpdatedAt({ ...st.project, markers: [] }) }))
+  },
+
+  jumpMarker: (dir) => {
+    const s = get()
+    const ms = (s.project.markers ?? []).map((m) => round2(m.t))
+    const t = s.currentTime
+    const candidates = ms.filter((p) => (dir === 1 ? p > t + 0.02 : p < t - 0.02)).sort((a, b) => a - b)
+    const target = dir === 1 ? candidates[0] : candidates[candidates.length - 1]
+    if (target === undefined) return false
+    s.setCurrentTime(target)
+    return true
+  },
 
   /* ================= pro tools ================= */
 
@@ -1384,7 +1430,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
       pts.add(round2(c.start))
       pts.add(round2(c.start + c.duration))
     }
-    for (const m of s.userMarkers) pts.add(round2(m))
+    for (const m of s.project.markers ?? []) pts.add(round2(m.t))
     const t = s.currentTime
     const candidates = [...pts].filter((p) => (dir === 1 ? p > t + 0.02 : p < t - 0.02)).sort((a, b) => a - b)
     const target = dir === 1 ? candidates[0] : candidates[candidates.length - 1]

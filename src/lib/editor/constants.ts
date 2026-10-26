@@ -454,6 +454,7 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'Shift + Delete', action: 'Ripple delete (close gap)' },
   { keys: 'M', action: 'Mute / unmute selected clip' },
   { keys: 'Shift + M', action: 'Add marker at playhead' },
+  { keys: '[ / ]', action: 'Jump to previous / next marker' },
   { keys: 'Ctrl + Z', action: 'Undo' },
   { keys: 'Ctrl + Shift + Z / Ctrl + Y', action: 'Redo' },
   { keys: '+ / - / Shift + Z', action: 'Zoom timeline in / out / fit' },
@@ -539,6 +540,9 @@ export function createTrack(kind: TrackKind, name?: string): Track {
   }
 }
 
+/** Day 08 — marker pin palette, rotated on add */
+export const MARKER_COLORS = ['#f59e0b', '#34d399', '#f472b6', '#a78bfa', '#22d3ee', '#f87171']
+
 export function createDefaultProject(name = 'Untitled Project'): Project {
   const now = Date.now()
   return {
@@ -554,6 +558,7 @@ export function createDefaultProject(name = 'Untitled Project'): Project {
       createTrack('audio', 'Audio 1'),
     ],
     clips: [],
+    markers: [],
     createdAt: now,
     updatedAt: now,
   }
