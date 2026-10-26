@@ -1078,3 +1078,22 @@ Stage Summary:
 - Full paste-attributes workflow (copy → inspect stash → single/multi paste → one-undo) shipped with kind-gated safety.
 - Catalog +1 live. Files: store.ts, PropertiesPanel.tsx, EditorShell.tsx, constants.ts (SHORTCUTS), timeline.ts.
 - Next: Day 10 — transform presets library + Category A audit & stress E2E.
+
+---
+Task ID: Day-10
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category A Day 10 — Transform presets library + Category A audit & stress E2E. (Days 05–10 all executed in this session on the user's "now work 05 to 10 day" command.)
+
+Work Log:
+- constants.ts: BUILTIN_TRANSFORM_PRESETS (Reset / Center 2× / PiP ↖ / PiP ↘ / Dutch 10° / Mirror / Flip V / Ghost 40%) + TRANSFORM_PRESETS_KEY localStorage.
+- PropertiesPanel: TransformPresetsRow at the top of Properties → Transform — 8 built-in chips + user library (save current transform with inline name input, apply, × delete, cap 24, persisted); multi-select applies the preset to EVERY selected clip in one undo; Transform section gains sectionId 'transform' deep link.
+- Catalog: +1 live timeline-transform-presets (action open-properties-transform wired through types + ProToolkitPanel).
+- Category A audit (regression sweep, all pass): Day 1 keyframes (addKeyframeAt), Day 2 batch (15-select duplicate), Day 3 edit modes (ripple toggle), Day 4 nested (group→1 compound→ungroup clean), Day 5 speed ramp (set on video), Day 6 pitch (audioFx stash), Day 7 favorites (text+sticker localStorage), Day 8 markers (add+jumpMarker), Day 9 paste attributes (copy→1 target), Day 10 presets (built-in + user).
+- STRESS E2E: built 36-clip project (30 image clips added programmatically, 23.4s timeline) → marquee-style 15-select batch duplicate → 51 clips → 20-select batch delete → 31 → two undos → 36 exactly; 40 random seeks in 19.4ms; playback over the dense timeline clean 2s; zoom-fit; zero page errors.
+- E2E desktop: Dutch preset → rot 10/scale 1.25, one-undo→0/1, redo; save "My Look" → chip + localStorage; apply to another clip (10°/1.25 carried); delete preset; deep link opens Transform.
+- E2E mobile 390×844: Edit sheet shows the preset chips — Mirror tap → flipX true; final playback smoke clean.
+
+Stage Summary:
+- CATEGORY A (Core Editing Engine, Days 1–10) COMPLETE: keyframes v2 + curve editor, multi-select/batch, magnetic + ripple/roll/slip/slide, nested compounds, speed ramps, per-effect controls (pitch+mix), favorites/recents everywhere, timeline markers, paste attributes, transform presets — all E2E-verified on desktop+mobile, catalog honest (+1 live today; timeline section now 56 live / 48 planned).
+- Session-level: Days 05–10 shipped as commits b7f3054(+hygiene), ae0f9a2, 219cbb9, 919308a, d19abf9, Day-10 this commit. GitHub push BLOCKED all session: remote token returns 401 Bad Credentials (expired/revoked); commits are safe locally; push pending fresh credentials.
+- Next: Category B Day 11 — color grading wheels/scopes upgrade.

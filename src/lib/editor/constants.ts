@@ -544,6 +544,21 @@ export function createTrack(kind: TrackKind, name?: string): Track {
 /** Day 08 — marker pin palette, rotated on add */
 export const MARKER_COLORS = ['#f59e0b', '#34d399', '#f472b6', '#a78bfa', '#22d3ee', '#f87171']
 
+/** Day 10 — built-in transform presets (full Transform snapshots) */
+export const BUILTIN_TRANSFORM_PRESETS: { id: string; name: string; transform: Transform }[] = [
+  { id: 'xf-reset', name: 'Reset', transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, flipX: false, flipY: false } },
+  { id: 'xf-zoom2', name: 'Center 2×', transform: { x: 0, y: 0, scale: 2, rotation: 0, opacity: 1, flipX: false, flipY: false } },
+  { id: 'xf-pip-tl', name: 'PiP ↖', transform: { x: -0.55, y: -0.5, scale: 0.45, rotation: 0, opacity: 1, flipX: false, flipY: false } },
+  { id: 'xf-pip-br', name: 'PiP ↘', transform: { x: 0.55, y: 0.5, scale: 0.45, rotation: 0, opacity: 1, flipX: false, flipY: false } },
+  { id: 'xf-dutch', name: 'Dutch 10°', transform: { x: 0, y: 0, scale: 1.25, rotation: 10, opacity: 1, flipX: false, flipY: false } },
+  { id: 'xf-mirror', name: 'Mirror', transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, flipX: true, flipY: false } },
+  { id: 'xf-flip-vert', name: 'Flip V', transform: { x: 0, y: 0, scale: 1, rotation: 180, opacity: 1, flipX: false, flipY: true } },
+  { id: 'xf-ghost', name: 'Ghost 40%', transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 0.4, flipX: false, flipY: false } },
+]
+
+/** localStorage key for user-saved transform presets (Day 10) */
+export const TRANSFORM_PRESETS_KEY = 'novacut.transform.presets.v1'
+
 export function createDefaultProject(name = 'Untitled Project'): Project {
   const now = Date.now()
   return {

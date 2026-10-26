@@ -52,6 +52,7 @@ import { getEngine } from '@/lib/editor/engine'
 import { transitionPairsForTrack } from '@/lib/editor/transitionBridge'
 import { toast } from 'sonner'
 import {
+  BUILTIN_TRANSFORM_PRESETS,
   BLEND_MODES,
   CANVAS_PRESETS,
   DEFAULT_CHROMA_KEY,
@@ -59,8 +60,9 @@ import {
   DEFAULT_FILTERS,
   EASING_OPTIONS,
   TEXT_FONTS,
+  TRANSFORM_PRESETS_KEY,
 } from '@/lib/editor/constants'
-import { clamp, computeHistogram, defaultSpeedRamp, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS } from '@/lib/editor/utils'
+import { clamp, computeHistogram, defaultSpeedRamp, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
 import { KeyframeCurveEditor } from '@/components/editor/preview/KeyframeCurve'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -184,7 +186,7 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx'
+export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
@@ -423,6 +425,145 @@ function Section({
       </div>
       {children}
     </section>
+  )
+}
+
+/* ================================================================ transform presets (Day 10) */
+
+interface TransformPreset {
+  id: string
+  name: string
+  transform: Transform
+}
+
+function loadUserTransformPresets(): TransformPreset[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(TRANSFORM_PRESETS_KEY) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (p): p is TransformPreset =>
+        !!p && typeof p === 'object' && typeof (p as TransformPreset).id === 'string' &&
+        typeof (p as TransformPreset).name === 'string' && !!(p as TransformPreset).transform,
+    )
+  } catch {
+    return []
+  }
+}
+
+function saveUserTransformPresets(list: TransformPreset[]): void {
+  try {
+    window.localStorage.setItem(TRANSFORM_PRESETS_KEY, JSON.stringify(list.slice(0, 24)))
+  } catch {
+    /* storage blocked — session-only */
+  }
+}
+
+function TransformPresetsRow({ clip }: { clip: Clip }) {
+  const updateClip = useEditor((s) => s.updateClip)
+  const selectedIds = useEditor((s) => s.selectedClipIds)
+  const [userPresets, setUserPresets] = useState<TransformPreset[]>(loadUserTransformPresets)
+  const [naming, setNaming] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const favRef = useRef(userPresets)
+
+  const applyPreset = (p: TransformPreset) => {
+    // multi-select aware: every selected visual clip gets the look, ONE undo
+    const targets = selectedIds.length > 1 ? selectedIds : [clip.id]
+    useEditor.getState().pushHistory('xf-preset')
+    for (const tid of targets) {
+      updateClip(tid, { transform: { ...p.transform } }, false)
+    }
+    toast(`Transform “${p.name}” applied${targets.length > 1 ? ` to ${targets.length} clips` : ''}`)
+  }
+
+  const saveCurrent = () => {
+    const name = nameDraft.trim() || `Preset ${favRef.current.length + 1}`
+    const preset: TransformPreset = { id: uid('xfp_'), name, transform: { ...clip.transform } }
+    const next = [preset, ...favRef.current].slice(0, 24)
+    favRef.current = next
+    setUserPresets(next)
+    saveUserTransformPresets(next)
+    setNaming(false)
+    setNameDraft('')
+    toast.success(`Saved “${name}” to your transform library`)
+  }
+
+  return (
+    <div className="space-y-1.5" data-nc-xf-presets>
+      <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto nc-scroll" role="group" aria-label="Transform presets">
+        {BUILTIN_TRANSFORM_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            data-nc-xf-preset={p.id}
+            onClick={() => applyPreset(p)}
+            className="rounded-md border border-(--nc-line) bg-(--nc-panel) px-1.5 py-0.5 text-[9.5px] text-muted-foreground transition-colors hover:border-fuchsia-400/40 hover:text-fuchsia-300"
+          >
+            {p.name}
+          </button>
+        ))}
+        {userPresets.map((p) => (
+          <span key={p.id} className="relative">
+            <button
+              type="button"
+              data-nc-xf-user-preset={p.id}
+              onClick={() => applyPreset(p)}
+              className="mr-1 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-1.5 py-0.5 text-[9.5px] text-fuchsia-200 transition-colors hover:border-fuchsia-400/60"
+            >
+              {p.name}
+            </button>
+            <button
+              type="button"
+              data-nc-xf-user-del={p.id}
+              title={`Delete preset ${p.name}`}
+              aria-label={`Delete preset ${p.name}`}
+              onClick={() => {
+                const next = favRef.current.filter((q) => q.id !== p.id)
+                favRef.current = next
+                setUserPresets(next)
+                saveUserTransformPresets(next)
+              }}
+              className="absolute -right-1 -top-1 flex size-3 items-center justify-center rounded-full bg-rose-500/80 text-[7px] font-bold text-white"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      {naming ? (
+        <div className="flex items-center gap-1.5">
+          <Input
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === 'Enter') saveCurrent()
+              if (e.key === 'Escape') setNaming(false)
+            }}
+            placeholder="Preset name…"
+            aria-label="Preset name"
+            className="h-6 flex-1 text-[11px]"
+            autoFocus
+          />
+          <Button type="button" size="sm" className="h-6 px-2 text-[10px]" onClick={saveCurrent} data-nc-xf-save-confirm>
+            Save
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => setNaming(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          data-nc-xf-save
+          onClick={() => setNaming(true)}
+          className="text-[9.5px] text-muted-foreground/70 underline-offset-2 transition-colors hover:text-fuchsia-300 hover:underline"
+        >
+          ＋ Save current transform as preset
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -2043,10 +2184,12 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
         <Section
           title="Transform"
           icon={Move}
+          sectionId="transform"
           onReset={() =>
             updateClip(clip.id, { transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, flipX: false, flipY: false } }, true)
           }
         >
+          <TransformPresetsRow clip={clip} />
           <SliderRow
             label="X"
             min={-1}
