@@ -42,6 +42,7 @@ export type ToolAction =
   | 'open-properties-adjustment'
   | 'open-properties-curves'
   | 'open-properties-wheels'
+  | 'open-properties-chroma'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

@@ -18,6 +18,7 @@ export const AI_TOOLS: ProTool[] = [
   { id: 'ai-auto-reframe', name: 'AI Auto Reframe', section: 'ai', group: 'AI editing', status: 'planned', desc: 'Re-crop widescreen footage for vertical using subject tracking' },
 
   // -------- AI cleanup --------
+  { id: 'ai-bg-removal-auto', name: 'One-Tap Background Removal', section: 'ai', group: 'AI cleanup', status: 'live', desc: 'Auto-detects the dominant border color of the frame and applies a tuned chroma key (tolerance from backdrop spread, spill cleanup) in one tap — honest chroma-based detection, all controls stay editable', action: 'open-properties-chroma' },
   { id: 'ai-object-remove', name: 'AI Object Remove', section: 'ai', group: 'AI cleanup', status: 'planned', desc: 'Erase objects and let AI inpaint the background' },
   { id: 'ai-silence-detection', name: 'AI Silence Detection', section: 'ai', group: 'AI cleanup', status: 'live', desc: 'Silence cut panel detects gaps and ripple-removes them on device', action: 'open-ai' },
   { id: 'ai-audio-denoise', name: 'AI Audio Denoise', section: 'ai', group: 'AI cleanup', status: 'live', desc: 'One-tap speech cleanup — de-rumble EQ, de-hiss top and gentle compression', action: 'open-ai' },

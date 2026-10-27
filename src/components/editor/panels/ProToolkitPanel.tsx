@@ -125,6 +125,7 @@ function useToolAction() {
       'open-properties-adjustment': () => openPropsSection('adjustment'),
       'open-properties-curves': () => openPropsSection('curves'),
       'open-properties-wheels': () => openPropsSection('wheels'),
+      'open-properties-chroma': () => openPropsSection('chroma'),
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])

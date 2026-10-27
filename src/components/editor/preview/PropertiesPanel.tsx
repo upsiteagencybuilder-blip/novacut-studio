@@ -196,7 +196,7 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'curves' | 'wheels' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform' | 'adjustment'
+export type PropsSectionId = 'filters' | 'grade' | 'curves' | 'wheels' | 'lut' | 'scopes' | 'chroma' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform' | 'adjustment'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
@@ -1441,17 +1441,61 @@ function BlendSection({ clip }: { clip: Clip }) {
 
 function ChromaSection({ clip }: { clip: Clip }) {
   const updateClip = useEditor((s) => s.updateClip)
+  const autoRemoveBackground = useEditor((s) => s.autoRemoveBackground)
   const [open, setOpen] = useState(false)
+  const [autoBusy, setAutoBusy] = useState(false)
   const ck = clip.chromaKey ?? DEFAULT_CHROMA_KEY
   const patch = (p: Partial<ChromaKey>) => updateClip(clip.id, { chromaKey: p }, `chroma-${clip.id}`)
+
+  const runAuto = () => {
+    if (clip.kind !== 'video' && clip.kind !== 'image') {
+      toast.error('Auto background removal works on video and image clips')
+      return
+    }
+    setAutoBusy(true)
+    // next frame so the engine has rendered the current playhead state
+    requestAnimationFrame(() => {
+      try {
+        const res = autoRemoveBackground(clip.id)
+        if (res.ok) {
+          toast.success(`Background removed — keyed ${res.color} (${Math.round((res.confidence ?? 0) * 100)}% border match) ✨`)
+          setOpen(true)
+        } else {
+          toast.error('Could not sample the frame — move the playhead over the clip')
+        }
+      } finally {
+        setAutoBusy(false)
+      }
+    })
+  }
+
   return (
     <CollapsibleSection
       title="Green Screen"
       icon={Pipette}
       open={open}
       onOpenChange={setOpen}
+      sectionId="chroma"
       hint="Film your subject against a solid green/blue screen, enable this, pick the screen color."
     >
+      {/* Day 18 — one-tap auto background removal (chroma-based detection) */}
+      {(clip.kind === 'video' || clip.kind === 'image') && (
+        <button
+          type="button"
+          data-nc-auto-bg
+          disabled={autoBusy}
+          onClick={runAuto}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/10 py-2 text-[11px] font-semibold text-fuchsia-200 transition-colors hover:bg-fuchsia-500/20 disabled:opacity-50"
+        >
+          <Wand2 className="size-3.5" />
+          {ck.enabled ? 'Re-detect background' : 'Remove background (auto)'}
+        </button>
+      )}
+      <p className="text-[10px] leading-snug text-muted-foreground/60">
+        Detects the dominant border color of the current frame and keys it —
+        chroma-based, works best on solid backdrops. Every control below stays
+        editable.
+      </p>
       <div className="flex items-center gap-2">
         <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Enable</span>
         <span className="flex-1 text-[10px] text-muted-foreground/70">key out the backdrop</span>

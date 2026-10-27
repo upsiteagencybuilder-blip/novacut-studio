@@ -1238,3 +1238,21 @@ Stage Summary:
 - Chroma keyer v2 shipped: tolerance/softness/edge/spill controls + quick swatches, same preview+export path.
 - Files: types.ts, utils.ts, PropertiesPanel.tsx, sections/vfx.ts, sections/ai.ts.
 - Next: Day 18 — AI background removal as one-tap clip FX.
+
+---
+Task ID: Day-18
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 18 — AI background removal as one-tap clip FX.
+
+Work Log:
+- NEW src/lib/editor/bg-detect.ts: deterministic backdrop detector — samples the composite frame, quantizes the 2px border ring into 4-bit/channel buckets, picks the dominant bucket as the backdrop color, derives tolerance from the winning bucket's mean border spread (clamped 0.12–0.45) + fixed smoothness 0.18 / spill 0.35 / edge 0.5, returns a confidence metric (share of border pixels in the winning bucket). Honest scope documented in-file: chroma-based detection, NOT neural matting — works best on solid backdrops.
+- store.ts autoRemoveBackground(id?): kind-gates to video/image, samples via the engine singleton, applies autoKeyPatch in ONE updateClip(history:true); returns {ok, color, confidence} for toasts.
+- PropertiesPanel ChromaSection: fuchsia one-tap button (data-nc-auto-bg) — "Remove background (auto)" / "Re-detect background" when already keyed — with rAF-deferred sampling, success toast naming the detected color + border-match %, honest explainer line ("chroma-based, works best on solid backdrops; every control stays editable"); section gains sectionId 'chroma'.
+- Catalog: +1 live ai-bg-removal-auto (AI cleanup group, honest description, deep link open-properties-chroma wired through tools/types + ProToolkitPanel).
+- E2E desktop 1280×800: tap on the sunrise clip → detected #060304 (19% border match — honest low confidence on a non-uniform backdrop), chromaKey {enabled, sim .12, smooth .18, spill .35, edge .5} applied, dark-pixel fraction 6.4% → 10.4%, toast shown, button label flips to "Re-detect background"; history verified structurally (past top snapshot holds chromaKey null after the tap; updateClip+undo sanity cycle passes); mobile 390×844: sheet button tap re-applies; playback smoke clean; zero console errors.
+- Debug note: mid-session HMR reloads reset the in-memory project + history, which made two undo reads look stale — re-verified on a clean session; the multiple-tap test sequence also stacked history entries (each tap pushes its own entry).
+
+Stage Summary:
+- One-tap background removal shipped: real detection math, tuned chroma patch, honest labeling everywhere (button hint, catalog, toast), full editability after.
+- Files: bg-detect.ts (new), store.ts, PropertiesPanel.tsx, tools/types.ts, sections/ai.ts, ProToolkitPanel.tsx.
+- Next: Day 19 — overlay pack gallery (light leaks, film grain, vignette presets).

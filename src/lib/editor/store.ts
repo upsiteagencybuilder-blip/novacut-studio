@@ -45,6 +45,7 @@ import {
   type TextPreset,
 } from './constants'
 import { isNestedClip, openCompound } from './nested'
+import { detectAutoKey, autoKeyPatch } from './bg-detect'
 import { baseValueForProperty, clamp, formatTimecode, landingTime, normalizeColorGrade, normalizeFilters, projectDuration, round2, uid } from './utils'
 import * as db from './db'
 
@@ -127,6 +128,12 @@ interface EditorStore {
   addStickerClip: (req: StickerRequest) => void
   /** Day 11 — insert an adjustment layer (invisible FX carrier) at the playhead on the top overlay track */
   addAdjustmentLayer: () => boolean
+  /**
+   * Day 18 — one-tap auto background removal: samples the composite frame,
+   * detects the dominant border color and applies a tuned chroma key in one
+   * undo step. Returns a toast-ready result or null when nothing is sampled.
+   */
+  autoRemoveBackground: (id?: string) => { ok: boolean; color?: string; confidence?: number }
   updateClip: (id: string, patch: ClipPatch, history?: boolean | string) => void
   /** strip a transition between two adjacent clips (fades + wipe mask + iris keys), one undo step */
   removeTransition: (outgoingId: string, incomingId: string) => void
@@ -690,6 +697,27 @@ export const useEditor = create<EditorStore>((set, get) => ({
     }
     s.addClip(clip)
     return true
+  },
+
+  /**
+   * Day 18 — one-tap background removal: sample the composite frame through
+   * the engine, detect the dominant border color, and apply a tuned chroma
+   * key in ONE undo step. Honest chroma-based detection (see bg-detect.ts) —
+   * works best on solid backdrops; everything stays editable after.
+   */
+  autoRemoveBackground: (id) => {
+    const s = get()
+    const target = id ?? s.selectedClipIds[0]
+    const clip = s.project.clips.find((c) => c.id === target)
+    if (!clip || (clip.kind !== 'video' && clip.kind !== 'image')) return { ok: false }
+    // import lazily to keep the engine out of the store's import graph head
+    const engine = (window as unknown as { __ncEngineInstance?: { sampleFrame: (n: number) => Uint8ClampedArray | null } }).__ncEngineInstance
+    const px = engine?.sampleFrame(128)
+    if (!px || px.length < 64) return { ok: false }
+    const result = detectAutoKey(px, 128)
+    const patch = autoKeyPatch(result)
+    s.updateClip(clip.id, { chromaKey: patch }, true)
+    return { ok: true, color: result.color, confidence: result.confidence }
   },
 
   updateClip: (id, patch, history) => {
