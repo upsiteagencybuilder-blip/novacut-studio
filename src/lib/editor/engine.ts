@@ -13,6 +13,7 @@ import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
 import { applyPixelEffects, buildFilterString, clamp, composeFilters, composeGrades, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, formatTimecode, projectDuration, rampSourceFraction } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
 import { applyClipFx, buildFxChain, makeImpulse, rebuildModulation } from './audio-mix'
+import { ensureFormantModule, getFormantError } from './formant-worklet'
 import { ensurePitchModule, getPitchError } from './pitch-worklet'
 import type { AudioFxChain } from './audio-mix'
 import { drawStickerArt } from './sticker-render'
@@ -156,8 +157,11 @@ class PreviewEngine {
 
   private audioCtx: AudioContext | null = null
   private pitchPreloaded = false
+  private formantPreloaded = false
   /** diagnostics: pitch worklet load status ('ready' | 'failed: …' | undefined) */
   pitchStatus: string | undefined = undefined
+  /** diagnostics: formant worklet load status ('ready' | 'failed: …' | undefined) */
+  formantStatus: string | undefined = undefined
   private exportDest: MediaStreamAudioDestinationNode | null = null
   private masterAnalyser: AnalyserNode | null = null
   private analyserData: Uint8Array | null = null
@@ -393,6 +397,7 @@ class PreviewEngine {
       if (!this.audioCtx) this.audioCtx = new AudioContext()
       if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
       this.preloadPitchModule()
+      this.preloadFormantModule()
       if (!this.exportDest) this.exportDest = this.audioCtx.createMediaStreamDestination()
       // route existing + future elements through their FX chains
       this.ensureAnalyser()
@@ -486,6 +491,7 @@ class PreviewEngine {
       if (!this.audioCtx) this.audioCtx = new AudioContext()
       if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
       this.preloadPitchModule()
+      this.preloadFormantModule()
       this.ensureAnalyser()
       const project = this.snapshotFn?.().project
       if (!project) return
@@ -566,6 +572,26 @@ class PreviewEngine {
         return
       }
       this.pitchStatus = 'ready'
+      for (const entry of this.videos.values()) entry.fxSig = undefined
+      for (const entry of this.audios.values()) entry.fxSig = undefined
+    })
+  }
+
+  /**
+   * Load the formant worklet once the graph exists (Day 21); when it lands,
+   * invalidate every chain's fx signature so the next frame wires the
+   * formant nodes in.
+   */
+  private preloadFormantModule() {
+    if (!this.audioCtx || this.formantPreloaded) return
+    this.formantPreloaded = true
+    void ensureFormantModule(this.audioCtx).then((ok) => {
+      if (!ok) {
+        this.formantStatus = `failed: ${getFormantError(this.audioCtx!) ?? 'unavailable'}`
+        console.warn('[novacut] formant worklet unavailable — formant FX stay bypassed:', this.formantStatus)
+        return
+      }
+      this.formantStatus = 'ready'
       for (const entry of this.videos.values()) entry.fxSig = undefined
       for (const entry of this.audios.values()) entry.fxSig = undefined
     })

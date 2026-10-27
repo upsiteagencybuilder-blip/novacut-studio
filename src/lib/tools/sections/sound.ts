@@ -47,6 +47,8 @@ export const SOUND_TOOLS: ProTool[] = [
 
   // -------- Pitch & time --------
   { id: 'sound-pitch-shifter', name: 'Pitch Shifter', section: 'sound', group: 'Pitch & time', status: 'live', desc: 'Per-clip granular pitch shift −12..+12 semitones with tempo preserved and a wet/dry mix knob — heard in preview, baked into audio + video exports', action: 'open-properties-audiofx' },
+  { id: 'sound-voice-formant-shifter', name: 'Voice Formant Shifter', section: 'sound', group: 'Pitch & time', status: 'live', desc: 'STFT cepstral formant shift ±12 semitones in the Voice Chain — vocal-tract resonances move while pitch and tempo stay put; heard in preview, baked into exports', action: 'open-properties-audiofx' },
+  { id: 'sound-voice-tempo-control', name: 'Voice Tempo Control', section: 'sound', group: 'Pitch & time', status: 'live', desc: 'Voice Chain tempo slider retimes extracted audio 0.5–2× with duration compensation in one undoable step', action: 'open-properties-audiofx' },
   { id: 'sound-per-effect-controls', name: 'Per-Effect Custom Controls', section: 'sound', group: 'Pitch & time', status: 'live', desc: 'Every audio FX owns its parameters — pitch semitones + blend, reverb room size, delay time/repeat, comp amount, mod depth, 3-band EQ — all inline in Properties → Audio FX', action: 'open-properties-audiofx' },
   { id: 'sound-time-stretch', name: 'Time Stretch (Audio)', section: 'sound', group: 'Pitch & time', status: 'live', desc: 'Speed slider and presets retime audio clips with duration compensation', action: 'open-effects' },
 
@@ -76,7 +78,7 @@ export const SOUND_TOOLS: ProTool[] = [
   { id: 'sound-audio-sync-tool', name: 'Audio Sync Tool (Waveform Matching)', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Align clips by matching their waveforms automatically' },
   { id: 'sound-ltc-timecode-reader', name: 'LTC Timecode Reader', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Decode linear timecode from an audio track' },
   { id: 'sound-audio-ducking-controls', name: 'Audio Ducking Controls', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Auto-duck toggle in clip properties ducks music under dialogue' },
-  { id: 'sound-extract-audio', name: 'Extract Audio (Detach)', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Detach the video soundtrack into an editable audio clip in one click' },
+  { id: 'sound-extract-audio', name: 'Extract Audio (Detach)', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Detach the video soundtrack into an editable audio clip in one click — Extract & edit voice lands straight on the Voice Chain (pitch / tempo / formant)' },
   { id: 'sound-essential-sound-panel', name: 'Essential Sound Panel', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Tag-based sound workflow stays roadmap, voice FX cover enhancement' },
   { id: 'sound-dialogue-enhancer', name: 'Dialogue Enhancer', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Dialogue Clarity audio FX preset plus voice FX enhancer presets' },
   { id: 'sound-music-ducking-threshold', name: 'Music Ducking Depth', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Duck depth slider sets how far music drops under video audio' },

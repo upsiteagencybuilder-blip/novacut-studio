@@ -370,6 +370,12 @@ export interface ClipAudioFx {
   pitch?: number
   /** pitch wet/dry blend 0..1 — 1 = fully shifted, 0.5 = parallel harmony (default 1) */
   pitchMix?: number
+  /**
+   * Formant (vocal-tract resonance) shift in semitones -12..12 — STFT
+   * cepstral-envelope shifter; timbre changes while pitch AND tempo stay
+   * put. Heard in preview AND baked into the offline mixdown. 0/undefined = off.
+   */
+  formant?: number
 }
 
 /**

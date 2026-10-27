@@ -23,6 +23,7 @@ import {
   Image as ImageIcon,
   Italic,
   Layers,
+  Mic2,
   Move,
   Palette,
   Pipette,
@@ -2394,11 +2395,13 @@ const AUDIO_FX_PRESETS: { id: string; label: string; patch: Partial<ClipAudioFx>
 
 /**
  * Per-clip audio FX chain — pan, 3-band EQ, high/low-pass filters, compressor,
- * reverb, delay and modulation (chorus/flanger/phaser). The engine builds the
- * matching WebAudio nodes for preview AND export.
+ * reverb, delay, modulation (chorus/flanger/phaser) and the Day 21 voice chain
+ * (extract → pitch / tempo / formant). The engine builds the matching WebAudio
+ * nodes for preview AND export.
  */
 function AudioFxSection({ clip }: { clip: Clip }) {
   const updateClip = useEditor((s) => s.updateClip)
+  const extractAudioFromVideo = useEditor((s) => s.extractAudioFromVideo)
   const fx: Partial<ClipAudioFx> = clip.audioFx ?? {}
 
   const patch = (p: Partial<ClipAudioFx>, history: boolean | string = 'audio-fx') =>
@@ -2412,6 +2415,27 @@ function AudioFxSection({ clip }: { clip: Clip }) {
 
   const pan = fx.pan ?? 0
   const hasFx = !!clip.audioFx && Object.values(clip.audioFx).some((v) => v !== undefined && v !== 0 && v !== 'none' && v !== false)
+  const pitchVal = fx.pitch ?? 0
+  const formantVal = fx.formant ?? 0
+  const tempoVal = clip.speed ?? 1
+  const fmtSt = (v: number) => (v === 0 ? 'Off' : `${v > 0 ? '+' : ''}${v} st`)
+
+  /** Day 21 woven flow: extract the soundtrack, then land on the voice chain. */
+  const extractAndEditVoice = async () => {
+    const res = await extractAudioFromVideo()
+    if (res === 'ok') {
+      // the store already selected the new audio clip — open the voice chain
+      const w = window as unknown as { __ncPropsSectionRequest?: string; __ncPropsSectionTries?: number }
+      w.__ncPropsSectionRequest = 'audiofx'
+      w.__ncPropsSectionTries = 0
+      window.dispatchEvent(new CustomEvent('nc-props-section', { detail: 'audiofx' }))
+      toast.success('Voice chain ready — pitch, tempo & formant on the extracted clip 🎙')
+    } else if (res === 'no-audio') {
+      toast.error('This video has no audio track to extract')
+    } else {
+      toast('Could not extract audio from this clip')
+    }
+  }
 
   return (
     <Section
@@ -2422,9 +2446,73 @@ function AudioFxSection({ clip }: { clip: Clip }) {
     >
       {!hasFx && (
         <p className="text-[10px] leading-snug text-muted-foreground/60">
-          Pan, EQ, filters, compressor, reverb, echo and modulation for this clip&apos;s sound — heard in preview and baked into exports.
+          Pan, EQ, filters, compressor, reverb, echo, modulation and formant for this clip&apos;s sound — heard in preview and baked into exports.
         </p>
       )}
+
+      {/* Day 21 — voice chain: extract → pitch / tempo / formant */}
+      <div className="space-y-1.5 rounded-lg border border-(--nc-line) bg-(--nc-panel-soft) p-2" data-nc-voice-chain>
+        <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+          <Mic2 className="h-3 w-3 shrink-0" />
+          Voice Chain
+          <span className="ml-auto flex gap-1" aria-label="Voice chain state">
+            <span className="rounded border border-(--nc-line) px-1 py-px text-[9px]" data-nc-vc-pitch>Pitch {fmtSt(pitchVal)}</span>
+            {clip.kind === 'audio' && (
+              <span className="rounded border border-(--nc-line) px-1 py-px text-[9px]" data-nc-vc-tempo>Tempo {tempoVal.toFixed(2)}×</span>
+            )}
+            <span className="rounded border border-(--nc-line) px-1 py-px text-[9px]" data-nc-vc-formant>Formant {fmtSt(formantVal)}</span>
+          </span>
+        </div>
+
+        {/* woven: extract the soundtrack, land straight on the chain (video clips) */}
+        {clip.kind === 'video' && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 w-full gap-1.5 text-[11px]"
+            data-nc-voice-extract-edit
+            onClick={extractAndEditVoice}
+          >
+            <AudioLines className="h-3 w-3" />
+            Extract &amp; edit voice
+          </Button>
+        )}
+
+        {/* tempo — tape-style retiming with duration compensation (audio clips) */}
+        {clip.kind === 'audio' && (
+          <SliderRow
+            label="Tempo"
+            min={0.5}
+            max={2}
+            step={0.05}
+            value={tempoVal}
+            onChange={(v) =>
+              updateClip(
+                clip.id,
+                { speed: v, duration: Math.max(0.1, (clip.duration * tempoVal) / v) },
+                'tempo'
+              )
+            }
+            format={(v) => `${v.toFixed(2)}×`}
+          />
+        )}
+
+        {/* formant — vocal-tract resonance shift, pitch + tempo preserved */}
+        <SliderRow
+          label="Formant"
+          min={-12}
+          max={12}
+          step={0.5}
+          value={formantVal}
+          onChange={(v) => patch({ formant: v }, 'formant')}
+          format={fmtSt}
+        />
+        <p className="text-[9px] leading-snug text-muted-foreground/60">
+          {clip.kind === 'video'
+            ? 'Extract the soundtrack to edit it as its own clip, or shape this video’s live sound below. Formant moves the vocal-tract resonances — timbre changes while pitch &amp; tempo stay put.'
+            : 'Formant moves the vocal-tract resonances — timbre changes while pitch &amp; tempo stay put. Tempo retimes with duration compensation.'}
+        </p>
+      </div>
 
       {/* presets */}
       <div className="flex flex-wrap gap-1.5">
