@@ -33,7 +33,7 @@ export const AI_TOOLS: ProTool[] = [
   { id: 'ai-caption-translate', name: 'AI Caption Translate', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Translate transcripts to Bangla, English, Hindi and more before captioning', action: 'open-ai' },
 
   // -------- Utility AI --------
-  { id: 'ai-chroma-key', name: 'Chroma Key (Green Screen)', section: 'ai', group: 'Utility AI', status: 'live', desc: 'Chroma section in clip properties keys green or custom colors' },
+  { id: 'ai-chroma-key', name: 'Chroma Key (Green Screen)', section: 'ai', group: 'Utility AI', status: 'live', desc: 'Chroma section in clip properties keys green, blue or custom colors with spill suppression and edge shaping' },
   { id: 'ai-video-stabilizer', name: 'Video Stabilizer', section: 'ai', group: 'Utility AI', status: 'planned', desc: 'Analyze and smooth shaky handheld footage automatically' },
   { id: 'ai-keyframing-panel', name: 'Keyframing Panel', section: 'ai', group: 'Utility AI', status: 'live', desc: 'Keyframe cards per property add keys with easing at the playhead' },
   { id: 'ai-masking-tool', name: 'Masking Tool', section: 'ai', group: 'Utility AI', status: 'planned', desc: 'Draw and track masks for localized effects' },

@@ -1459,9 +1459,31 @@ function ChromaSection({ clip }: { clip: Clip }) {
       </div>
       {ck.enabled && (
         <>
-          <ColorField label="Key color" value={ck.color} onChange={(v) => patch({ color: v })} />
+          <div className="flex items-center gap-2">
+            <ColorField label="Key color" value={ck.color} onChange={(v) => patch({ color: v })} />
+            <div className="flex gap-1" role="group" aria-label="Common screen colors">
+              {([
+                ['#00b140', 'chroma green'],
+                ['#0047bb', 'chroma blue'],
+              ] as const).map(([hex, label]) => (
+                <button
+                  key={hex}
+                  type="button"
+                  title={label}
+                  aria-label={`Use ${label}`}
+                  data-nc-chroma-swatch={hex}
+                  onClick={() => patch({ color: hex })}
+                  className={cn(
+                    'size-6 rounded-md border transition-transform hover:scale-110',
+                    ck.color.toLowerCase() === hex ? 'border-white ring-1 ring-white/60' : 'border-white/20',
+                  )}
+                  style={{ background: hex }}
+                />
+              ))}
+            </div>
+          </div>
           <SliderRow
-            label="Similar"
+            label="Tolerance"
             min={0}
             max={1}
             step={0.01}
@@ -1470,7 +1492,7 @@ function ChromaSection({ clip }: { clip: Clip }) {
             format={fmtPct}
           />
           <SliderRow
-            label="Smooth"
+            label="Softness"
             min={0}
             max={1}
             step={0.01}
@@ -1478,6 +1500,27 @@ function ChromaSection({ clip }: { clip: Clip }) {
             onChange={(v) => patch({ smoothness: v })}
             format={fmtPct}
           />
+          <SliderRow
+            label="Edge"
+            min={0}
+            max={1}
+            step={0.01}
+            value={ck.edge ?? 0.5}
+            onChange={(v) => patch({ edge: v })}
+            format={(v) => (Math.abs(v - 0.5) < 0.005 ? 'neutral' : v > 0.5 ? `hard ${Math.round(v * 100)}%` : `soft ${Math.round((1 - v) * 100)}%`)}
+          />
+          <SliderRow
+            label="Spill"
+            min={0}
+            max={1}
+            step={0.01}
+            value={ck.spill ?? 0}
+            onChange={(v) => patch({ spill: v })}
+            format={fmtPct}
+          />
+          <p className="text-[10px] leading-snug text-muted-foreground/60">
+            Edge hardens or softens the matte boundary; Spill pulls the screen-color cast out of hair and edges.
+          </p>
         </>
       )}
     </CollapsibleSection>

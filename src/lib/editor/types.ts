@@ -174,6 +174,17 @@ export interface ChromaKey {
   similarity: number
   /** 0..1 edge softness */
   smoothness: number
+  /**
+   * Day 17 — 0..1 spill suppression: pulls the key-color cast out of the
+   * remaining (non-keyed) pixels by clamping the key channel toward the
+   * other two. undefined/0 = off (legacy projects).
+   */
+  spill?: number
+  /**
+   * Day 17 — 0..1 edge shaping: alpha gamma on the partial-key ramp.
+   * 0.5 = neutral (default/undefined); < 0.5 softens the matte, > 0.5 hardens it.
+   */
+  edge?: number
 }
 
 /** One control point of an RGB-curve channel (normalized 0..1 space, sorted by x) */

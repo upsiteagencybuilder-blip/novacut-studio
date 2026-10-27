@@ -1219,3 +1219,22 @@ Stage Summary:
 - Shape masks shipped end-to-end: data model, canvas-space engine clip path, keyframable maskX/maskY/maskScale riding the shared keyframe engine + curve editor, invert, copy/paste FX support, honest catalog.
 - Files: types.ts, utils.ts, engine.ts, store.ts, PropertiesPanel.tsx, sections/vfx.ts.
 - Next: Day 17 — chroma key v2: spill suppression + tolerance/edge UI.
+
+---
+Task ID: Day-17
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 17 — Chroma key v2: spill suppression, tolerance + edge UI.
+
+Work Log:
+- types.ts ChromaKey: spill? (0..1 — clamp the key-dominant channel toward the other two on surviving pixels) + edge? (0..1 alpha gamma on the partial-key ramp; 0.5 = neutral, legacy-safe undefined).
+- utils.ts applyPixelEffects: edge shaping `a = 255·(a/255)^(2·edge)` applied to the partial-band alpha; spill clamps the key-dominant channel (derived from the key color's max channel) toward max(others) wherever alpha > 0.
+- PropertiesPanel ChromaSection: relabeled Tolerance (was Similar) + Softness; new Edge slider with neutral/hard/soft readout format; new Spill slider; chroma-green (#00b140) and chroma-blue (#0047bb) quick swatches (data-nc-chroma-swatch, active ring) beside the key color field; explainer line.
+- Catalog: vfx-chroma-keyer + ai-chroma-key descriptions updated to the v2 feature set (both stay live).
+- E2E desktop 1280×800: keyed the sampled sky color #604c5b at tolerance .4 → 52.2% of the frame transparent (black bg); edge soft (0.05) vs hard (0.97) at smoothness .5 → mid-tone fraction 0.181 vs 0.125 (matte boundary shaping proven); spill on the red-dominant key → r−b 64.7 → 25.8 (excess key-channel pulled toward the others); swatch tap sets #00b140; one-undo paths; playback clean; zero console errors.
+- E2E mobile 390×844: Edit sheet → Green Screen expanded → 2 swatches + full slider set present.
+- Debug note: the key color's DOMINANT channel (not "green") drives spill — #604c5b is red-dominant, so spill pulled red; the math is generic.
+
+Stage Summary:
+- Chroma keyer v2 shipped: tolerance/softness/edge/spill controls + quick swatches, same preview+export path.
+- Files: types.ts, utils.ts, PropertiesPanel.tsx, sections/vfx.ts, sections/ai.ts.
+- Next: Day 18 — AI background removal as one-tap clip FX.

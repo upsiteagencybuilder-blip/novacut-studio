@@ -9,7 +9,7 @@ import type { ProTool } from '../types'
 
 export const VFX_TOOLS: ProTool[] = [
   // -------- Keying --------
-  { id: 'vfx-chroma-keyer', name: 'Chroma Keyer', section: 'vfx', group: 'Keying', status: 'live', desc: 'Chroma section in properties keys any color with similarity and smoothness' },
+  { id: 'vfx-chroma-keyer', name: 'Chroma Keyer', section: 'vfx', group: 'Keying', status: 'live', desc: 'Chroma section keys any color with tolerance, softness, edge shaping (soften/harden the matte) and spill suppression, plus chroma green/blue quick swatches' },
   { id: 'vfx-ultra-keyer', name: 'Ultra Keyer', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Advanced keyer with auto-spill, edge and light wrap controls' },
   { id: 'vfx-delta-keyer', name: 'Delta Keyer', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Resolve-class delta keyer with matte finesse controls' },
   { id: 'vfx-luma-keyer', name: 'Luma Keyer', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Key footage by brightness range for skies and smoke' },

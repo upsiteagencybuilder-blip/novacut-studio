@@ -412,6 +412,11 @@ export function applyPixelEffects(
   // thresholds in squared euclidean space (0..441 max distance)
   const simDist = similarity * 220
   const smoothDist = Math.max(1, smoothness * 160)
+  // Day 17 — spill suppression + edge shaping
+  const spill = chroma ? clamp(chroma.spill ?? 0, 0, 1) : 0
+  const edgeGamma = chroma ? 2 * clamp(chroma.edge ?? 0.5, 0, 1) : 1 // 0.5 → neutral
+  // key channel index (the dominant channel of the key color) drives spill
+  const keyChan = keyRgb[0] >= keyRgb[1] && keyRgb[0] >= keyRgb[2] ? 0 : keyRgb[1] >= keyRgb[2] ? 1 : 2
   const temp = grade ? grade.temperature : 0
   const tint = grade ? grade.tint : 0
   const shadows = grade ? grade.shadows : 0
@@ -444,7 +449,22 @@ export function applyPixelEffects(
         d[i + 3] = 0
         continue
       } else if (dist < simDist + smoothDist) {
-        d[i + 3] = Math.round(d[i + 3] * ((dist - simDist) / smoothDist))
+        let a = d[i + 3] * ((dist - simDist) / smoothDist)
+        // Day 17 — edge shaping: gamma on the partial-key ramp (soften/harden)
+        if (edgeGamma !== 1) a = 255 * Math.pow(a / 255, edgeGamma)
+        d[i + 3] = Math.round(a)
+      }
+      // Day 17 — spill suppression: clamp the key channel toward the other
+      // two wherever the pixel survived the key (hair/edge fringes)
+      if (spill > 0 && d[i + 3] > 0) {
+        const px = [r, g, b]
+        const kv = px[keyChan]
+        const others = keyChan === 0 ? Math.max(px[1], px[2]) : keyChan === 1 ? Math.max(px[0], px[2]) : Math.max(px[0], px[1])
+        const excess = kv - others
+        if (excess > 0) px[keyChan] = kv - excess * spill
+        r = px[0]
+        g = px[1]
+        b = px[2]
       }
     }
 
