@@ -1181,3 +1181,21 @@ Stage Summary:
 - Built-in LUT library shipped: 10 procedural looks over the existing engine path, chips on desktop + mobile, honest catalog.
 - Files: builtin-luts.ts (new), engine.ts, PropertiesPanel.tsx, sections/color.ts.
 - Next: Day 15 — scopes: luma waveform joining the histogram.
+
+---
+Task ID: Day-15
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 15 — Scopes: luma waveform joining the histogram.
+
+Work Log:
+- utils.ts: computeLumaWaveform(pixels, width, rows=48) — per-source-column luma distribution (Rec.709 luma, alpha-gated), cols×rows counts.
+- PropertiesPanel ScopesSection: Histogram | Waveform tab pair (data-nc-scope, role=tablist); waveform renderer — x mirrors the frame, y = luma (0 IRE bottom → 100 top), additive 'lighter' glow with density-driven alpha, green cells with lime highlights above 85%, dashed 0/100 IRE guide lines; canvas aria-label + data-nc-scope-canvas follow the mode; caption text per mode.
+- Scope redraw contract fixed (was draw-on-playhead-only): now also re-draws on ANY clip mutation (clipsRef dep) with a throttle that has a trailing edge AND defers the draw one requestAnimationFrame — the engine's own rAF render (scheduled by the bridge on the same store change) must land first, otherwise the scope samples the PREVIOUS composite (found via E2E: COM stayed stale after a grade change until a seek forced a redraw).
+- Catalog: color-video-scopes beta→live (desc: histogram + waveform, vectorscope/parade still roadmap), color-waveform-monitor planned→live; both deep-link open-properties-scopes.
+- E2E desktop 1280×800: tabs render, waveform populated (10,319 lit cells of 18,432); grade-response monotonic — luma center-of-mass 28.5 @ brightness 1.0 → 37 @ 1.7 → 19.2 @ 0.55, all within 700ms of the change; undo restores brightness 1.
+- E2E mobile 390×844: Edit sheet → Scopes → waveform tab renders (2 tabs, canvas present); playback smoke clean; zero console errors.
+
+Stage Summary:
+- Two-scope panel shipped: histogram + luma waveform, live-tracking the grade with correct engine-render ordering.
+- Files: utils.ts, PropertiesPanel.tsx, sections/color.ts.
+- Next: Day 16 — shape masks (rect/ellipse) with keyframed position/scale.

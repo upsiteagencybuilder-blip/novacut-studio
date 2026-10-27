@@ -74,8 +74,8 @@ export const COLOR_TOOLS: ProTool[] = [
   { id: 'color-aces-workflow-toggle', name: 'ACES Workflow Toggle', section: 'color', group: 'LUTs & color management', status: 'planned', desc: 'Enable the ACES color-managed pipeline for the project' },
 
   // -------- Scopes & monitoring --------
-  { id: 'color-video-scopes', name: 'Video Scopes', section: 'color', group: 'Scopes & monitoring', status: 'beta', desc: 'RGB histogram scope ships today; waveform, vectorscope and parade stay roadmap' },
-  { id: 'color-waveform-monitor', name: 'Waveform Monitor', section: 'color', group: 'Scopes & monitoring', status: 'planned', desc: 'Read luminance distribution per scanline on a waveform' },
+  { id: 'color-video-scopes', name: 'Video Scopes', section: 'color', group: 'Scopes & monitoring', status: 'live', desc: 'RGB histogram and luma waveform scopes of the composite frame, switchable tabs, throttled live updates', action: 'open-properties-scopes' },
+  { id: 'color-waveform-monitor', name: 'Waveform Monitor', section: 'color', group: 'Scopes & monitoring', status: 'live', desc: 'Luma waveform tab in Scopes: per-column luminance distribution with 0/100 IRE guides and additive glow', action: 'open-properties-scopes' },
   { id: 'color-vectorscope', name: 'Vectorscope', section: 'color', group: 'Scopes & monitoring', status: 'planned', desc: 'Judge hue and saturation against the skin-tone line' },
   { id: 'color-parade-monitor', name: 'Parade Monitor (RGB)', section: 'color', group: 'Scopes & monitoring', status: 'planned', desc: 'Side-by-side RGB waveforms for channel balancing' },
   { id: 'color-histogram', name: 'Histogram', section: 'color', group: 'Scopes & monitoring', status: 'live', desc: 'Live RGB histogram of the playhead frame in clip properties', action: 'open-properties-scopes' },

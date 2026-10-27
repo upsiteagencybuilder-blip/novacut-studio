@@ -64,7 +64,7 @@ import {
   TEXT_FONTS,
   TRANSFORM_PRESETS_KEY,
 } from '@/lib/editor/constants'
-import { clamp, computeHistogram, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
+import { clamp, computeHistogram, computeLumaWaveform, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
 import { BUILTIN_LUTS } from '@/lib/editor/builtin-luts'
 import { KeyframeCurveEditor } from '@/components/editor/preview/KeyframeCurve'
 import { cn } from '@/lib/utils'
@@ -1968,14 +1968,18 @@ function LutSection({ clip }: { clip: Clip }) {
 /* ================================================================ scopes */
 
 /**
- * Scopes — live RGB histogram of the playhead frame. Samples the preview
- * canvas through the engine (post-composite pixels: filters, grade, LUT and
- * chroma all included) and redraws throttled while the playhead moves.
+ * Scopes (Day 15) — live RGB histogram AND luma waveform of the playhead
+ * frame. Samples the preview canvas through the engine (post-composite
+ * pixels: filters, grade, LUT and chroma all included) and redraws throttled
+ * while the playhead moves.
  */
 function ScopesSection() {
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<'histogram' | 'waveform'>('histogram')
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const currentTime = useEditor((s) => s.currentTime)
+  // any clip mutation (grade/LUT/filter edits) must also re-scope the frame
+  const clipsRef = useEditor((s) => s.project.clips)
   const lastDrawRef = useRef(0)
 
   const draw = useCallback(() => {
@@ -1985,7 +1989,6 @@ function ScopesSection() {
     if (!ctx) return
     const pixels = getEngine().sampleFrame(128)
     if (!pixels) return
-    const hist = computeHistogram(pixels)
     const w = canvas.width
     const h = canvas.height
     ctx.clearRect(0, 0, w, h)
@@ -2000,6 +2003,42 @@ function ScopesSection() {
       ctx.lineTo((gx / 4) * w, h)
       ctx.stroke()
     }
+    if (mode === 'waveform') {
+      // ---- luma waveform: x = source column, y = luma (top = 1.0). Sample is
+      // 128 wide at 16:9 → 72 rows; plot with additive glow, green luma tint.
+      const cols = 128
+      const wf = computeLumaWaveform(pixels, cols, 64)
+      let max = 1
+      for (let i = 0; i < wf.data.length; i++) if (wf.data[i] > max) max = wf.data[i]
+      const cellW = w / cols
+      const cellH = h / wf.rows
+      ctx.globalCompositeOperation = 'lighter'
+      for (let x = 0; x < wf.cols; x++) {
+        for (let bin = 0; bin < wf.rows; bin++) {
+          const v = wf.data[x * wf.rows + bin]
+          if (v === 0) continue
+          const a = Math.min(1, 0.18 + (v / max) * 0.85)
+          ctx.globalAlpha = a
+          ctx.fillStyle = bin / wf.rows > 0.85 ? '#d9f99d' : '#4ade80'
+          ctx.fillRect(x * cellW, h - (bin + 1) * cellH, Math.max(1, cellW), Math.max(1, cellH))
+        }
+      }
+      // 0 IRE and 100 IRE guide lines
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.globalAlpha = 0.5
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+      ctx.setLineDash([3, 3])
+      for (const yr of [0, 1]) {
+        ctx.beginPath()
+        ctx.moveTo(0, yr === 0 ? h - 1 : 1)
+        ctx.lineTo(w, yr === 0 ? h - 1 : 1)
+        ctx.stroke()
+      }
+      ctx.setLineDash([])
+      ctx.globalAlpha = 1
+      return
+    }
+    const hist = computeHistogram(pixels)
     let max = 1
     for (const ch of [hist.r, hist.g, hist.b]) for (const v of ch) if (v > max) max = v
     ctx.globalCompositeOperation = 'screen'
@@ -2022,16 +2061,32 @@ function ScopesSection() {
     }
     ctx.globalCompositeOperation = 'source-over'
     ctx.globalAlpha = 1
-  }, [])
+  }, [mode])
 
-  // redraw when the frame changes — throttled so playback stays smooth
+  // redraw when the frame OR the grade changes — throttled with a trailing
+  // edge, and deferred one animation frame so the engine's own rAF render
+  // (scheduled by the bridge on the same store change) lands FIRST and the
+  // scope samples the NEW composite instead of the previous frame
   useEffect(() => {
     if (!open) return
+    let raf = 0
+    const run = () => {
+      lastDrawRef.current = performance.now()
+      draw()
+    }
     const now = performance.now()
-    if (now - lastDrawRef.current < 160) return
-    lastDrawRef.current = now
-    draw()
-  }, [open, currentTime, draw])
+    if (now - lastDrawRef.current < 160) {
+      const id = window.setTimeout(() => {
+        raf = requestAnimationFrame(run)
+      }, 170 - (now - lastDrawRef.current))
+      return () => {
+        window.clearTimeout(id)
+        cancelAnimationFrame(raf)
+      }
+    }
+    raf = requestAnimationFrame(run)
+    return () => cancelAnimationFrame(raf)
+  }, [open, currentTime, draw, mode, clipsRef])
 
   return (
     <CollapsibleSection
@@ -2042,16 +2097,37 @@ function ScopesSection() {
       sectionId="scopes"
       hint="Read the tonal balance before grading — spikes at the edges mean crushed blacks or blown highlights."
     >
+      <div className="flex gap-1" role="tablist" aria-label="Scope mode">
+        {(['histogram', 'waveform'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="tab"
+            aria-selected={mode === m}
+            data-nc-scope={m}
+            onClick={() => setMode(m)}
+            className={cn(
+              'flex-1 rounded-md border px-1 py-1 text-[10px] font-semibold capitalize transition-colors',
+              mode === m ? 'border-white/30 bg-white/10 text-foreground' : 'border-transparent text-muted-foreground hover:bg-white/5',
+            )}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
       <canvas
         ref={canvasRef}
         width={256}
         height={72}
-        aria-label="RGB histogram of the playhead frame"
+        aria-label={mode === 'waveform' ? 'Luma waveform of the playhead frame' : 'RGB histogram of the playhead frame'}
         role="img"
+        data-nc-scope-canvas={mode}
         className="w-full rounded-lg border border-(--nc-line)"
       />
       <p className="text-[10px] leading-snug text-muted-foreground/60">
-        Red · green · blue histogram of the composite frame — updates with the playhead.
+        {mode === 'waveform'
+          ? 'Luma waveform — horizontal axis mirrors the frame, vertical is brightness (0 IRE bottom, 100 top).'
+          : 'Red · green · blue histogram of the composite frame — updates with the playhead.'}
       </p>
     </CollapsibleSection>
   )

@@ -666,6 +666,32 @@ export function computeHistogram(pixels: Uint8ClampedArray): { r: number[]; g: n
 }
 
 /**
+ * Day 15 — luma waveform: per-source-column luma distribution.
+ * Returns cols×rows counts (row 0 = black at the BOTTOM when drawn flipped).
+ * The caller supplies the sample's width (cols) and picks the row resolution.
+ */
+export function computeLumaWaveform(
+  pixels: Uint8ClampedArray,
+  width: number,
+  rows = 48
+): { cols: number; rows: number; data: Float32Array } {
+  const count = pixels.length / 4
+  const height = Math.max(1, Math.round(count / width))
+  const cols = width
+  const data = new Float32Array(cols * rows)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = (y * cols + x) * 4
+      if (pixels[i + 3] < 8) continue
+      const l = (0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2]) / 255
+      const bin = Math.min(rows - 1, Math.floor(l * rows))
+      data[x * rows + bin]++
+    }
+  }
+  return { cols, rows, data }
+}
+
+/**
  * Magnetic dual-edge snap — the core of the magnetic timeline feel.
  * A dragged clip hunts for targets with BOTH edges: its start and its end
  * (start + duration). Whichever edge lands closer to a target wins, so a clip
