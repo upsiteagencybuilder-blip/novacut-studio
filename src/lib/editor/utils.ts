@@ -166,6 +166,18 @@ export function normalizeColorGrade(input: unknown): ColorGrade {
     }
     if (any) out.curves = curves
   }
+  // Day 13 — sanitize the lift/gamma/gain wheels
+  for (const w of ['lift', 'gamma', 'gain'] as const) {
+    const raw = src[w] as Record<string, unknown> | undefined
+    if (raw && typeof raw === 'object') {
+      const wheel = {
+        r: clamp(Number.isFinite(Number(raw.r)) ? Number(raw.r) : 0, -1, 1),
+        g: clamp(Number.isFinite(Number(raw.g)) ? Number(raw.g) : 0, -1, 1),
+        b: clamp(Number.isFinite(Number(raw.b)) ? Number(raw.b) : 0, -1, 1),
+      }
+      if (wheel.r !== 0 || wheel.g !== 0 || wheel.b !== 0) out[w] = wheel
+    }
+  }
   return out
 }
 
@@ -368,9 +380,16 @@ export function applyPixelEffects(
   const grade = opts.grade
   const curves = grade?.curves
   const hasCurves = !!curves && [curves.rgb, curves.r, curves.g, curves.b].some((c) => (c?.length ?? 0) >= 2)
+  const lift = grade?.lift
+  const gammaW = grade?.gamma
+  const gainW = grade?.gain
+  const hasWheels =
+    (!!lift && (lift.r !== 0 || lift.g !== 0 || lift.b !== 0)) ||
+    (!!gammaW && (gammaW.r !== 0 || gammaW.g !== 0 || gammaW.b !== 0)) ||
+    (!!gainW && (gainW.r !== 0 || gainW.g !== 0 || gainW.b !== 0))
   const hasGrade =
     !!grade &&
-    (grade.temperature !== 0 || grade.tint !== 0 || grade.shadows !== 0 || grade.highlights !== 0 || grade.vibrance !== 1 || hasCurves)
+    (grade.temperature !== 0 || grade.tint !== 0 || grade.shadows !== 0 || grade.highlights !== 0 || grade.vibrance !== 1 || hasCurves || hasWheels)
   const lut = opts.lut && opts.lut.table.length ? opts.lut : null
   const lutMix = lut ? clamp(opts.lutIntensity ?? 1, 0, 1) : 0
   const lut2 = opts.lut2 && opts.lut2.table.length ? opts.lut2 : null
@@ -445,6 +464,28 @@ export function applyPixelEffects(
         r = clamp(r + delta, 0, 255)
         g = clamp(g + delta, 0, 255)
         b = clamp(b + delta, 0, 255)
+      }
+      // Day 13 — lift/gamma/gain color wheels (same luminance masks as the
+      // shadows/highlights sliders, but per-channel pushes)
+      if (hasWheels) {
+        if (lift) {
+          const m = Math.pow(1 - l, 2)
+          r = clamp(r + lift.r * 42 * m, 0, 255)
+          g = clamp(g + lift.g * 42 * m, 0, 255)
+          b = clamp(b + lift.b * 42 * m, 0, 255)
+        }
+        if (gammaW) {
+          const m = 4 * l * (1 - l) // bell curve peaking at midtones
+          r = clamp(r + gammaW.r * 36 * m, 0, 255)
+          g = clamp(g + gammaW.g * 36 * m, 0, 255)
+          b = clamp(b + gammaW.b * 36 * m, 0, 255)
+        }
+        if (gainW) {
+          const m = Math.pow(l, 2)
+          r = clamp(r + gainW.r * 42 * m, 0, 255)
+          g = clamp(g + gainW.g * 42 * m, 0, 255)
+          b = clamp(b + gainW.b * 42 * m, 0, 255)
+        }
       }
       if (vibrance !== 1) {
         const mx = Math.max(r, g, b)
@@ -586,6 +627,17 @@ export function composeGrades(a: ColorGrade, b: ColorGrade): ColorGrade {
       hasCurves = true
     }
   }
+  const wheel = (wa?: ColorGrade['lift'], wb?: ColorGrade['lift']): ColorGrade['lift'] => {
+    if (!wa && !wb) return undefined
+    return {
+      r: clamp((wa?.r ?? 0) + (wb?.r ?? 0), -1, 1),
+      g: clamp((wa?.g ?? 0) + (wb?.g ?? 0), -1, 1),
+      b: clamp((wa?.b ?? 0) + (wb?.b ?? 0), -1, 1),
+    }
+  }
+  const lift = wheel(a.lift, b.lift)
+  const gamma = wheel(a.gamma, b.gamma)
+  const gain = wheel(a.gain, b.gain)
   return {
     temperature: clamp(a.temperature + b.temperature, -1, 1),
     tint: clamp(a.tint + b.tint, -1, 1),
@@ -593,6 +645,9 @@ export function composeGrades(a: ColorGrade, b: ColorGrade): ColorGrade {
     highlights: clamp(a.highlights + b.highlights, -1, 1),
     vibrance: clamp(a.vibrance + b.vibrance - 1, 0, 2),
     ...(hasCurves ? { curves } : {}),
+    ...(lift ? { lift } : {}),
+    ...(gamma ? { gamma } : {}),
+    ...(gain ? { gain } : {}),
   }
 }
 

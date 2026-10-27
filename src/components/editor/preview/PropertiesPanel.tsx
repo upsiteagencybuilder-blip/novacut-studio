@@ -36,6 +36,7 @@ import {
   Snowflake,
   Sparkles,
   Spline,
+  CircleDot,
   Sticker,
   Strikethrough,
   Sun,
@@ -95,6 +96,7 @@ import type {
   TextAnimation,
   TextStyle,
   Transform,
+  WheelColor,
 } from '@/lib/editor/types'
 
 /* ================================================================ meta */
@@ -189,7 +191,7 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'curves' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform' | 'adjustment'
+export type PropsSectionId = 'filters' | 'grade' | 'curves' | 'wheels' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform' | 'adjustment'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
@@ -1735,6 +1737,147 @@ function CurvesSection({ clip }: { clip: Clip }) {
   )
 }
 
+/* ================================================================ color wheels (Day 13) */
+
+/**
+ * Map a pad drag (dx, dy from center, screen y flipped) to the wheel's RGB
+ * offsets: classic 3-way wheel math — each channel rides a cosine spaced 120°
+ * apart, so the push stays hue-balanced and |channel| ≤ strength ≤ 1.
+ */
+function wheelFromPad(dx: number, dy: number): WheelColor {
+  const s = Math.min(1, Math.hypot(dx, dy))
+  if (s < 0.02) return { r: 0, g: 0, b: 0 }
+  const theta = Math.atan2(-dy, dx)
+  const c = (ang: number) => Math.round(s * Math.cos(ang) * 100) / 100
+  return { r: c(theta), g: c(theta - (2 * Math.PI) / 3), b: c(theta + (2 * Math.PI) / 3) }
+}
+
+/** Inverse map: RGB offsets → handle position + strength for the pad. */
+function padFromWheel(v: WheelColor): { x: number; y: number; s: number } {
+  const energy = (2 * (v.r * v.r + v.g * v.g + v.b * v.b)) / 3
+  const s = Math.min(1, Math.sqrt(Math.max(0, energy)))
+  if (s < 0.02) return { x: 0, y: 0, s: 0 }
+  const sinT = clamp((v.g - v.b) / (s * Math.sqrt(3) + 1e-6), -1, 1)
+  const cosT = clamp((2 * v.r - v.g - v.b) / (3 * s + 1e-6), -1, 1)
+  const theta = Math.atan2(sinT, cosT)
+  return { x: s * Math.cos(theta), y: -s * Math.sin(theta), s }
+}
+
+const WHEEL_DEFS: { id: 'lift' | 'gamma' | 'gain'; label: string; hint: string }[] = [
+  { id: 'lift', label: 'Lift', hint: 'pushes SHADOWS toward the wheel color' },
+  { id: 'gamma', label: 'Gamma', hint: 'tints MIDTONES' },
+  { id: 'gain', label: 'Gain', hint: 'tints HIGHLIGHTS' },
+]
+
+/** One draggable color wheel pad (hue ring + strength radius). */
+function ColorWheel({
+  which,
+  value,
+  onChange,
+}: {
+  which: 'lift' | 'gamma' | 'gain'
+  value: WheelColor
+  onChange: (v: WheelColor) => void
+}) {
+  const padRef = useRef<HTMLDivElement | null>(null)
+  const dragRef = useRef(false)
+  const pos = padFromWheel(value)
+  const handle = (clientX: number, clientY: number) => {
+    const pad = padRef.current
+    if (!pad) return
+    const r = pad.getBoundingClientRect()
+    const dx = (clientX - (r.left + r.width / 2)) / (r.width / 2)
+    const dy = (clientY - (r.top + r.height / 2)) / (r.height / 2)
+    onChange(wheelFromPad(dx, dy))
+  }
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div
+        ref={padRef}
+        data-nc-wheel={which}
+        role="application"
+        aria-label={`${which} color wheel`}
+        title={WHEEL_DEFS.find((w) => w.id === which)!.hint}
+        className="relative h-[74px] w-[74px] cursor-crosshair touch-none rounded-full border border-(--nc-line)"
+        style={{
+          background:
+            'conic-gradient(from 0deg, #ff4d4d, #ffd24d, #7bff6b, #4dffe0, #4da6ff, #b84dff, #ff4da6, #ff4d4d)',
+          boxShadow: 'inset 0 0 18px rgba(0,0,0,0.55)',
+        }}
+        onPointerDown={(e) => {
+          dragRef.current = true
+          ;(e.target as Element).setPointerCapture?.(e.pointerId)
+          handle(e.clientX, e.clientY)
+        }}
+        onPointerMove={(e) => {
+          if (dragRef.current) handle(e.clientX, e.clientY)
+        }}
+        onPointerUp={() => {
+          dragRef.current = false
+        }}
+        onPointerCancel={() => {
+          dragRef.current = false
+        }}
+        onDoubleClick={(e) => {
+          // dblclick zeroes the wheel
+          const pad = padRef.current
+          if (!pad) return
+          const r = pad.getBoundingClientRect()
+          const dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2)
+          if (Math.hypot(dx, 0) < 1.2) onChange({ r: 0, g: 0, b: 0 })
+        }}
+      >
+        {/* dimming overlay so the ring stays subtle; handle pops over it */}
+        <div className="pointer-events-none absolute inset-0 rounded-full bg-black/35" />
+        <div
+          data-nc-wheel-dot={which}
+          className="pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white/20 shadow"
+          style={{
+            left: `${50 + pos.x * 46}%`,
+            top: `${50 + pos.y * 46}%`,
+            background: pos.s > 0.02 ? `rgb(${128 + value.r * 110}, ${128 + value.g * 110}, ${128 + value.b * 110})` : 'rgba(255,255,255,0.35)',
+          }}
+        />
+        <span className="pointer-events-none absolute inset-x-0 bottom-[-16px] text-center text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {WHEEL_DEFS.find((w) => w.id === which)!.label}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/** Day 13 — lift/gamma/gain color wheels with per-wheel reset. */
+function WheelsSection({ clip }: { clip: Clip }) {
+  const updateClip = useEditor((s) => s.updateClip)
+  const [open, setOpen] = useState(false)
+  const g = clip.colorGrade ?? DEFAULT_COLOR_GRADE
+  const wheelOn = (w?: WheelColor) => !!w && (w.r !== 0 || w.g !== 0 || w.b !== 0)
+  const anyWheels = wheelOn(g.lift) || wheelOn(g.gamma) || wheelOn(g.gain)
+  const setWheel = (which: 'lift' | 'gamma' | 'gain', v: WheelColor) => {
+    // always SET the key (even zero) — applyClipPatch merges grades by spread,
+    // so a deleted key would keep the old value; normalizeColorGrade strips
+    // all-zero wheels from the stored grade
+    updateClip(clip.id, { colorGrade: { ...g, [which]: v } }, `wheel-${which}`)
+  }
+  return (
+    <CollapsibleSection
+      title="Color Wheels"
+      icon={CircleDot}
+      open={open}
+      onOpenChange={setOpen}
+      sectionId="wheels"
+      onReset={anyWheels ? () => updateClip(clip.id, { colorGrade: { ...g, lift: undefined, gamma: undefined, gain: undefined } }, true) : undefined}
+      hint="Drag inside a wheel: angle sets the hue push, distance sets the strength. Double-click a wheel to zero it."
+    >
+      <div className="grid grid-cols-3 gap-1 pb-3">
+        {WHEEL_DEFS.map((w) => (
+          <ColorWheel key={w.id} which={w.id} value={g[w.id] ?? { r: 0, g: 0, b: 0 }} onChange={(v) => setWheel(w.id, v)} />
+        ))}
+      </div>
+    </CollapsibleSection>
+  )
+}
+
 function LutSection({ clip }: { clip: Clip }) {
   const updateClip = useEditor((s) => s.updateClip)
   const media = useEditor((s) => s.media)
@@ -2360,6 +2503,7 @@ function AdjustmentPanel({ clip }: { clip: Clip }) {
       </Section>
       <GradeSection clip={clip} />
       <CurvesSection clip={clip} />
+      <WheelsSection clip={clip} />
       <LutSection clip={clip} />
       <ScopesSection />
       <Section title="Duration" icon={Timer}>
@@ -2882,6 +3026,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
         <>
           <GradeSection clip={clip} />
           <CurvesSection clip={clip} />
+          <WheelsSection clip={clip} />
           <LutSection clip={clip} />
           <ChromaSection clip={clip} />
           <ScopesSection />

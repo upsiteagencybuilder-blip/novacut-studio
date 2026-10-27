@@ -1141,3 +1141,24 @@ Stage Summary:
 - Full RGB curves editor shipped: 4 channels, add/drag/remove points, per-channel reset, engine LUT pipeline shared by preview/export, adjustment-layer composition, honest catalog flip.
 - Files: types.ts, utils.ts, engine.ts, PropertiesPanel.tsx, tools/types.ts, sections/color.ts, ProToolkitPanel.tsx.
 - Next: Day 13 — color wheels (lift/gamma/gain) + compare split view.
+
+---
+Task ID: Day-13
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 13 — Color wheels (lift/gamma/gain) + compare split view.
+
+Work Log:
+- types.ts: WheelColor {r,g,b} (−1..1 each, pads keep r+g+b≈0) + ColorGrade.lift/gamma/gain (optional, legacy-safe).
+- utils.ts applyPixelEffects: wheel pushes ride the same luminance masks as the shadows/highlights sliders but per-channel (lift m=(1−l)², gamma m=4l(1−l) bell, gain m=l²), applied after shadows/highlights before curves; hasGrade + normalizeColorGrade (sanitize, all-zero wheels dropped) + composeGrades (wheels add-clamp between clip and adjustment layers).
+- engine.ts: hasGrade wheels-aware; renderFrame refactored — visual pass extracted to renderVisual(); compare split = dual pass (graded → offscreen compareCanvas, original → main with noColorFx strip) + composite right-of-cut + divider line/handle glyph; setCompareSplit/getCompareSplit (preview-only, exports always graded); drawClip honors noColorFx (identity filters, no grade/LUT/chroma/adjustments/vision); renderVisual clears activeAdjustments under noColorFx.
+- PropertiesPanel: WheelsSection — three 74px ColorWheel pads (conic hue ring, dimmed, draggable handle with setPointerCapture, live RGB readout handle color), classic 3-way wheel math (channel = s·cos(θ±120°)), inverse padFromWheel for handle restore, dblclick zeroes a wheel, section reset, sectionId 'wheels'; mounted in the video/image pipeline + adjustment panel.
+- PreviewPane: Columns2 compare toggle in the transport (data-nc-compare-toggle, fuchsia active state) + draggable divider handle overlay on the stage (role=slider, touch-none) driving engine.setCompareSplit live.
+- Catalog: color-lift-wheel, color-gamma-wheel, color-gain-wheel, color-color-wheels, color-primary-color-wheels all flipped live with honest descriptions (offset wheel stays roadmap — disclosed in the full-set entry); +1 live color-compare-split-view; deep link open-properties-wheels.
+- E2E desktop 1280×800: gain drag → {r:.71,g:−.28,b:−.42}, r−b 29.4→36 (warm highlights); lift drag → {r:−.46,g:−.26,b:.72}, r−b → 21.1 (teal shadows vs warm highlights); dblclick zero works (after fixing the merge bug below); compare toggle → same instant left 89.4 vs right 161.2; divider drag → split 0.15 with boundary re-verified (left-of-cut 104.7 vs right 162.2); toggle off → split null, uniform render (left≠right is image gradient + fadeIn 0.6 alpha blend — verified: 161×0.833≈134≈137); playback clean; zero console errors.
+- E2E mobile 390×844: compare toggle visible in transport; Edit sheet → Color Wheels → 3 pads; gamma drag → {r:.49,g:.16,b:−.65} applied.
+- Bugs found & fixed during E2E: (1) setWheel used `delete patch[which]` but applyClipPatch merges grades by spread — deleted keys kept the old value; now always SET the key and let normalizeColorGrade strip all-zero wheels. (2) Initial renderFrame refactor left `tracks` undefined in the audio section — re-added.
+
+Stage Summary:
+- Pro 3-way color wheels + compare split shipped: wheel math, luminance-masked pixel pipeline, adjustment-layer composition, dual-pass split renderer, honest catalog flips.
+- Files: types.ts, utils.ts, engine.ts, PropertiesPanel.tsx, PreviewPane.tsx, tools/types.ts, sections/color.ts, ProToolkitPanel.tsx.
+- Next: Day 14 — built-in LUT library (procedural .cube-style tables; .cube import already exists).

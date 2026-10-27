@@ -5,7 +5,7 @@
  * Renders the project timeline onto a <canvas> and drives synced media playback.
  * Pure module: no direct store import — state arrives via a snapshot fn (see bridge hook).
  */
-import type { Clip, LutData, MediaAssetRuntime, Project, WipeShape } from './types'
+import type { Clip, ColorGrade, LutData, MediaAssetRuntime, Project, WipeShape } from './types'
 import type { OverlayDraw, VisionDraw } from '@/lib/effects/types'
 import { getEffect, getOverlayDraw } from '@/lib/effects/registry'
 import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
@@ -16,7 +16,7 @@ import { applyClipFx, buildFxChain, makeImpulse, rebuildModulation } from './aud
 import { ensurePitchModule, getPitchError } from './pitch-worklet'
 import type { AudioFxChain } from './audio-mix'
 import { drawStickerArt } from './sticker-render'
-import { CANVAS_FONT_LOAD_LIST, DEFAULT_COLOR_GRADE, MIN_CLIP_DURATION } from './constants'
+import { CANVAS_FONT_LOAD_LIST, DEFAULT_COLOR_GRADE, DEFAULT_FILTERS, MIN_CLIP_DURATION } from './constants'
 
 export interface EngineSnapshot {
   project: Project
@@ -186,6 +186,23 @@ class PreviewEngine {
   private exportScaleOverride: number | null = null
   /** timecode burn-in overlay, armed only between beginExport/endExport */
   private exportBurnIn: 'timecode' | null = null
+
+  /** Day 13 — compare split: 0..1 fraction; LEFT of the cut shows the ORIGINAL, right shows the graded frame. null = off */
+  private compareSplit: number | null = null
+  /** while true, drawClip renders with ALL color FX stripped (original look) */
+  private noColorFx = false
+  /** offscreen for the graded pass of the compare split */
+  private compareCanvas: HTMLCanvasElement | null = null
+
+  /** Toggle/retune the compare split (preview only — exports always render the graded frame) */
+  setCompareSplit(v: number | null) {
+    this.compareSplit = v == null ? null : clamp(v, 0.02, 0.98)
+    this.renderFrame()
+  }
+
+  getCompareSplit(): number | null {
+    return this.exportScaleOverride !== null ? null : this.compareSplit
+  }
 
   /** Detect device tier once and pick the adaptive preview render scale */
   initAdaptiveQuality() {
@@ -881,7 +898,9 @@ class PreviewEngine {
     if (!g) return false
     if (g.temperature !== 0 || g.tint !== 0 || g.shadows !== 0 || g.highlights !== 0 || g.vibrance !== 1) return true
     const c = g.curves
-    return !!c && [c.rgb, c.r, c.g, c.b].some((ch) => (ch?.length ?? 0) >= 2)
+    if (!!c && [c.rgb, c.r, c.g, c.b].some((ch) => (ch?.length ?? 0) >= 2)) return true
+    const wheelOn = (w?: { r: number; g: number; b: number }) => !!w && (w.r !== 0 || w.g !== 0 || w.b !== 0)
+    return wheelOn(g.lift) || wheelOn(g.gamma) || wheelOn(g.gain)
   }
 
   private needsPixelFx(clip: Clip): boolean {
@@ -1014,32 +1033,19 @@ class PreviewEngine {
 
   /* -------------------------------------------------- render */
 
-  renderFrame() {
-    const ctx = this.ctx
-    const canvas = this.canvas
-    const snap = this.snapshotFn?.()
-    if (!ctx || !canvas || !snap) return
-    const { project, mediaMap } = snap
-    this.masterVolume = snap.masterVolume
-    this.masterMuted = snap.masterMuted
-
-    // canvas backing store: project size × adaptive render scale (1 while exporting)
-    const scale = this.activeScale()
-    const bw = Math.max(1, Math.round(project.canvasWidth * scale))
-    const bh = Math.max(1, Math.round(project.canvasHeight * scale))
-    if (canvas.width !== bw || canvas.height !== bh) {
-      canvas.width = bw
-      canvas.height = bh
-    }
-    const W = project.canvasWidth
-    const H = project.canvasHeight
-    const t = this.time
-
+  /**
+   * Visual pass: background + every visible track bottom-first, including the
+   * adjustment-layer composition and transition bridges. Runs on the main
+   * canvas normally, twice when the compare split is active (graded pass into
+   * the offscreen, original pass with noColorFx on the main canvas).
+   */
+  private renderVisual(ctx: CanvasRenderingContext2D, W: number, H: number, t: number, project: Project, mediaMap: Map<string, MediaAssetRuntime>, scale: number) {
     // background (drawing happens in logical canvas space; the base transform
     // maps it onto the scaled backing store)
     ctx.setTransform(scale, 0, 0, scale, 0, 0)
     ctx.globalAlpha = 1
     ctx.filter = 'none'
+    ctx.globalCompositeOperation = 'source-over'
     ctx.fillStyle = project.backgroundColor || '#000000'
     ctx.fillRect(0, 0, W, H)
 
@@ -1049,9 +1055,9 @@ class PreviewEngine {
     // visible clip on a track BELOW theirs while their time range is active
     const trackIndex = new Map<string, number>()
     tracks.forEach((tr, i) => trackIndex.set(tr.id, i))
-    const activeAdjustments = project.clips.filter(
-      (c) => c.kind === 'adjustment' && t >= c.start - 0.0001 && t < c.start + c.duration,
-    )
+    const activeAdjustments = this.noColorFx
+      ? []
+      : project.clips.filter((c) => c.kind === 'adjustment' && t >= c.start - 0.0001 && t < c.start + c.duration)
     for (let i = tracks.length - 1; i >= 0; i--) {
       const track = tracks[i]
       if (track.kind === 'audio' || track.hidden) continue
@@ -1083,8 +1089,72 @@ class PreviewEngine {
         this.drawClip(ctx, clip, t, W, H, mediaMap, project, bridgedSuccessor ? { progress: 0 } : undefined, adj)
       }
     }
+  }
+
+  renderFrame() {
+    const ctx = this.ctx
+    const canvas = this.canvas
+    const snap = this.snapshotFn?.()
+    if (!ctx || !canvas || !snap) return
+    const { project, mediaMap } = snap
+    this.masterVolume = snap.masterVolume
+    this.masterMuted = snap.masterMuted
+
+    // canvas backing store: project size × adaptive render scale (1 while exporting)
+    const scale = this.activeScale()
+    const bw = Math.max(1, Math.round(project.canvasWidth * scale))
+    const bh = Math.max(1, Math.round(project.canvasHeight * scale))
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw
+      canvas.height = bh
+    }
+    const W = project.canvasWidth
+    const H = project.canvasHeight
+    const t = this.time
+
+    const compare = this.compareSplit != null && this.exportScaleOverride === null
+    if (compare) {
+      // ---- Day 13 compare split: two passes. The GRADED frame renders into an
+      // offscreen; the ORIGINAL (every color FX stripped) renders onto the main
+      // canvas; the graded right side is composited over, cut at the split.
+      if (!this.compareCanvas) this.compareCanvas = document.createElement('canvas')
+      const cmp = this.compareCanvas
+      if (cmp.width !== bw || cmp.height !== bh) {
+        cmp.width = bw
+        cmp.height = bh
+      }
+      const cctx = cmp.getContext('2d')!
+      cctx.setTransform(scale, 0, 0, scale, 0, 0)
+      this.renderVisual(cctx, W, H, t, project, mediaMap, scale)
+      this.noColorFx = true
+      this.renderVisual(ctx, W, H, t, project, mediaMap, scale)
+      this.noColorFx = false
+      const cut = Math.round(bw * clamp(this.compareSplit!, 0, 1))
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.filter = 'none'
+      ctx.globalAlpha = 1
+      ctx.globalCompositeOperation = 'source-over'
+      if (cut < bw) ctx.drawImage(cmp, cut, 0, bw - cut, bh, cut, 0, bw - cut, bh)
+      // divider line
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'
+      ctx.fillRect(cut - 1, 0, 2, bh)
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'
+      ctx.beginPath()
+      ctx.arc(cut, bh / 2, 9, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'
+      ctx.font = '600 10px ui-sans-serif, system-ui'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('⇔', cut, bh / 2)
+      ctx.restore()
+    } else {
+      this.renderVisual(ctx, W, H, t, project, mediaMap, scale)
+    }
 
     // audio-only clips: keep their elements in sync even though nothing is drawn
+    const tracks = project.tracks
     const anySolo = project.tracks.some((tr) => tr.solo)
     for (const track of tracks) {
       if (track.kind !== 'audio') continue
@@ -1226,13 +1296,18 @@ class PreviewEngine {
     // ---- adjustment-layer composition (Day 11): the effective filters / grade
     // are the clip's own PLUS every active adjustment above its track; LUTs
     // chain (clip's own first, then the topmost adjustment that carries one)
-    let effFilters = clip.filters
-    let effGrade = clip.colorGrade
+    // Day 13: noColorFx (compare-split original pass) strips ALL color FX —
+    // no filters, no grade, no LUT, no chroma, no adjustments
+    const noFx = this.noColorFx
+    let effFilters = noFx ? DEFAULT_FILTERS : clip.filters
+    let effGrade: ColorGrade | undefined = noFx ? undefined : clip.colorGrade
     let adjLut: LutData | null = null
     let adjLutIntensity = 1
-    if (adj.length) {
+    if (noFx) {
+      adj = []
+    } else if (adj.length) {
       let f = clip.filters
-      let g = clip.colorGrade
+      let g: ColorGrade | undefined = clip.colorGrade
       for (const a of adj) {
         f = composeFilters(f, a.filters)
         g = g ? composeGrades(g, a.colorGrade ?? DEFAULT_COLOR_GRADE) : a.colorGrade
@@ -1248,7 +1323,7 @@ class PreviewEngine {
       effGrade = g
     }
     const effClip: Clip = adj.length ? { ...clip, filters: effFilters, colorGrade: effGrade } : clip
-    const needsFx = adj.length > 0 || this.needsPixelFx(clip)
+    const needsFx = !noFx && (adj.length > 0 || this.needsPixelFx(clip))
 
     // ---- keyframe-driven transform (falls back to static transform) ----
     const kfX = evaluateKeyframeProperty(clip, 'x', tLocal)
@@ -1303,7 +1378,7 @@ class PreviewEngine {
     // Vision applies to MEDIA clips' pixels only; text/sticker draw straight to
     // the main canvas and intentionally skip vision (documented limitation).
     let vis: ActiveVision | null = null
-    if (clip.vision && (clip.kind === 'video' || clip.kind === 'image') && !adj.length) {
+    if (clip.vision && (clip.kind === 'video' || clip.kind === 'image') && !adj.length && !this.noColorFx) {
       const vi = clamp(clip.vision.intensity, 0, 1)
       if (vi > 0.001) {
         try {

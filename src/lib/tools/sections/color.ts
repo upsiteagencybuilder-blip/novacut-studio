@@ -10,16 +10,16 @@ import type { ProTool } from '../types'
 
 export const COLOR_TOOLS: ProTool[] = [
   // -------- Wheels & primaries --------
-  { id: 'color-primary-color-wheels', name: 'Primary Color Wheels', section: 'color', group: 'Wheels & primaries', status: 'beta', desc: 'Temperature, tint, shadows and highlights sliders grade primaries today' },
+  { id: 'color-primary-color-wheels', name: 'Primary Color Wheels', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Temperature/tint sliders, shadows and highlights, plus interactive lift, gamma and gain wheels with drag pads and per-wheel reset', action: 'open-properties-wheels' },
   { id: 'color-secondary-correction-tool', name: 'Secondary Color Correction Tool', section: 'color', group: 'Wheels & primaries', status: 'planned', desc: 'Isolate and correct one color range without touching the rest' },
-  { id: 'color-lift-wheel', name: 'Lift Wheel', section: 'color', group: 'Wheels & primaries', status: 'planned', desc: 'Push shadows toward a color with the lift wheel' },
-  { id: 'color-gamma-wheel', name: 'Gamma Wheel', section: 'color', group: 'Wheels & primaries', status: 'planned', desc: 'Tint midtones with the gamma color wheel' },
-  { id: 'color-gain-wheel', name: 'Gain Wheel', section: 'color', group: 'Wheels & primaries', status: 'planned', desc: 'Tint highlights with the gain color wheel' },
+  { id: 'color-lift-wheel', name: 'Lift Wheel', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Draggable lift wheel pushes shadows toward any hue — angle sets hue, radius sets strength', action: 'open-properties-wheels' },
+  { id: 'color-gamma-wheel', name: 'Gamma Wheel', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Draggable gamma wheel tints midtones with a luminance bell mask', action: 'open-properties-wheels' },
+  { id: 'color-gain-wheel', name: 'Gain Wheel', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Draggable gain wheel tints highlights; composes with the adjustment-layer wheels', action: 'open-properties-wheels' },
   { id: 'color-offset-wheel', name: 'Offset Wheel', section: 'color', group: 'Wheels & primaries', status: 'planned', desc: 'Shift the whole image with the offset wheel' },
   { id: 'color-shadows-slider', name: 'Shadows Slider', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Shadows slider in clip properties lifts or crushes shadow detail', action: 'open-properties-grade' },
   { id: 'color-midtones-slider', name: 'Midtones Slider', section: 'color', group: 'Wheels & primaries', status: 'planned', desc: 'Adjust gamma midtones independently of shadows and highlights' },
   { id: 'color-highlights-slider', name: 'Highlights Slider', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Highlights slider rolls off or boosts highlights in clip properties', action: 'open-properties-grade' },
-  { id: 'color-color-wheels', name: 'Color Wheels', section: 'color', group: 'Wheels & primaries', status: 'planned', desc: 'Full lift, gamma, gain and offset wheel set' },
+  { id: 'color-color-wheels', name: 'Color Wheels', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Lift, gamma and gain wheel pads with hue-ring backgrounds — offset wheel still on the roadmap (honest scope)', action: 'open-properties-wheels' },
   { id: 'color-color-bars', name: 'Color Bars', section: 'color', group: 'Wheels & primaries', status: 'planned', desc: 'Generate SMPTE bars for calibration and test outputs' },
   { id: 'color-log-controls', name: 'Log Controls', section: 'color', group: 'Wheels & primaries', status: 'planned', desc: 'Log-space low, mid and high controls for camera originals' },
   { id: 'color-temperature-slider', name: 'Temperature Slider', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Temperature slider warms or cools the grade in clip properties', action: 'open-properties-grade' },
@@ -29,6 +29,8 @@ export const COLOR_TOOLS: ProTool[] = [
   { id: 'color-saturation-slider', name: 'Saturation Slider', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Saturation slider controls intensity from grayscale to vivid', action: 'open-properties-filters' },
   { id: 'color-hue-slider', name: 'Hue Slider', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Hue slider rotates all colors around the wheel in properties', action: 'open-properties-filters' },
   { id: 'color-luma-slider', name: 'Luma Slider', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Brightness slider scales overall luminance in clip properties', action: 'open-properties-filters' },
+
+  { id: 'color-compare-split-view', name: 'Compare Split View', section: 'color', group: 'Scopes & monitoring', status: 'live', desc: 'Preview transport toggle renders the original left of a draggable cut and the graded frame right of it — sweep to judge a grade against source', action: 'open-properties-wheels' },
 
   // -------- Curves --------
   { id: 'color-curves-panel', name: 'Curves Panel', section: 'color', group: 'Curves', status: 'live', desc: 'Interactive RGB/R/G/B tone curves: click to add points, drag to reshape, double-click to remove — sampled to a 256-entry LUT per channel, works on clips and adjustment layers', action: 'open-properties-curves' },

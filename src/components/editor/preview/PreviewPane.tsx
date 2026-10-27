@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
+  Columns2,
   Maximize,
   Pause,
   Play,
@@ -59,6 +60,24 @@ export function PreviewPane() {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const dragRef = useRef<DragState | null>(null)
+
+  // ---- Day 13 compare split (original ⇔ graded) ----
+  const [compare, setCompare] = useState(false)
+  const [split, setSplit] = useState(0.5)
+  const splitDragRef = useRef(false)
+  const toggleCompare = () => {
+    const next = !compare
+    setCompare(next)
+    getEngine().setCompareSplit(next ? split : null)
+  }
+  const applySplitFromEvent = (clientX: number) => {
+    const stage = wrapperRef.current
+    if (!stage) return
+    const r = stage.getBoundingClientRect()
+    const v = clamp((clientX - r.left) / r.width, 0.02, 0.98)
+    setSplit(v)
+    getEngine().setCompareSplit(v)
+  }
 
   // The ONLY component allowed to mount the engine bridge.
   useEngineBridge(canvasRef)
@@ -250,6 +269,34 @@ export function PreviewPane() {
                 </span>
               </div>
             )}
+
+            {/* compare split divider (Day 13): drag to sweep the original⇔graded cut */}
+            {compare && (
+              <div
+                data-nc-compare-handle
+                role="slider"
+                aria-label="Compare split position"
+                aria-valuemin={2}
+                aria-valuemax={98}
+                aria-valuenow={Math.round(split * 100)}
+                className="absolute inset-y-0 z-20 w-6 -translate-x-1/2 cursor-ew-resize touch-none"
+                style={{ left: `${split * 100}%` }}
+                onPointerDown={(e) => {
+                  splitDragRef.current = true
+                  ;(e.target as Element).setPointerCapture?.(e.pointerId)
+                  applySplitFromEvent(e.clientX)
+                }}
+                onPointerMove={(e) => {
+                  if (splitDragRef.current) applySplitFromEvent(e.clientX)
+                }}
+                onPointerUp={() => {
+                  splitDragRef.current = false
+                }}
+                onPointerCancel={() => {
+                  splitDragRef.current = false
+                }}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -314,6 +361,18 @@ export function PreviewPane() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-8 w-8 ${compare ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'text-muted-foreground hover:text-foreground'}`}
+            title={compare ? 'Exit compare split' : 'Compare split: original ⇔ graded'}
+            aria-label={compare ? 'Exit compare split' : 'Compare split view'}
+            aria-pressed={compare}
+            data-nc-compare-toggle
+            onClick={toggleCompare}
+          >
+            <Columns2 className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"

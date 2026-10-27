@@ -190,6 +190,13 @@ export interface GradeCurves {
   b?: CurvePoint[]
 }
 
+/** Per-channel color offset for the lift/gamma/gain wheels (each -1..1, wheel pads keep r+g+b ≈ 0) */
+export interface WheelColor {
+  r: number
+  g: number
+  b: number
+}
+
 /** Pro color grade (applied per-pixel after CSS filters) */
 export interface ColorGrade {
   /** -1 (cool) .. 1 (warm) */
@@ -204,6 +211,12 @@ export interface ColorGrade {
   vibrance: number
   /** Day 12 — per-channel RGB curves (0..1 control points); optional for legacy projects */
   curves?: GradeCurves
+  /** Day 13 — lift wheel: push shadows toward a color */
+  lift?: WheelColor
+  /** Day 13 — gamma wheel: tint midtones */
+  gamma?: WheelColor
+  /** Day 13 — gain wheel: tint highlights */
+  gain?: WheelColor
 }
 
 export type BlendMode =
