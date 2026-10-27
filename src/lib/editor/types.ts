@@ -138,7 +138,7 @@ export type TextAnimation =
 export type StickerAnimation = 'none' | 'pop' | 'float' | 'spin' | 'pulse'
 
 /** Properties that can be keyframed */
-export type KeyframeProperty = 'x' | 'y' | 'scale' | 'rotation' | 'opacity' | 'volume' | 'iris'
+export type KeyframeProperty = 'x' | 'y' | 'scale' | 'rotation' | 'opacity' | 'volume' | 'iris' | 'maskX' | 'maskY' | 'maskScale'
 export type EasingType =
   | 'linear'
   | 'easeIn'
@@ -380,6 +380,22 @@ export interface NestedClipData {
   memberIds?: string[]
 }
 
+/**
+ * Day 16 — shape mask: clips the clip's own draw to a rect or ellipse in
+ * canvas space. Position (x/y) is a −1..1 offset from the canvas center (same
+ * UX as transform); w/h are fractions of the canvas dimensions; keyframes on
+ * maskX/maskY/maskScale animate the mask (scale multiplies w/h).
+ */
+export interface ClipMask {
+  shape: 'rect' | 'ellipse'
+  x: number
+  y: number
+  w: number
+  h: number
+  /** show everything OUTSIDE the shape instead */
+  invert?: boolean
+}
+
 export interface Clip {
   id: string
   trackId: string
@@ -410,6 +426,8 @@ export interface Clip {
   fit?: ClipFit
   /** normalized crop rect, null/undefined = no crop */
   crop?: CropRect | null
+  /** Day 16 — shape mask (rect/ellipse) cutting this clip's draw; null = off */
+  mask?: ClipMask | null
   /** 0..1 */
   volume: number
   muted: boolean

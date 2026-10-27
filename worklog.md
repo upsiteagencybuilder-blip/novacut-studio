@@ -1199,3 +1199,23 @@ Stage Summary:
 - Two-scope panel shipped: histogram + luma waveform, live-tracking the grade with correct engine-render ordering.
 - Files: utils.ts, PropertiesPanel.tsx, sections/color.ts.
 - Next: Day 16 — shape masks (rect/ellipse) with keyframed position/scale.
+
+---
+Task ID: Day-16
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 16 — Shape masks (rect/ellipse) with keyframed position/scale.
+
+Work Log:
+- types.ts: ClipMask {shape rect|ellipse, x/y −1..1 offset from canvas center, w/h fractions of frame, invert?} + Clip.mask? (null = off) + KeyframeProperty += maskX/maskY/maskScale.
+- utils.ts: KEYFRAME_PROPERTIES += Mask X/Y/Scale (min/max/step feed the shared curve editor); baseValueForProperty mask cases (maskX/maskY from mask, maskScale 1).
+- engine.ts drawClip: canvas-space clip path applied AFTER the wipe block and BEFORE the clip's own transform — ellipse via ctx.ellipse, rect via ctx.rect, invert via oversized outer rect + evenodd; keyframed maskX/maskY/maskScale evaluated per frame; guard radius ≥0.5px; applies to video/image/text/sticker (documented: audio/adjustment/nested skip).
+- store.ts copyAttributes/pasteAttributes: mask joins the stash (kind-gated like crop — skipped for audio).
+- PropertiesPanel MaskSection: None-state shows rect/ellipse starter chips; active state = collapsible with shape switch (aria-pressed), Pos X/Y sliders with keyframe diamonds (data-nc-mask-kf), W/H sliders, Scale slider (applies to w/h directly), Invert switch, reset-to-none; hint documents canvas-space semantics; keys appear in Animation curve editor automatically ("Mask X · 2" chip verified).
+- Catalog: +1 live vfx-shape-masks with honest note (feather stays roadmap; feather-control entry remains planned).
+- E2E desktop 1280×800: ellipse 0.6×0.6 → corners [0,0,0] (was [71,70,98]), center unchanged [160,63,150]; keyframes: maskX key @0.5 (x=0) + @2.0 (x=0.5) → seek 1.25 → interpolated x≈0.25, left edge [0,0,0] vs right-of-center [203,137,131]; invert → hole black [3,1,4], outside visible [30,26,49]; one-undo reverts invert; rect switch; mask:null → corner restored [91,85,111]; curve editor chip "Mask X · 2"; playback clean; zero console errors.
+- E2E mobile 390×844: Edit sheet → Shape Mask → ellipse tap → mask {ellipse,0,0,.6,.6} applied; playback smoke clean.
+
+Stage Summary:
+- Shape masks shipped end-to-end: data model, canvas-space engine clip path, keyframable maskX/maskY/maskScale riding the shared keyframe engine + curve editor, invert, copy/paste FX support, honest catalog.
+- Files: types.ts, utils.ts, engine.ts, store.ts, PropertiesPanel.tsx, sections/vfx.ts.
+- Next: Day 17 — chroma key v2: spill suppression + tolerance/edge UI.

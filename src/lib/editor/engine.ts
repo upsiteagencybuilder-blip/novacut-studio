@@ -1440,6 +1440,28 @@ class PreviewEngine {
       this.applyWipeMask(ctx, clip.wipe, clamp(iris, 0, 1), W, H)
     }
 
+    // ---- Day 16 shape mask: rect/ellipse hole in CANVAS space (before the
+    // clip's own transform). Position keyframes (maskX/maskY) animate the
+    // offset from center; maskScale multiplies the base w/h size.
+    const mask = clip.mask
+    if (mask && (clip.kind === 'video' || clip.kind === 'image' || clip.kind === 'text' || clip.kind === 'sticker')) {
+      const mx = evaluateKeyframeProperty(clip, 'maskX', tLocal) ?? mask.x
+      const my = evaluateKeyframeProperty(clip, 'maskY', tLocal) ?? mask.y
+      const ms = evaluateKeyframeProperty(clip, 'maskScale', tLocal) ?? 1
+      const mcx = W / 2 + mx * W
+      const mcy = H / 2 + my * H
+      const mrw = Math.max(0.5, (mask.w * W * ms) / 2)
+      const mrh = Math.max(0.5, (mask.h * H * ms) / 2)
+      ctx.beginPath()
+      if (mask.invert) ctx.rect(-W, -H, W * 3, H * 3)
+      if (mask.shape === 'ellipse') {
+        ctx.ellipse(mcx, mcy, mrw, mrh, 0, 0, Math.PI * 2)
+      } else {
+        ctx.rect(mcx - mrw, mcy - mrh, mrw * 2, mrh * 2)
+      }
+      ctx.clip(mask.invert ? 'evenodd' : 'nonzero')
+    }
+
     // motion (Ken Burns family) — all presets are deterministic functions of
     // tLocal so preview and export render identical frames
     const q = clip.duration > 0 ? clamp(tLocal / clip.duration, 0, 1) : 0

@@ -1361,6 +1361,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
         chromaKey: clip.chromaKey,
         crop: clip.crop,
         fit: clip.fit,
+        mask: clip.mask,
         overlay: clip.overlay,
         vision: clip.vision,
         audioFx: clip.audioFx,
@@ -1409,10 +1410,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
           // kind-gated groups — text style only onto text, sticker art only onto stickers
           if (a.textStyle && c.kind === 'text') next.textStyle = { ...a.textStyle }
           if (a.sticker && c.kind === 'sticker') next.sticker = { ...a.sticker }
-          // crop/fit are meaningless for audio
+          // crop/fit/mask are meaningless for audio
           if (c.kind !== 'audio') {
             if (a.crop !== undefined) next.crop = a.crop ? { ...a.crop } : null
             if (a.fit !== undefined) next.fit = a.fit
+            if (a.mask !== undefined) next.mask = a.mask ? { ...a.mask } : null
           }
           if (a.chromaKey !== undefined && (c.kind === 'video' || c.kind === 'image')) {
             next.chromaKey = a.chromaKey ? { ...a.chromaKey } : undefined

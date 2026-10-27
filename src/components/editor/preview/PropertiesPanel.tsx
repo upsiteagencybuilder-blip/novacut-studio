@@ -37,6 +37,9 @@ import {
   Sparkles,
   Spline,
   CircleDot,
+  Square,
+  SquareDashed,
+  Circle,
   Sticker,
   Strikethrough,
   Sun,
@@ -84,6 +87,7 @@ import type {
   ClipAudioFx,
   ClipKind,
   ClipFit,
+  ClipMask,
   ColorGrade,
   CurvePoint,
   EasingType,
@@ -2354,6 +2358,174 @@ function AudioFxSection({ clip }: { clip: Clip }) {
   )
 }
 
+/* ================================================================ shape mask (Day 16) */
+
+const DEFAULT_MASK: ClipMask = { shape: 'rect', x: 0, y: 0, w: 0.6, h: 0.6 }
+
+/**
+ * Day 16 — shape mask: cut the clip's draw to a rect or ellipse in canvas
+ * space. Position/size sliders, invert toggle, and keyframe diamonds for
+ * maskX / maskY / maskScale (the diamonds reuse the shared keyframe engine,
+ * so the Animation curve editor picks the tracks up automatically).
+ */
+function MaskSection({ clip }: { clip: Clip }) {
+  const updateClip = useEditor((s) => s.updateClip)
+  const currentTime = useEditor((s) => s.currentTime)
+  const addKeyframeAtPlayhead = useEditor((s) => s.addKeyframeAtPlayhead)
+  const removeKeyframe = useEditor((s) => s.removeKeyframe)
+  const [open, setOpen] = useState(false)
+  const mask = clip.mask ?? null
+
+  const patch = (p: Partial<ClipMask>, history: boolean | string = 'mask') =>
+    updateClip(clip.id, { mask: { ...DEFAULT_MASK, ...mask, ...p } }, history)
+
+  const kfAt = (prop: KeyframeProperty) => {
+    const eps = 0.5 / 30 + 0.001
+    return (clip.keyframes ?? []).find((k) => k.property === prop && Math.abs(k.time - currentTime) <= eps)
+  }
+  const anyKeys = (prop: KeyframeProperty) => (clip.keyframes ?? []).some((k) => k.property === prop)
+  const toggleKf = (prop: KeyframeProperty, label: string) => {
+    const existing = kfAt(prop)
+    if (existing) {
+      removeKeyframe(clip.id, existing.id)
+      toast(`Mask keyframe removed`)
+    } else {
+      addKeyframeAtPlayhead(clip.id, prop)
+      toast.success(`Keyframed ${label} at playhead`)
+    }
+  }
+  const kfDiamond = (prop: KeyframeProperty, label: string) => {
+    const kf = kfAt(prop)
+    const any = anyKeys(prop)
+    return (
+      <button
+        type="button"
+        title={kf ? 'Remove mask keyframe at playhead' : any ? 'Add mask keyframe at playhead' : 'Keyframe this mask property at the playhead'}
+        aria-label={kf ? `Remove ${prop} keyframe at playhead` : `Add ${prop} keyframe at playhead`}
+        aria-pressed={!!kf}
+        data-nc-mask-kf={prop}
+        onClick={() => toggleKf(prop, label)}
+        className={cn(
+          'shrink-0 rounded p-0.5 transition-colors',
+          kf ? 'text-amber-400' : any ? 'text-muted-foreground/70 hover:text-foreground' : 'text-muted-foreground/40 hover:text-foreground',
+        )}
+      >
+        <Diamond className={cn('size-3', kf && 'fill-current')} />
+      </button>
+    )
+  }
+
+  if (!mask) {
+    return (
+      <Section title="Shape Mask" icon={SquareDashed}>
+        <div className="flex gap-1.5">
+          {(['rect', 'ellipse'] as const).map((shape) => (
+            <button
+              key={shape}
+              type="button"
+              data-nc-mask-shape={shape}
+              onClick={() => updateClip(clip.id, { mask: { ...DEFAULT_MASK, shape } }, true)}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-(--nc-line) py-1.5 text-[10px] font-medium capitalize text-muted-foreground transition-colors hover:border-white/30 hover:text-foreground"
+            >
+              {shape === 'rect' ? <Square className="size-3" /> : <Circle className="size-3" />}
+              {shape}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] leading-snug text-muted-foreground/60">
+          Reveal only part of this clip through a rect or ellipse — keyframable position and scale.
+        </p>
+      </Section>
+    )
+  }
+
+  return (
+    <CollapsibleSection
+      title="Shape Mask"
+      icon={SquareDashed}
+      open={open}
+      onOpenChange={setOpen}
+      onReset={() => updateClip(clip.id, { mask: null }, true)}
+      hint="The mask lives in canvas space: X/Y offset from center, W/H as fractions of the frame, scale multiplies the size."
+    >
+      <div className="flex gap-1.5">
+        {(['rect', 'ellipse'] as const).map((shape) => (
+          <button
+            key={shape}
+            type="button"
+            data-nc-mask-shape={shape}
+            aria-pressed={mask.shape === shape}
+            onClick={() => patch({ shape }, true)}
+            className={cn(
+              'flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1.5 text-[10px] font-medium capitalize transition-colors',
+              mask.shape === shape ? 'border-fuchsia-400/60 bg-fuchsia-500/10 text-foreground' : 'border-(--nc-line) text-muted-foreground hover:border-white/30 hover:text-foreground',
+            )}
+          >
+            {shape === 'rect' ? <Square className="size-3" /> : <Circle className="size-3" />}
+            {shape}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Pos X</span>
+        {kfDiamond('maskX', 'Mask X')}
+        <Slider
+          value={[mask.x]}
+          min={-1}
+          max={1}
+          step={0.01}
+          onValueChange={([v]) => patch({ x: v }, 'mask-x')}
+          className="flex-1"
+          aria-label="Mask position X"
+        />
+        <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">{mask.x.toFixed(2)}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Pos Y</span>
+        {kfDiamond('maskY', 'Mask Y')}
+        <Slider
+          value={[mask.y]}
+          min={-1}
+          max={1}
+          step={0.01}
+          onValueChange={([v]) => patch({ y: v }, 'mask-y')}
+          className="flex-1"
+          aria-label="Mask position Y"
+        />
+        <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">{mask.y.toFixed(2)}</span>
+      </div>
+      <SliderRow label="Width" min={0.05} max={1.5} step={0.01} value={mask.w} onChange={(v) => patch({ w: v }, 'mask-w')} format={fmtPct} />
+      <SliderRow label="Height" min={0.05} max={1.5} step={0.01} value={mask.h} onChange={(v) => patch({ h: v }, 'mask-h')} format={fmtPct} />
+      <div className="flex items-center gap-1">
+        <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Scale</span>
+        {kfDiamond('maskScale', 'Mask Scale')}
+        <Slider
+          value={[1]}
+          min={0.1}
+          max={4}
+          step={0.01}
+          onValueChange={([v]) => {
+            // scale is derived live: apply it to w/h directly so it stays
+            // editable after (the diamond keys drive the animated multiply)
+            patch({ w: clamp(DEFAULT_MASK.w * v, 0.05, 1.5), h: clamp(DEFAULT_MASK.h * v, 0.05, 1.5) }, 'mask-scale')
+          }}
+          className="flex-1"
+          aria-label="Mask size scale"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Invert</span>
+        <span className="flex-1 text-[10px] text-muted-foreground/70">show outside the shape</span>
+        <Switch checked={!!mask.invert} onCheckedChange={(on) => patch({ invert: on }, true)} />
+      </div>
+      <p className="text-[10px] leading-snug text-muted-foreground/60">
+        Keyframed Mask X/Y/Scale tracks appear in Animation → curve editor too.
+      </p>
+    </CollapsibleSection>
+  )
+}
+
 function CropSection({ clip }: { clip: Clip }) {
   const project = useEditor((s) => s.project)
   const media = useEditor((s) => s.media)
@@ -2882,6 +3054,9 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
 
       {/* crop — video / image */}
       {(clip.kind === 'video' || clip.kind === 'image') && <CropSection clip={clip} />}
+
+      {/* shape mask — every visual kind (Day 16) */}
+      {(clip.kind === 'video' || clip.kind === 'image' || clip.kind === 'text' || clip.kind === 'sticker') && <MaskSection clip={clip} />}
 
       {/* animation keyframes — every clip kind */}
       <AnimationSection clip={clip} fps={project.fps} />

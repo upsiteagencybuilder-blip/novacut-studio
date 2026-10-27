@@ -269,6 +269,9 @@ export const KEYFRAME_PROPERTIES: { id: KeyframeProperty; label: string; min: nu
   { id: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, unit: '°' },
   { id: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.01 },
   { id: 'volume', label: 'Volume', min: 0, max: 1, step: 0.01 },
+  { id: 'maskX', label: 'Mask X', min: -1, max: 1, step: 0.01 },
+  { id: 'maskY', label: 'Mask Y', min: -1, max: 1, step: 0.01 },
+  { id: 'maskScale', label: 'Mask Scale', min: 0.1, max: 4, step: 0.01 },
 ]
 
 function keyframesFor(clip: Clip, property: KeyframeProperty): Keyframe[] {
@@ -310,6 +313,12 @@ export function baseValueForProperty(clip: Clip, property: KeyframeProperty): nu
       return clip.kind === 'text' || clip.kind === 'sticker' ? 0 : clip.volume
     case 'iris':
       // wipe mask progress — 1 = fully revealed (no clipping)
+      return 1
+    case 'maskX':
+      return clip.mask?.x ?? 0
+    case 'maskY':
+      return clip.mask?.y ?? 0
+    case 'maskScale':
       return 1
   }
 }

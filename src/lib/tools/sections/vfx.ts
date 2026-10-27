@@ -20,6 +20,7 @@ export const VFX_TOOLS: ProTool[] = [
   { id: 'vfx-matte-choker', name: 'Matte Choker', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Choke or grow matte edges to remove fringing' },
 
   // -------- Roto & masks --------
+  { id: 'vfx-shape-masks', name: 'Shape Masks (Rect / Ellipse)', section: 'vfx', group: 'Roto & masks', status: 'live', desc: 'Cut a clip to a rect or ellipse in canvas space with keyframable position and scale plus invert — keys ride the shared curve editor; feather stays roadmap', action: 'open-properties-transform' },
   { id: 'vfx-feather-control', name: 'Feather Control', section: 'vfx', group: 'Roto & masks', status: 'planned', desc: 'Soften mask edges with adjustable feather falloff' },
   { id: 'vfx-roto-brush-tool', name: 'Roto Brush Tool', section: 'vfx', group: 'Roto & masks', status: 'planned', desc: 'Paint a stroke and let propagation build the matte' },
   { id: 'vfx-planar-tracker', name: 'Planar Tracker', section: 'vfx', group: 'Roto & masks', status: 'planned', desc: 'Track planar surfaces to pin screens and signs' },
