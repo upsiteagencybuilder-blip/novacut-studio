@@ -1,4 +1,4 @@
-import type { ChromaKey, Clip, ColorGrade, EasingType, Filters, Keyframe, KeyframeProperty, LutData, Project, RampEase, SpeedRampPoint } from './types'
+import type { ChromaKey, Clip, ColorGrade, CurvePoint, EasingType, Filters, Keyframe, KeyframeProperty, LutData, Project, RampEase, SpeedRampPoint } from './types'
 
 export function uid(prefix = ''): string {
   return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`
@@ -126,16 +126,45 @@ export function normalizeFilters(input: unknown): Filters {
 
 /**
  * Coerce persisted/patched color-grade data into the strict ColorGrade
- * contract (missing keys, out-of-range values, NaN).
+ * contract (missing keys, out-of-range values, NaN). Curves sanitize
+ * per channel: finite + clamped points, sorted by x, dropped when < 2.
  */
 export function normalizeColorGrade(input: unknown): ColorGrade {
   const src = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>
-  const out = {} as Record<keyof ColorGrade, number>
-  for (const key of Object.keys(GRADE_RANGE_TABLE) as (keyof ColorGrade)[]) {
+  const out = {
+    temperature: 0,
+    tint: 0,
+    shadows: 0,
+    highlights: 0,
+    vibrance: 1,
+  } as ColorGrade
+  for (const key of Object.keys(GRADE_RANGE_TABLE) as (keyof typeof GRADE_RANGE_TABLE)[]) {
     const [min, max] = GRADE_RANGE_TABLE[key]
     const v = Number(src[key])
     const neutral = key === 'vibrance' ? 1 : 0
     out[key] = Number.isFinite(v) ? clamp(v, min, max) : neutral
+  }
+  const rawCurves = (src.curves ?? null) as Partial<Record<'rgb' | 'r' | 'g' | 'b', unknown>> | null
+  if (rawCurves && typeof rawCurves === 'object') {
+    const curves: NonNullable<ColorGrade['curves']> = {}
+    let any = false
+    for (const ch of ['rgb', 'r', 'g', 'b'] as const) {
+      const arr = Array.isArray(rawCurves[ch]) ? (rawCurves[ch] as unknown[]) : []
+      const pts: CurvePoint[] = []
+      for (const p of arr) {
+        const o = (typeof p === 'object' && p !== null ? p : {}) as Record<string, unknown>
+        const x = Number(o.x)
+        const y = Number(o.y)
+        if (Number.isFinite(x) && Number.isFinite(y)) pts.push({ x: clamp(x, 0, 1), y: clamp(y, 0, 1) })
+      }
+      if (pts.length >= 1) {
+        // >=1 kept: single points are in-progress drafts (engine treats <2 as
+        // identity); they survive so the second click completes the pair
+        curves[ch] = pts.sort((a, b) => a.x - b.x)
+        any = true
+      }
+    }
+    if (any) out.curves = curves
   }
   return out
 }
@@ -337,7 +366,11 @@ export function applyPixelEffects(
 ): boolean {
   const chroma = opts.chroma?.enabled ? opts.chroma : null
   const grade = opts.grade
-  const hasGrade = !!grade && (grade.temperature !== 0 || grade.tint !== 0 || grade.shadows !== 0 || grade.highlights !== 0 || grade.vibrance !== 1)
+  const curves = grade?.curves
+  const hasCurves = !!curves && [curves.rgb, curves.r, curves.g, curves.b].some((c) => (c?.length ?? 0) >= 2)
+  const hasGrade =
+    !!grade &&
+    (grade.temperature !== 0 || grade.tint !== 0 || grade.shadows !== 0 || grade.highlights !== 0 || grade.vibrance !== 1 || hasCurves)
   const lut = opts.lut && opts.lut.table.length ? opts.lut : null
   const lutMix = lut ? clamp(opts.lutIntensity ?? 1, 0, 1) : 0
   const lut2 = opts.lut2 && opts.lut2.table.length ? opts.lut2 : null
@@ -362,6 +395,11 @@ export function applyPixelEffects(
   const lut2Size = lut2?.size ?? 0
   const lut2Max = lut2Size - 1
   const lut2Table = lut2?.table
+  // Day 12 — RGB curves: 256-entry 8-bit LUTs per channel, applied after grade
+  const rgbLut = hasCurves ? buildCurveLut(curves!.rgb) : null
+  const rLut = hasCurves ? buildCurveLut(curves!.r) : null
+  const gLut = hasCurves ? buildCurveLut(curves!.g) : null
+  const bLut = hasCurves ? buildCurveLut(curves!.b) : null
 
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue
@@ -420,6 +458,18 @@ export function applyPixelEffects(
       }
     }
 
+    if (hasCurves) {
+      // master curve first, then per-channel (DaVinci-style order)
+      if (rgbLut) {
+        r = rgbLut[Math.round(r)]
+        g = rgbLut[Math.round(g)]
+        b = rgbLut[Math.round(b)]
+      }
+      if (rLut) r = rLut[Math.round(r)]
+      if (gLut) g = gLut[Math.round(g)]
+      if (bLut) b = bLut[Math.round(b)]
+    }
+
     if (lut && lutSize >= 2) {
       // cube LUT: red fastest, then green, then blue
       const ri = Math.round((r / 255) * lutMax)
@@ -449,6 +499,59 @@ export function applyPixelEffects(
   return true
 }
 
+/* ---------------- RGB curves (Day 12) ---------------- */
+
+/**
+ * Evaluate a piecewise-linear 0..1 curve at x (points sorted by x, clamped ends).
+ */
+export function evalCurveAt(points: CurvePoint[], x: number): number {
+  if (points.length === 0) return x
+  if (points.length === 1) return x <= points[0].x ? points[0].y : points[0].y
+  const pts = points
+  if (x <= pts[0].x) return pts[0].y
+  if (x >= pts[pts.length - 1].x) return pts[pts.length - 1].y
+  let s = 0
+  while (s < pts.length - 2 && x > pts[s + 1].x) s++
+  const p0 = pts[s]
+  const p1 = pts[s + 1]
+  const t = p1.x - p0.x < 1e-6 ? 0 : (x - p0.x) / (p1.x - p0.x)
+  return p0.y + (p1.y - p0.y) * t
+}
+
+/**
+ * Build a 256-entry 8-bit LUT from normalized 0..1 control points.
+ * Piecewise-linear between points; clamped outside the point range.
+ * Returns null when the channel is identity (< 2 points or all y≈x).
+ */
+export function buildCurveLut(points?: CurvePoint[]): Uint8Array | null {
+  if (!points || points.length < 2) return null
+  const lut = new Uint8Array(256)
+  let changed = false
+  for (let i = 0; i < 256; i++) {
+    const v = Math.round(clamp(evalCurveAt(points, i / 255), 0, 1) * 255)
+    lut[i] = v
+    if (v !== i) changed = true
+  }
+  return changed ? lut : null
+}
+
+/**
+ * Compose two curve chains (adjustment over clip): out(x) = b(a(x)),
+ * re-sampled into a 17-point piecewise-linear approximation.
+ */
+function composeCurves(a?: CurvePoint[], b?: CurvePoint[]): CurvePoint[] | undefined {
+  if (!a?.length && !b?.length) return undefined
+  if (!a?.length) return b
+  if (!b?.length) return a
+  const N = 16
+  const pts: CurvePoint[] = []
+  for (let i = 0; i <= N; i++) {
+    const x = i / N
+    pts.push({ x, y: clamp(evalCurveAt(b, evalCurveAt(a, x)), 0, 1) })
+  }
+  return pts
+}
+
 /* ---------------- FX composition (adjustment layers, Day 11) ---------------- */
 
 /**
@@ -470,15 +573,26 @@ export function composeFilters(a: Filters, b: Filters): Filters {
 
 /**
  * Compose the base clip's pro grade with an adjustment layer's grade.
- * Every channel adds and clamps into its own range (1 = neutral vibrance).
+ * Every channel adds and clamps into its own range (1 = neutral vibrance);
+ * curves compose as function chains (adjustment applies AFTER the clip's own).
  */
 export function composeGrades(a: ColorGrade, b: ColorGrade): ColorGrade {
+  const curves: ColorGrade['curves'] = {}
+  let hasCurves = false
+  for (const ch of ['rgb', 'r', 'g', 'b'] as const) {
+    const composed = composeCurves(a.curves?.[ch], b.curves?.[ch])
+    if (composed) {
+      curves[ch] = composed
+      hasCurves = true
+    }
+  }
   return {
     temperature: clamp(a.temperature + b.temperature, -1, 1),
     tint: clamp(a.tint + b.tint, -1, 1),
     shadows: clamp(a.shadows + b.shadows, -1, 1),
     highlights: clamp(a.highlights + b.highlights, -1, 1),
     vibrance: clamp(a.vibrance + b.vibrance - 1, 0, 2),
+    ...(hasCurves ? { curves } : {}),
   }
 }
 

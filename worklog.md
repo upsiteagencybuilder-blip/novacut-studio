@@ -1121,3 +1121,23 @@ Stage Summary:
 - Adjustment layers shipped end-to-end: data model, composition math, engine pass (preview + export share it), timeline identity, dedicated inspector, honest catalog entry with deep link. Compounds honestly excluded (group guard + session guard).
 - Category B Day 11 complete. Files: types.ts, utils.ts, engine.ts, store.ts, PropertiesPanel.tsx, ClipBlock.tsx, TimelineToolbar.tsx, tools/types.ts, sections/timeline.ts, ProToolkitPanel.tsx.
 - Next: Day 12 — RGB curves editor.
+
+---
+Task ID: Day-12
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 12 — Color grading: RGB curves editor.
+
+Work Log:
+- types.ts: CurvePoint {x,y} (0..1) + GradeCurves {rgb/r/g/b} + ColorGrade.curves? (legacy-safe optional).
+- utils.ts: evalCurveAt (piecewise-linear, clamped ends), buildCurveLut (256-entry 8-bit per channel, null when identity), composeCurves (adjustment-over-clip function chains re-sampled at 17 points) wired into composeGrades; applyPixelEffects gains hasCurves detection + master→per-channel LUT application (DaVinci order, after grade before cube LUT); normalizeColorGrade sanitizes curves (finite, clamped, x-sorted; ≥1 point kept so in-progress drafts survive the updateClip normalize pass — found via E2E when the store stripped single-point drafts and the second click started from empty).
+- engine.ts hasGrade: curves presence now routes clips through the pixel-FX pass.
+- PropertiesPanel: CurvesSection — channel chips (RGB/R/G/B with point counts, data-nc-curve-ch), interactive SVG graph (click adds sorted point, drag dots with neighbor-clamped x, dblclick removes, Reset per channel, reset-all when any curve active), sampled 24-segment path, quarter grid + identity diagonal, sectionId 'curves' deep link; mounted in the video/image pipeline AND the adjustment panel (adjustment curves compose onto every clip below via composeGrades).
+- Catalog: color-curves-panel flipped planned→live with honest description + action open-properties-curves (tools/types + ProToolkitPanel + PropsSectionId).
+- E2E desktop 1280×800: two clicks → rgb pts exactly [(0.25,0.20),(0.80,0.80)], avg 96.2→112.3; R channel clicks → pts [(0.30,0.15),(0.75,0.80)], r−b 22.2; dot drag → y 0.149→0.448, r−b 60.4, one undo reverts to 0.1493 exact; dblclick removes → 1-pt draft; Reset R clears channel, RGB kept; playback clean; console clean (the two empty ✗ entries were HMR-unload noise).
+- E2E mobile 390×844: Edit sheet → Curves expands → two taps add points to the existing rgb curve (4 pts total, avg 162.3), state continuity from desktop proven.
+- Debug note: React synthetic events cannot be triggered via element.__reactProps direct calls to VERIFY state (handler ran fine; the real bug was normalizeColorGrade). SVG pointer interactions need scrollIntoView on mobile sheets.
+
+Stage Summary:
+- Full RGB curves editor shipped: 4 channels, add/drag/remove points, per-channel reset, engine LUT pipeline shared by preview/export, adjustment-layer composition, honest catalog flip.
+- Files: types.ts, utils.ts, engine.ts, PropertiesPanel.tsx, tools/types.ts, sections/color.ts, ProToolkitPanel.tsx.
+- Next: Day 13 — color wheels (lift/gamma/gain) + compare split view.

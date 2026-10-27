@@ -31,7 +31,7 @@ export const COLOR_TOOLS: ProTool[] = [
   { id: 'color-luma-slider', name: 'Luma Slider', section: 'color', group: 'Wheels & primaries', status: 'live', desc: 'Brightness slider scales overall luminance in clip properties', action: 'open-properties-filters' },
 
   // -------- Curves --------
-  { id: 'color-curves-panel', name: 'Curves Panel', section: 'color', group: 'Curves', status: 'planned', desc: 'Adjust tone and color by bending interactive curves' },
+  { id: 'color-curves-panel', name: 'Curves Panel', section: 'color', group: 'Curves', status: 'live', desc: 'Interactive RGB/R/G/B tone curves: click to add points, drag to reshape, double-click to remove — sampled to a 256-entry LUT per channel, works on clips and adjustment layers', action: 'open-properties-curves' },
   { id: 'color-custom-curves-rgb', name: 'Custom Curves (RGB)', section: 'color', group: 'Curves', status: 'planned', desc: 'Bend red, green and blue channels independently with spline points' },
   { id: 'color-hue-vs-hue-curve', name: 'Hue vs Hue Curve', section: 'color', group: 'Curves', status: 'planned', desc: 'Shift specific hues to other hues along the curve' },
   { id: 'color-hue-vs-sat-curve', name: 'Hue vs Sat Curve', section: 'color', group: 'Curves', status: 'planned', desc: 'Boost or drain saturation for chosen hues only' },

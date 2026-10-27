@@ -35,6 +35,7 @@ import {
   SlidersHorizontal,
   Snowflake,
   Sparkles,
+  Spline,
   Sticker,
   Strikethrough,
   Sun,
@@ -62,7 +63,7 @@ import {
   TEXT_FONTS,
   TRANSFORM_PRESETS_KEY,
 } from '@/lib/editor/constants'
-import { clamp, computeHistogram, defaultSpeedRamp, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
+import { clamp, computeHistogram, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
 import { KeyframeCurveEditor } from '@/components/editor/preview/KeyframeCurve'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -82,6 +83,7 @@ import type {
   ClipKind,
   ClipFit,
   ColorGrade,
+  CurvePoint,
   EasingType,
   Filters,
   Keyframe,
@@ -187,7 +189,7 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform' | 'adjustment'
+export type PropsSectionId = 'filters' | 'grade' | 'curves' | 'lut' | 'scopes' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform' | 'adjustment'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
@@ -1540,6 +1542,199 @@ function GradeSection({ clip }: { clip: Clip }) {
   )
 }
 
+/* ================================================================ RGB curves (Day 12) */
+
+const CURVE_CHANNELS: { id: 'rgb' | 'r' | 'g' | 'b'; label: string; color: string }[] = [
+  { id: 'rgb', label: 'RGB', color: '#e5e7eb' },
+  { id: 'r', label: 'R', color: '#fb7185' },
+  { id: 'g', label: 'G', color: '#4ade80' },
+  { id: 'b', label: 'B', color: '#38bdf8' },
+]
+
+/**
+ * Day 12 — RGB curves editor: one interactive channel at a time (RGB/R/G/B).
+ * Click empty graph = add a control point, drag dots = reshape (x stays sorted),
+ * double-click a dot = remove it, chip × = reset the channel. Points are
+ * normalized 0..1; the engine samples them into a 256-entry LUT per channel.
+ */
+function CurvesSection({ clip }: { clip: Clip }) {
+  const updateClip = useEditor((s) => s.updateClip)
+  const [open, setOpen] = useState(false)
+  const [channel, setChannel] = useState<'rgb' | 'r' | 'g' | 'b'>('rgb')
+  const dragRef = useRef<number | null>(null)
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const g = clip.colorGrade ?? DEFAULT_COLOR_GRADE
+  const points = useMemo(() => g.curves?.[channel] ?? [], [g.curves, channel])
+  const activeColor = CURVE_CHANNELS.find((c) => c.id === channel)!.color
+  const anyCurves = !!g.curves && Object.values(g.curves).some((c) => (c?.length ?? 0) >= 2)
+
+  const setPoints = (pts: CurvePoint[]) => {
+    const curves: NonNullable<ColorGrade['curves']> = { ...(g.curves ?? {}) }
+    // 1-point channels are kept as drafts (engine treats <2 points as identity);
+    // 0 points clears the channel entirely
+    if (pts.length === 0) delete curves[channel]
+    else curves[channel] = pts
+    const hasAny = Object.values(curves).some((c) => (c?.length ?? 0) >= 1)
+    updateClip(clip.id, { colorGrade: { ...g, curves: hasAny ? curves : undefined } }, `curves-${channel}`)
+  }
+
+  const svgPoint = (e: { clientX: number; clientY: number }): CurvePoint | null => {
+    const svg = svgRef.current
+    if (!svg) return null
+    const r = svg.getBoundingClientRect()
+    return {
+      x: clamp((e.clientX - r.left) / r.width, 0, 1),
+      y: clamp(1 - (e.clientY - r.top) / r.height, 0, 1),
+    }
+  }
+
+  const onSvgDown = (e: React.PointerEvent) => {
+    const p = svgPoint(e)
+    if (!p) return
+    // near an existing dot? let its own handler grab the drag instead
+    const near = points.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) < 0.05)
+    if (near !== -1) {
+      dragRef.current = near
+      ;(e.target as Element).setPointerCapture?.(e.pointerId)
+      return
+    }
+    // add a point into the sorted position
+    const pts = [...points, p].sort((a, b) => a.x - b.x)
+    setPoints(pts)
+    dragRef.current = pts.findIndex((q) => q === p)
+  }
+
+  const onSvgMove = (e: React.PointerEvent) => {
+    const i = dragRef.current
+    if (i == null) return
+    const p = svgPoint(e)
+    if (!p) return
+    const pts = [...points]
+    // keep x sorted between neighbours (min 0.01 gap)
+    const minX = i === 0 ? 0 : pts[i - 1].x + 0.01
+    const maxX = i === pts.length - 1 ? 1 : pts[i + 1].x - 0.01
+    pts[i] = { x: clamp(p.x, minX, Math.max(minX, maxX)), y: p.y }
+    setPoints(pts)
+  }
+
+  const onSvgUp = () => {
+    dragRef.current = null
+  }
+
+  const onSvgDblClick = (e: React.MouseEvent) => {
+    const p = svgPoint(e)
+    if (!p) return
+    const near = points.findIndex((q) => Math.hypot(q.x - p.x, q.y - p.y) < 0.05)
+    if (near !== -1) setPoints(points.filter((_, idx) => idx !== near))
+  }
+
+  // polyline path sampled through the curve evaluator (smooth 24 segments)
+  const path = useMemo(() => {
+    if (points.length < 2) return 'M0,1 L1,0' // identity diagonal (svg y is flipped)
+    return Array.from({ length: 25 }, (_, i) => {
+      const x = i / 24
+      const y = evalCurveAt(points, x)
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(3)},${(1 - y).toFixed(3)}`
+    }).join(' ')
+  }, [points])
+
+  return (
+    <CollapsibleSection
+      title="Curves"
+      icon={Spline}
+      open={open}
+      onOpenChange={setOpen}
+      sectionId="curves"
+      onReset={anyCurves ? () => updateClip(clip.id, { colorGrade: { ...g, curves: undefined } }, true) : undefined}
+      hint="Bend a channel's tone curve: click the graph to add points, drag to reshape, double-click a point to remove it."
+    >
+      <div className="flex gap-1" role="tablist" aria-label="Curve channel">
+        {CURVE_CHANNELS.map((c) => {
+          const count = g.curves?.[c.id]?.length ?? 0
+          return (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={channel === c.id}
+              data-nc-curve-ch={c.id}
+              onClick={() => setChannel(c.id)}
+              className={cn(
+                'flex-1 rounded-md border px-1 py-1 text-[10px] font-semibold transition-colors',
+                channel === c.id ? 'border-white/30 bg-white/10 text-foreground' : 'border-transparent text-muted-foreground hover:bg-white/5',
+              )}
+              style={channel === c.id ? { color: c.color } : undefined}
+            >
+              {c.label}
+              {count >= 2 ? ` ·${count}` : ''}
+            </button>
+          )
+        })}
+      </div>
+
+      <svg
+        ref={svgRef}
+        viewBox="0 0 1 1"
+        preserveAspectRatio="none"
+        data-nc-curve-svg={channel}
+        className="h-36 w-full cursor-crosshair touch-none rounded-lg border border-(--nc-line) bg-black/50"
+        onPointerDown={onSvgDown}
+        onPointerMove={onSvgMove}
+        onPointerUp={onSvgUp}
+        onPointerCancel={onSvgUp}
+        onDoubleClick={onSvgDblClick}
+        role="application"
+        aria-label={`${channel} tone curve editor`}
+      >
+        {/* quarter grid */}
+        {[0.25, 0.5, 0.75].map((v) => (
+          <line key={`v${v}`} x1={v} y1={0} x2={v} y2={1} stroke="rgba(255,255,255,0.08)" strokeWidth={0.005} vectorEffect="non-scaling-stroke" />
+        ))}
+        {[0.25, 0.5, 0.75].map((v) => (
+          <line key={`h${v}`} x1={0} y1={v} x2={1} y2={v} stroke="rgba(255,255,255,0.08)" strokeWidth={0.005} vectorEffect="non-scaling-stroke" />
+        ))}
+        {/* identity diagonal */}
+        <line x1={0} y1={1} x2={1} y2={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="0.03 0.03" strokeWidth={0.005} vectorEffect="non-scaling-stroke" />
+        {/* the curve */}
+        <path d={path} fill="none" stroke={activeColor} strokeWidth={0.012} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+        {/* control points */}
+        {points.map((p, i) => (
+          <circle
+            key={i}
+            cx={p.x}
+            cy={1 - p.y}
+            r={0.035}
+            fill={activeColor}
+            stroke="rgba(0,0,0,0.7)"
+            strokeWidth={0.008}
+            vectorEffect="non-scaling-stroke"
+            data-nc-curve-dot={i}
+            className="cursor-grab"
+          >
+            <title>{`Point ${i + 1} — in ${Math.round(p.x * 100)}% · out ${Math.round(p.y * 100)}% (double-click to remove)`}</title>
+          </circle>
+        ))}
+      </svg>
+
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground/60">
+        <span>
+          {points.length < 2
+            ? 'Tap the graph to place two points'
+            : `${points.length} points · in→out ${Math.round(points[0].y * 100)}%→${Math.round(points[points.length - 1].y * 100)}%`}
+        </span>
+        <button
+          type="button"
+          className="rounded px-1.5 py-0.5 hover:bg-white/10 hover:text-foreground disabled:opacity-40"
+          disabled={points.length === 0}
+          onClick={() => setPoints([])}
+        >
+          Reset {channel.toUpperCase()}
+        </button>
+      </div>
+    </CollapsibleSection>
+  )
+}
+
 function LutSection({ clip }: { clip: Clip }) {
   const updateClip = useEditor((s) => s.updateClip)
   const media = useEditor((s) => s.media)
@@ -2164,6 +2359,7 @@ function AdjustmentPanel({ clip }: { clip: Clip }) {
         />
       </Section>
       <GradeSection clip={clip} />
+      <CurvesSection clip={clip} />
       <LutSection clip={clip} />
       <ScopesSection />
       <Section title="Duration" icon={Timer}>
@@ -2685,6 +2881,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
       {(clip.kind === 'video' || clip.kind === 'image') && (
         <>
           <GradeSection clip={clip} />
+          <CurvesSection clip={clip} />
           <LutSection clip={clip} />
           <ChromaSection clip={clip} />
           <ScopesSection />

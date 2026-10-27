@@ -176,6 +176,20 @@ export interface ChromaKey {
   smoothness: number
 }
 
+/** One control point of an RGB-curve channel (normalized 0..1 space, sorted by x) */
+export interface CurvePoint {
+  x: number
+  y: number
+}
+
+/** Per-channel curve sets — any channel with fewer than 2 points is identity */
+export interface GradeCurves {
+  rgb?: CurvePoint[]
+  r?: CurvePoint[]
+  g?: CurvePoint[]
+  b?: CurvePoint[]
+}
+
 /** Pro color grade (applied per-pixel after CSS filters) */
 export interface ColorGrade {
   /** -1 (cool) .. 1 (warm) */
@@ -188,6 +202,8 @@ export interface ColorGrade {
   highlights: number
   /** 0..2 vibrance (smart saturation), 1 = neutral */
   vibrance: number
+  /** Day 12 — per-channel RGB curves (0..1 control points); optional for legacy projects */
+  curves?: GradeCurves
 }
 
 export type BlendMode =

@@ -878,7 +878,10 @@ class PreviewEngine {
 
   private hasGrade(clip: Clip): boolean {
     const g = clip.colorGrade
-    return !!g && (g.temperature !== 0 || g.tint !== 0 || g.shadows !== 0 || g.highlights !== 0 || g.vibrance !== 1)
+    if (!g) return false
+    if (g.temperature !== 0 || g.tint !== 0 || g.shadows !== 0 || g.highlights !== 0 || g.vibrance !== 1) return true
+    const c = g.curves
+    return !!c && [c.rgb, c.r, c.g, c.b].some((ch) => (ch?.length ?? 0) >= 2)
   }
 
   private needsPixelFx(clip: Clip): boolean {

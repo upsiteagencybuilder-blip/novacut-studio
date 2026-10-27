@@ -123,6 +123,7 @@ function useToolAction() {
       'open-properties-audiofx': () => openPropsSection('audiofx'),
       'open-properties-transform': () => openPropsSection('transform'),
       'open-properties-adjustment': () => openPropsSection('adjustment'),
+      'open-properties-curves': () => openPropsSection('curves'),
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])
