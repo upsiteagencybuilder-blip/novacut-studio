@@ -1256,3 +1256,21 @@ Stage Summary:
 - One-tap background removal shipped: real detection math, tuned chroma patch, honest labeling everywhere (button hint, catalog, toast), full editability after.
 - Files: bg-detect.ts (new), store.ts, PropertiesPanel.tsx, tools/types.ts, sections/ai.ts, ProToolkitPanel.tsx.
 - Next: Day 19 — overlay pack gallery (light leaks, film grain, vignette presets).
+
+---
+Task ID: Day-19
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 19 — Overlay pack gallery: light leaks, film grain, vignette presets.
+
+Work Log:
+- NEW src/lib/effects/packs.ts: six curated packs (Light Leaks 12, Film Grain 9, Vignette 11, Retro Broadcast 8, Atmosphere 16, Camera FX 18) resolved FROM the live registry by draw kind / particle variant — zero fake effects; members are the exact OverlayEffect objects the engine, favorites and recents already use. Pack swatches are composite CSS previews of the family look.
+- EffectsPanel: 'packs' joins CategoryFilter with a 📦 Packs chip (count 6) placed after All/Favorites/Recent; pack-list view = 2-col cards (swatch header, emoji+name, desc, member-count badge, data-nc-pack-card ids) with the search box filtering packs by name/desc; opening a pack shows a back button, pack header card (name/desc/swatch, "N overlays") and the member grid reusing renderCard — so favorites stars, active rings, one-tap apply/retap-remove and the Active overlay intensity slider all work inside packs for free. Empty-state + explainer line included; leaving the category closes the open pack.
+- Catalog: +1 live filter-overlay-pack-gallery (action open-effects-packs); filter-light-leaks + filter-film-grain-overlays descs updated to reference their packs (grain stays beta — scratches remain roadmap, honest).
+- Deep link: ToolAction += 'open-effects-packs' wired through ProToolkitPanel openEffectsCategory('packs') — the existing mount-race-safe request flag path.
+- E2E desktop 1280×800: 6 pack cards render; Light Leaks opens with 12 members; UI apply of "Light Leak Corner · Amber" → clip.overlay {overlay-leak-01, 0.7} and frame-mean brightness 115.96 → 124.46 (+8.50, screen-blend bloom); undo pops the removal correctly; Active overlay slider (Radix [role=slider]) present; search "grain" filters the pack list to Film Grain only; "Grain Film · Strong" applied via UI → {overlay-grain-06, 0.78}; Pro toolkit "Overlay Pack Gallery" deep link lands on Effects tab with Packs active and 6 cards; playback clean; zero console errors.
+- E2E mobile 390×844: bottom nav → Effects → Packs chip → 6 cards → Vignette pack → "Vignette Cine · Deep" tap → {overlay-vignette-11, 0.9}, corner pixel [16,16,22] (near-black = vignette cutting); playback smoke clean; zero errors.
+
+Stage Summary:
+- Overlay Pack Gallery shipped: six curated bundles over the real 90-overlay registry, one-tap apply with full favorites/recents/intensity integration, honest catalog with a new live entry + deep link.
+- Files: packs.ts (new), EffectsPanel.tsx, tools/types.ts, sections/filters.ts, ProToolkitPanel.tsx.
+- Next: Day 20 — blend preset gallery + Category B audit + first color/filters SOON batch flip.

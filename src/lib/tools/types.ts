@@ -23,6 +23,7 @@ export type ToolAction =
   | 'open-stickers'
   | 'open-effects'
   | 'open-effects-color'
+  | 'open-effects-packs'
   | 'open-audio'
   | 'open-ai'
   | 'open-mixer'

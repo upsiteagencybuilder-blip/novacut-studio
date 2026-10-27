@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
+  ArrowLeft,
   ArrowRight,
   AudioLines,
   Check,
@@ -42,6 +43,7 @@ import {
   saveIdList,
   toggleIdInList,
 } from '@/lib/effects/favorites'
+import { OVERLAY_PACKS, getOverlayPack } from '@/lib/effects/packs'
 import { EFFECT_COUNTS, TOTAL_EFFECTS, getEffect, searchEffects } from '@/lib/effects/registry'
 import { previewVoiceEffect, renderVoiceToWav, stopVoicePreview } from '@/lib/effects/voice'
 import type {
@@ -66,13 +68,14 @@ import { round2, uid } from '@/lib/editor/utils'
 import type { Clip, ColorGrade, Filters, MotionType, TextStyle } from '@/lib/editor/types'
 import { cn } from '@/lib/utils'
 
-type CategoryFilter = EffectCategory | 'all' | 'favorites' | 'recent'
+type CategoryFilter = EffectCategory | 'all' | 'favorites' | 'recent' | 'packs'
 
 /** Cards rendered per page — keeps 220+ result sets smooth on low-end phones */
 const PAGE_SIZE = 60
 
 const CATEGORY_CHIPS: Array<{ id: CategoryFilter; label: string; emoji: string; count: number }> = [
   // 'all', 'favorites' and 'recent' are prepended dynamically (live counts)
+  { id: 'packs', label: 'Packs', emoji: '📦', count: OVERLAY_PACKS.length },
   { id: 'color', label: 'Color', emoji: '🎨', count: EFFECT_COUNTS.color },
   { id: 'transition', label: 'Transitions', emoji: '🎬', count: EFFECT_COUNTS.transition },
   { id: 'text', label: 'Text', emoji: '🔤', count: EFFECT_COUNTS.text },
@@ -641,6 +644,7 @@ export function EffectsPanel() {
   const [category, setCategory] = useState<CategoryFilter>('all')
   const [search, setSearch] = useState('')
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [packId, setPackId] = useState<string | null>(null)
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [addingId, setAddingId] = useState<string | null>(null)
@@ -707,10 +711,13 @@ export function EffectsPanel() {
     }
   }, [])
 
-  // new filter context → back to the first page
+  // new filter context → back to the first page; leaving Packs closes the open pack
   useEffect(() => {
     setVisibleCount(PAGE_SIZE)
   }, [category, search])
+  useEffect(() => {
+    if (category !== 'packs') setPackId(null)
+  }, [category])
 
   const chips = useMemo(
     () => [
@@ -723,6 +730,7 @@ export function EffectsPanel() {
   )
 
   const results = useMemo(() => {
+    if (category === 'packs') return [] // packs render their own gallery, not the flat grid
     if (category === 'favorites' || category === 'recent') {
       const ids = category === 'favorites' ? favorites : recent
       return ids
@@ -1494,8 +1502,92 @@ export function EffectsPanel() {
         })}
       </div>
 
+      {/* ---------- overlay pack gallery (curated bundles of the 90 canvas overlays) ---------- */}
+      {category === 'packs' && (() => {
+        const q = search.trim().toLowerCase()
+        const packs = q
+          ? OVERLAY_PACKS.filter((p) => p.name.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q))
+          : OVERLAY_PACKS
+        const openPack = packId ? getOverlayPack(packId) : undefined
+        return (
+          <>
+            {openPack ? (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPackId(null)}
+                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:bg-(--nc-panel-strong) hover:text-foreground"
+                  >
+                    <ArrowLeft className="size-3.5" /> All packs
+                  </button>
+                  <span className="text-[10px] tabular-nums text-muted-foreground">{openPack.members.length} overlays</span>
+                </div>
+                <div className="nc-glass space-y-1.5 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base" aria-hidden>{openPack.emoji}</span>
+                    <span className="text-xs font-semibold text-foreground/95">{openPack.name}</span>
+                  </div>
+                  <p className="text-[10px] leading-snug text-muted-foreground">{openPack.desc}</p>
+                  <span
+                    className="block h-10 w-full rounded-md border border-(--nc-line)"
+                    style={{ background: openPack.swatch }}
+                    aria-hidden
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">{openPack.members.map(renderCard)}</div>
+              </>
+            ) : (
+              <>
+                {packs.length === 0 ? (
+                  <div className="flex flex-col items-center px-4 py-10 text-center">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-(--nc-line) bg-(--nc-panel)">
+                      <SearchX className="size-5 text-fuchsia-300" />
+                    </span>
+                    <p className="mt-3 text-sm font-medium">No packs match</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Try a different search.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {packs.map((pack) => (
+                      <button
+                        key={pack.id}
+                        type="button"
+                        data-nc-pack-card={pack.id}
+                        title={pack.desc}
+                        onClick={() => setPackId(pack.id)}
+                        className="group relative overflow-hidden rounded-lg border border-(--nc-line) bg-(--nc-panel) text-left outline-none transition hover:border-fuchsia-400/60 focus-visible:ring-2 focus-visible:ring-(--nc-accent)"
+                      >
+                        <span
+                          className="block h-16 w-full border-b border-(--nc-line) transition group-hover:opacity-90"
+                          style={{ background: pack.swatch }}
+                          aria-hidden
+                        />
+                        <span className="block px-2 pt-1.5 text-[11px] font-semibold text-foreground/95">
+                          <span aria-hidden className="mr-1">{pack.emoji}</span>
+                          {pack.name}
+                        </span>
+                        <span className="block line-clamp-2 px-2 pb-1 pt-0.5 text-[9px] leading-snug text-muted-foreground">
+                          {pack.desc}
+                        </span>
+                        <span className="absolute right-1.5 top-1.5 rounded-full bg-black/45 px-1.5 py-0.5 text-[9px] font-semibold tabular-nums text-white/90 backdrop-blur-sm">
+                          {pack.members.length}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[10px] leading-snug text-muted-foreground/80">
+                  Curated bundles of the {EFFECT_COUNTS.overlay} canvas overlays — tap a pack, then tap a card to apply it to the selected clip. Intensity and removal live in the Active overlay card below.
+                </p>
+              </>
+            )}
+          </>
+        )
+      })()}
+
       {/* ---------- effects grid ---------- */}
-      {results.length === 0 ? (
+      {category !== 'packs' && results.length === 0 ? (
         <div className="flex flex-col items-center px-4 py-10 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-(--nc-line) bg-(--nc-panel)">
             <SearchX className="size-5 text-fuchsia-300" />
@@ -1523,7 +1615,7 @@ export function EffectsPanel() {
             </Button>
           )}
         </div>
-      ) : (
+      ) : category !== 'packs' ? (
         <>
           <div className="grid grid-cols-3 gap-1.5">{visible.map(renderCard)}</div>
           {visibleCount < results.length && (
@@ -1537,7 +1629,7 @@ export function EffectsPanel() {
             </Button>
           )}
         </>
-      )}
+      ) : null}
 
       {/* transitions rewrite transform keyframes on both clips — always disclose */}
       {category === 'transition' && results.length > 0 && (

@@ -100,6 +100,7 @@ function useToolAction() {
       'open-stickers': () => setPanelTab('stickers'),
       'open-effects': () => setPanelTab('effects'),
       'open-effects-color': () => openEffectsCategory('color'),
+      'open-effects-packs': () => openEffectsCategory('packs'),
       'open-audio': () => setPanelTab('audio'),
       'open-ai': (tool) => {
         setAiSubTab(AI_SUBTAB_BY_TOOL[tool.id] ?? 'assistant')

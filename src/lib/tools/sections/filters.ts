@@ -57,9 +57,10 @@ export const FILTERS_TOOLS: ProTool[] = [
 
   // -------- Overlay packs --------
   { id: 'filter-filters-library', name: 'Filters Library', section: 'filters', group: 'Overlay packs', status: 'live', desc: 'Effects browser collects every effect category with search', action: 'open-effects' },
+  { id: 'filter-overlay-pack-gallery', name: 'Overlay Pack Gallery', section: 'filters', group: 'Overlay packs', status: 'live', desc: 'Six curated packs bundle the ninety canvas overlays into one-tap look families', action: 'open-effects-packs' },
   { id: 'filter-overlays-library', name: 'Overlays Library', section: 'filters', group: 'Overlay packs', status: 'live', desc: 'Ninety canvas overlays from vignettes to zoom pulses', action: 'open-effects' },
-  { id: 'filter-light-leaks', name: 'Light Leaks & Lens Flare Overlays', section: 'filters', group: 'Overlay packs', status: 'live', desc: 'Twelve light leak overlays sweep and flicker in four hues' },
-  { id: 'filter-film-grain-overlays', name: 'Film Grain & Scratches Overlays', section: 'filters', group: 'Overlay packs', status: 'beta', desc: 'Grain overlays (fine/film/heavy) ship today, scratch layers stay roadmap' },
+  { id: 'filter-light-leaks', name: 'Light Leaks & Lens Flare Overlays', section: 'filters', group: 'Overlay packs', status: 'live', desc: 'Twelve light leak overlays sweep and flicker in four hues, curated in the Light Leaks pack', action: 'open-effects-packs' },
+  { id: 'filter-film-grain-overlays', name: 'Film Grain & Scratches Overlays', section: 'filters', group: 'Overlay packs', status: 'beta', desc: 'Grain overlays (fine/film/heavy) ship in the Film Grain pack, scratch layers stay roadmap', action: 'open-effects-packs' },
   { id: 'filter-rain-snow-overlays', name: 'Rain & Snow Overlays', section: 'filters', group: 'Overlay packs', status: 'live', desc: 'Particle overlays render rain, snow, dust and bubbles', action: 'open-effects' },
   { id: 'filter-boris-newblue-panel', name: 'Boris FX & NewBlueFX Panel', section: 'filters', group: 'Overlay packs', status: 'planned', desc: 'Third-party plugin suites for specialty looks remain roadmap' },
 ]
