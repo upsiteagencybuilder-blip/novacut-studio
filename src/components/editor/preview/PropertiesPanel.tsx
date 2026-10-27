@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import {
   Activity,
   AlignCenter,
@@ -1416,24 +1416,165 @@ function AnimationSection({ clip, fps }: { clip: Clip; fps: number }) {
   )
 }
 
+/**
+ * Day 20 — blend preset gallery. Curated named looks + every canvas mode
+ * grouped by family, each with a REAL CSS mix-blend-mode preview (base
+ * gradient + top gradient composited live by the browser — the same
+ * compositing the engine does, so the swatch shows the honest result).
+ */
+const BLEND_LOOKS: Array<{ id: string; name: string; blend: BlendMode; base: string; top: string; desc: string }> = [
+  {
+    id: 'look-double-exposure',
+    name: 'Double Exposure',
+    blend: 'screen',
+    base: 'linear-gradient(135deg,#0b1220,#334155)',
+    top: 'radial-gradient(circle at 62% 38%, rgba(251,191,36,0.95), rgba(251,146,60,0.35) 55%, transparent 78%)',
+    desc: 'Bright layer blooms through — leaks, smoke, flares',
+  },
+  {
+    id: 'look-ink-shadow',
+    name: 'Ink Shadow',
+    blend: 'multiply',
+    base: 'linear-gradient(135deg,#fde68a,#f59e0b)',
+    top: 'linear-gradient(135deg,#1e293b,#0f172a)',
+    desc: 'Top layer inks the base darker — shadow comps',
+  },
+  {
+    id: 'look-film-burn',
+    name: 'Film Burn',
+    blend: 'lighter',
+    base: 'linear-gradient(135deg,#1c1917,#44403c)',
+    top: 'radial-gradient(circle at 30% 70%, rgba(249,115,22,0.9), transparent 62%)',
+    desc: 'True additive glow — burns without clipping hue',
+  },
+  {
+    id: 'look-soft-contrast',
+    name: 'Soft Contrast',
+    blend: 'soft-light',
+    base: 'linear-gradient(135deg,#64748b,#94a3b8)',
+    top: 'radial-gradient(circle at 50% 45%, rgba(255,255,255,0.85), rgba(15,23,42,0.55) 78%)',
+    desc: 'Gentle photographic lift — texture and atmosphere',
+  },
+  {
+    id: 'look-invert-pop',
+    name: 'Invert Pop',
+    blend: 'difference',
+    base: 'linear-gradient(135deg,#22d3ee,#0ea5e9)',
+    top: 'linear-gradient(135deg,#f472b6,#a855f7)',
+    desc: 'Channel-wise inversion — glitch looks, alignment',
+  },
+  {
+    id: 'look-color-transfer',
+    name: 'Color Transfer',
+    blend: 'color',
+    base: 'linear-gradient(135deg,#e2e8f0,#94a3b8)',
+    top: 'linear-gradient(135deg,#f97316,#ec4899)',
+    desc: 'Borrows hue + chroma, keeps base luminance detail',
+  },
+]
+
+/** every canvas blend mode grouped the way grade tools present them */
+const BLEND_FAMILIES: Array<{ label: string; modes: BlendMode[] }> = [
+  { label: 'Normal', modes: ['source-over'] },
+  { label: 'Darken', modes: ['multiply', 'darken', 'color-burn'] },
+  { label: 'Lighten', modes: ['screen', 'lighten', 'color-dodge', 'lighter'] },
+  { label: 'Contrast', modes: ['overlay', 'soft-light', 'hard-light'] },
+  { label: 'Comparative', modes: ['difference', 'exclusion'] },
+  { label: 'Color', modes: ['hue', 'saturation', 'color', 'luminosity'] },
+]
+
+/** shared demo gradients for the per-mode chips — one base + one top so families stay comparable */
+const BLEND_CHIP_BASE = 'linear-gradient(135deg,#cbd5e1,#64748b)'
+const BLEND_CHIP_TOP = 'linear-gradient(135deg,#f97316,#7c3aed)'
+
+/** canvas → CSS blend naming ('lighter' is canvas-only; CSS calls it plus-lighter) */
+function cssBlend(mode: BlendMode): CSSProperties['mixBlendMode'] {
+  if (mode === 'lighter') return 'plus-lighter'
+  if (mode === 'source-over') return 'normal'
+  return mode
+}
+
+function BlendSwatch({ base, top, blend, className }: { base: string; top: string; blend: BlendMode; className?: string }) {
+  return (
+    <span
+      className={cn('relative block overflow-hidden rounded-md border border-(--nc-line)', className)}
+      style={{ background: base }}
+      aria-hidden
+    >
+      <span className="absolute inset-0" style={{ background: top, mixBlendMode: cssBlend(blend) }} />
+    </span>
+  )
+}
+
 function BlendSection({ clip }: { clip: Clip }) {
   const updateClip = useEditor((s) => s.updateClip)
   const [open, setOpen] = useState(false)
+  const current = clip.blendMode ?? 'source-over'
+  const apply = (mode: BlendMode) => updateClip(clip.id, { blendMode: mode }, `blend-${clip.id}`)
   return (
     <CollapsibleSection title="Blend Mode" icon={Blend} open={open} onOpenChange={setOpen}>
-      <SelectRow
-        label="Mode"
-        value={clip.blendMode ?? 'source-over'}
-        onChange={(v) => updateClip(clip.id, { blendMode: v as BlendMode }, `blend-${clip.id}`)}
-      >
-        {BLEND_MODES.map((b) => (
-          <SelectItem key={b.id} value={b.id} className="text-xs">
-            {b.label}
-          </SelectItem>
+      {/* curated looks */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {BLEND_LOOKS.map((look) => {
+          const active = current === look.blend
+          return (
+            <button
+              key={look.id}
+              type="button"
+              data-nc-blend-look={look.id}
+              title={look.desc}
+              aria-pressed={active}
+              onClick={() => apply(look.blend)}
+              className={cn(
+                'rounded-lg border p-1.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-(--nc-accent)',
+                active
+                  ? 'border-(--nc-accent) bg-(--nc-panel-strong) ring-1 ring-(--nc-accent)'
+                  : 'border-(--nc-line) bg-(--nc-panel) hover:border-fuchsia-400/60'
+              )}
+            >
+              <BlendSwatch base={look.base} top={look.top} blend={look.blend} className="h-12 w-full" />
+              <span className="mt-1 block truncate text-[10px] font-semibold text-foreground/95">{look.name}</span>
+              <span className="block truncate text-[9px] leading-tight text-muted-foreground">{look.desc}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* every mode, grouped by family */}
+      <div className="space-y-1.5">
+        {BLEND_FAMILIES.map((fam) => (
+          <div key={fam.label}>
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/70">{fam.label}</p>
+            <div className="mt-0.5 flex flex-wrap gap-1">
+              {fam.modes.map((mode) => {
+                const label = BLEND_MODES.find((b) => b.id === mode)?.label ?? mode
+                const active = current === mode
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    data-nc-blend-mode={mode}
+                    title={label}
+                    aria-pressed={active}
+                    onClick={() => apply(mode)}
+                    className={cn(
+                      'flex h-7 items-center gap-1 rounded-full border pl-0.5 pr-2 text-[10px] outline-none transition focus-visible:ring-2 focus-visible:ring-(--nc-accent)',
+                      active
+                        ? 'border-(--nc-accent) bg-(--nc-panel-strong) font-semibold text-foreground ring-1 ring-(--nc-accent)'
+                        : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:border-fuchsia-400/50 hover:text-foreground'
+                    )}
+                  >
+                    <BlendSwatch base={BLEND_CHIP_BASE} top={BLEND_CHIP_TOP} blend={mode} className="h-5 w-5 rounded-full" />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         ))}
-      </SelectRow>
+      </div>
       <p className="text-[10px] leading-snug text-muted-foreground/60">
-        How this clip composites over the layers beneath it.
+        How this clip composites over the layers beneath it — swatches are live mix-blend-mode previews. Tap Normal to reset.
       </p>
     </CollapsibleSection>
   )

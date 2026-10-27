@@ -34,7 +34,7 @@ export const COLOR_TOOLS: ProTool[] = [
 
   // -------- Curves --------
   { id: 'color-curves-panel', name: 'Curves Panel', section: 'color', group: 'Curves', status: 'live', desc: 'Interactive RGB/R/G/B tone curves: click to add points, drag to reshape, double-click to remove — sampled to a 256-entry LUT per channel, works on clips and adjustment layers', action: 'open-properties-curves' },
-  { id: 'color-custom-curves-rgb', name: 'Custom Curves (RGB)', section: 'color', group: 'Curves', status: 'planned', desc: 'Bend red, green and blue channels independently with spline points' },
+  { id: 'color-custom-curves-rgb', name: 'Custom Curves (RGB)', section: 'color', group: 'Curves', status: 'live', desc: 'Bend master, red, green and blue channels with click-to-add points and draggable curve dots — sampled to a 256-entry LUT per channel', action: 'open-properties-curves' },
   { id: 'color-hue-vs-hue-curve', name: 'Hue vs Hue Curve', section: 'color', group: 'Curves', status: 'planned', desc: 'Shift specific hues to other hues along the curve' },
   { id: 'color-hue-vs-sat-curve', name: 'Hue vs Sat Curve', section: 'color', group: 'Curves', status: 'planned', desc: 'Boost or drain saturation for chosen hues only' },
   { id: 'color-hue-vs-luma-curve', name: 'Hue vs Luma Curve', section: 'color', group: 'Curves', status: 'planned', desc: 'Darken or lift specific hues along the luma curve' },

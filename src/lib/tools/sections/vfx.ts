@@ -32,18 +32,18 @@ export const VFX_TOOLS: ProTool[] = [
   { id: 'vfx-mask-feather-slider', name: 'Mask Feather Slider', section: 'vfx', group: 'Roto & masks', status: 'planned', desc: 'Feather each mask edge with a numeric slider' },
 
   // -------- Blending modes --------
-  { id: 'vfx-blending-modes', name: 'Blending Modes', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Fifteen canvas blend modes in clip properties composite via the engine' },
-  { id: 'vfx-normal-mode', name: 'Normal Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Default source-over compositing, the Normal entry in the dropdown' },
+  { id: 'vfx-blending-modes', name: 'Blending Modes', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Blend gallery in clip properties: live mix-blend-mode preview swatches for every canvas mode plus six curated looks' },
+  { id: 'vfx-normal-mode', name: 'Normal Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Default source-over compositing, the Normal entry in the blend gallery' },
   { id: 'vfx-dissolve-mode', name: 'Dissolve Mode', section: 'vfx', group: 'Blending modes', status: 'planned', desc: 'Randomly dither pixels between layers by opacity' },
-  { id: 'vfx-darken-mode', name: 'Darken Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Darken in the blend dropdown to keep the darker pixels' },
-  { id: 'vfx-multiply-mode', name: 'Multiply Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Multiply in the blend dropdown to darken like ink layers' },
+  { id: 'vfx-darken-mode', name: 'Darken Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Darken in the blend gallery to keep the darker pixels' },
+  { id: 'vfx-multiply-mode', name: 'Multiply Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Multiply in the blend gallery to darken like ink layers' },
   { id: 'vfx-color-burn-mode', name: 'Color Burn Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Color Burn for high-contrast darkening of the base' },
   { id: 'vfx-linear-burn-mode', name: 'Linear Burn Mode', section: 'vfx', group: 'Blending modes', status: 'planned', desc: 'Subtractive darkening without the burn contrast curve' },
   { id: 'vfx-darker-color-mode', name: 'Darker Color Mode', section: 'vfx', group: 'Blending modes', status: 'planned', desc: 'Keep the darker color per pixel, not per channel' },
-  { id: 'vfx-lighten-mode', name: 'Lighten Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Lighten in the blend dropdown to keep brighter pixels' },
+  { id: 'vfx-lighten-mode', name: 'Lighten Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Lighten in the blend gallery to keep brighter pixels' },
   { id: 'vfx-screen-mode', name: 'Screen Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Screen for glows, smoke and light leak comps' },
   { id: 'vfx-color-dodge-mode', name: 'Color Dodge Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Color Dodge for bright, blown-out glow comps' },
-  { id: 'vfx-linear-dodge-mode', name: 'Linear Dodge Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Linear Dodge (Add) in the blend dropdown for true additive glow comps' },
+  { id: 'vfx-linear-dodge-mode', name: 'Linear Dodge Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Linear Dodge (Add) in the blend gallery for true additive glow comps' },
   { id: 'vfx-lighter-color-mode', name: 'Lighter Color Mode', section: 'vfx', group: 'Blending modes', status: 'planned', desc: 'Keep the lighter color per pixel, not per channel' },
   { id: 'vfx-overlay-mode', name: 'Overlay Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Overlay to boost contrast while keeping midtones' },
   { id: 'vfx-soft-light-mode', name: 'Soft Light Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Soft Light for a gentle photographic contrast lift' },
@@ -62,7 +62,7 @@ export const VFX_TOOLS: ProTool[] = [
   { id: 'vfx-luminosity-mode', name: 'Luminosity Mode', section: 'vfx', group: 'Blending modes', status: 'live', desc: 'Pick Luminosity to borrow brightness while keeping color' },
 
   // -------- Layers & animation --------
-  { id: 'vfx-adjustment-layer', name: 'Adjustment Layer', section: 'vfx', group: 'Layers & animation', status: 'planned', desc: 'One layer whose effects apply to everything underneath' },
+  { id: 'vfx-adjustment-layer', name: 'Adjustment Layer', section: 'vfx', group: 'Layers & animation', status: 'live', desc: 'One invisible FX carrier whose filters, grade, curves and LUTs apply to every clip below while active', action: 'open-properties-adjustment' },
   { id: 'vfx-solid-color-layer', name: 'Solid Color Layer', section: 'vfx', group: 'Layers & animation', status: 'planned', desc: 'Generate flat color solids as comp backdrops' },
   { id: 'vfx-null-object', name: 'Null Object', section: 'vfx', group: 'Layers & animation', status: 'planned', desc: 'Invisible rig layer that drives other layer transforms' },
   { id: 'vfx-parenting-link', name: 'Parenting Link', section: 'vfx', group: 'Layers & animation', status: 'planned', desc: 'Parent layers so children inherit transforms hierarchically' },

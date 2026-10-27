@@ -1274,3 +1274,20 @@ Stage Summary:
 - Overlay Pack Gallery shipped: six curated bundles over the real 90-overlay registry, one-tap apply with full favorites/recents/intensity integration, honest catalog with a new live entry + deep link.
 - Files: packs.ts (new), EffectsPanel.tsx, tools/types.ts, sections/filters.ts, ProToolkitPanel.tsx.
 - Next: Day 20 — blend preset gallery + Category B audit + first color/filters SOON batch flip.
+
+---
+Task ID: Day-20
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 20 — Blend preset gallery + Category B audit; first color/filters SOON batch flip.
+
+Work Log:
+- BlendSection rebuilt as a preset gallery: 6 curated BLEND_LOOKS (Double Exposure/screen, Ink Shadow/multiply, Film Burn/lighter, Soft Contrast/soft-light, Invert Pop/difference, Color Transfer/color) each with a REAL CSS mix-blend-mode live swatch (base+top gradients composited by the browser — canvas 'lighter' mapped to CSS 'plus-lighter', 'source-over' to 'normal'); plus all 17 canvas modes grouped into 6 families (Normal/Darken/Lighten/Contrast/Comparative/Color) as chips with mini live swatches; one-tap apply with active ring + aria-pressed; tap Normal to reset. Replaces the bare dropdown; data-nc-blend-look / data-nc-blend-mode hooks.
+- Catalog honest flips (first SOON batch): color-custom-curves-rgb planned→live (Day 12 shipped master+R/G/B curves; desc now says click-to-add points + draggable dots, deep link open-properties-curves); vfx-adjustment-layer planned→live (Day 11 shipped the FX carrier; desc names filters/grade/curves/LUTs, deep link open-properties-adjustment); vfx-blending-modes + vfx-normal-mode descs now describe the blend gallery.
+- Category B regression audit (Days 11–19 + 20), desktop 1280×800: D11 adjustment layer 117.70→192.10 mean; D12 RGB curve lift 117.70→139.70 (clean re-run after catching my own vibrance:0 patch bug — audit hygiene); D13 wheels bidirectional r-b warm 44.90 / base 38.29 / cool 30.68 (clamped-highlight image, monotonic); D14 mono-silver LUT triple-verified — bun unit test [161,65,152]→[92,92,92] spread 0, engine fx-canvas center [76,76,76] via runtime monkey-patch, screenshot visually grayscale (earlier "colorful" probes were text-glow/sticker pixels + stale coords — measurement lesson logged, NO regression); D15 histogram+waveform tabs/canvases; D16 ellipse mask corner [0,0,0] center raw; D17 sky key 99.9% through at sim .4 on sampled #eb9e50; D18 auto-bg detection #6a6789 dark 4.9%→23.1% via the real button; D19 packs (verified in Day-19 session + re-opened); D20 blend gallery 6 looks + 17 modes, Ink Shadow multiply 127.4→11.5 over bg, swatch computed mixBlendMode=multiply, undo/difference-chip/active-ring/Normal-reset.
+- E2E mobile 390×844: inspector sheet Blend Mode opens with 6 looks + 17 modes; Double Exposure tap → blendMode screen; Effects sheet → Packs → 6 cards; zero console errors both viewports.
+- Debug note: added nothing to the engine — QA reached it through the existing window.__ncEngineInstance handle; drawThroughFx/needsPixelFx confirmed correct at runtime.
+
+Stage Summary:
+- Category B (Visual FX & Color, Days 11–20) COMPLETE: adjustment layers, RGB curves, wheels+compare, LUTs, scopes, masks, chroma v2, auto bg removal, overlay packs, blend gallery — all live with honest catalog entries; first SOON batch flipped (custom curves RGB + adjustment layer).
+- Files: PropertiesPanel.tsx, sections/color.ts, sections/vfx.ts.
+- Next: Day 21 — Category C audio suite begins.
