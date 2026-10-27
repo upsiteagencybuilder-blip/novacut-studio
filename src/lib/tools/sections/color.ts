@@ -67,6 +67,7 @@ export const COLOR_TOOLS: ProTool[] = [
 
   // -------- LUTs & color management --------
   { id: 'color-input-lut-dropdown', name: 'Input LUT Dropdown', section: 'color', group: 'LUTs & color management', status: 'live', desc: 'Import .cube LUTs in the media panel, then pick one per clip', action: 'open-properties-lut' },
+  { id: 'color-builtin-lut-library', name: 'Built-in LUT Library', section: 'color', group: 'LUTs & color management', status: 'live', desc: 'Ten procedural cinematic looks (Teal & Orange, Warm Film, Cool Noir, Vintage Fade, Punchy HDR, Sun-Kissed, Cyber Night, Forest Green, Bleach Bypass, Mono Silver) as real 3D tables — one tap, mixable with intensity', action: 'open-properties-lut' },
   { id: 'color-output-lut-dropdown', name: 'Output LUT Dropdown', section: 'color', group: 'LUTs & color management', status: 'planned', desc: 'Apply a display LUT at the output stage of the grade' },
   { id: 'color-3d-lut-creator', name: '3D LUT Creator', section: 'color', group: 'LUTs & color management', status: 'planned', desc: 'Author and export custom .cube LUTs from a grade' },
   { id: 'color-cst', name: 'Color Space Transform (CST)', section: 'color', group: 'LUTs & color management', status: 'planned', desc: 'Convert footage between camera log and working color spaces' },

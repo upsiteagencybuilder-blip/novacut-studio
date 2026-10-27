@@ -1162,3 +1162,22 @@ Stage Summary:
 - Pro 3-way color wheels + compare split shipped: wheel math, luminance-masked pixel pipeline, adjustment-layer composition, dual-pass split renderer, honest catalog flips.
 - Files: types.ts, utils.ts, engine.ts, PropertiesPanel.tsx, PreviewPane.tsx, tools/types.ts, sections/color.ts, ProToolkitPanel.tsx.
 - Next: Day 14 — built-in LUT library (procedural .cube-style tables; .cube import already exists).
+
+---
+Task ID: Day-14
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category B Day 14 — Built-in LUT library (.cube import already shipped pre-roadmap; today = the library).
+
+Work Log:
+- NEW src/lib/editor/builtin-luts.ts: ten procedural cinematic looks (Teal & Orange, Warm Film, Cool Noir, Vintage Fade, Punchy HDR, Sun-Kissed, Cyber Night, Forest Green, Bleach Bypass, Mono Silver) as real 3D LUT tables — each a per-look color transform sampled over an 8³ grid (512 entries, red-fastest order matching the engine lookup), swatch css-filter previews; getBuiltinLutData resolves `builtin:<id>`.
+- engine.ts getLut: builtin: ids resolve through the generated tables (lutCache shared with imported LUTs) — same pixel-fx path, intensity mix, export path, and adjustment-layer lut2 chaining all work unchanged.
+- PropertiesPanel LutSection rebuilt: 4-col built-in chip grid (gradient swatch + filter preview + active ring, data-nc-lut-chip, tap-to-apply/tap-again-to-clear in one undo), imported .cube dropdown below (when any), Mix slider, "Active:" readout; empty-state removed (library always present).
+- Catalog: +1 live color-builtin-lut-library with honest scope note (import .cube was already live).
+- E2E desktop 1280×800: 10 chips render; Teal & Orange → lutId builtin:teal-orange, b>g teal push [113,89,98]; Mono Silver → image pixels EXACTLY mono ([100,100,100], [35,34,35], [107,107,107] — the one colorful center pixel is the demo TEXT overlay, which intentionally skips the pixel-fx pass); Mix 0.5 → partial blend [112,95,93]; Punchy → contrast look avg 93.5; chip re-tap clears → base 97.6 exact; undo restores the LUT.
+- E2E mobile 390×844: Edit sheet → LUT chips → Cyber Night tap → lutId set, magenta-shifted pixel [176,103,122]; playback smoke clean; zero console errors.
+- Debug notes: (1) a `document.querySelector('canvas')` read hit the SCOPES histogram canvas, not the preview — use engine sampleFrame for pixel receipts; (2) agent-browser `set viewport` does NOT survive `reload` — re-set after reloads; (3) sampleFrame dimensions follow canvas aspect (96×54 at 16:9), not square.
+
+Stage Summary:
+- Built-in LUT library shipped: 10 procedural looks over the existing engine path, chips on desktop + mobile, honest catalog.
+- Files: builtin-luts.ts (new), engine.ts, PropertiesPanel.tsx, sections/color.ts.
+- Next: Day 15 — scopes: luma waveform joining the histogram.

@@ -16,6 +16,7 @@ import { applyClipFx, buildFxChain, makeImpulse, rebuildModulation } from './aud
 import { ensurePitchModule, getPitchError } from './pitch-worklet'
 import type { AudioFxChain } from './audio-mix'
 import { drawStickerArt } from './sticker-render'
+import { getBuiltinLutData } from './builtin-luts'
 import { CANVAS_FONT_LOAD_LIST, DEFAULT_COLOR_GRADE, DEFAULT_FILTERS, MIN_CLIP_DURATION } from './constants'
 
 export interface EngineSnapshot {
@@ -911,8 +912,14 @@ class PreviewEngine {
   private getLut(clip: Clip, mediaMap: Map<string, MediaAssetRuntime>): LutData | null {
     if (!clip.lutId) return null
     if (this.lutCache.has(clip.lutId)) return this.lutCache.get(clip.lutId) ?? null
-    const asset = mediaMap.get(clip.lutId)
-    const lut = asset?.lutData ?? null
+    // Day 14 — built-in procedural LUTs resolve without media assets
+    let lut: LutData | null = null
+    if (clip.lutId.startsWith('builtin:')) {
+      lut = getBuiltinLutData(clip.lutId)
+    } else {
+      const asset = mediaMap.get(clip.lutId)
+      lut = asset?.lutData ?? null
+    }
     this.lutCache.set(clip.lutId, lut)
     return lut
   }

@@ -65,6 +65,7 @@ import {
   TRANSFORM_PRESETS_KEY,
 } from '@/lib/editor/constants'
 import { clamp, computeHistogram, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
+import { BUILTIN_LUTS } from '@/lib/editor/builtin-luts'
 import { KeyframeCurveEditor } from '@/components/editor/preview/KeyframeCurve'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -1883,40 +1884,82 @@ function LutSection({ clip }: { clip: Clip }) {
   const media = useEditor((s) => s.media)
   const [open, setOpen] = useState(false)
   const luts = useMemo(() => media.filter((m) => m.kind === 'lut'), [media])
+  const isBuiltin = !!clip.lutId?.startsWith('builtin:')
+  const importedName = !isBuiltin && clip.lutId ? luts.find((l) => l.id === clip.lutId)?.name : null
   return (
-    <CollapsibleSection title="LUT" icon={Sparkles} open={open} onOpenChange={setOpen} sectionId="lut">
-      {luts.length === 0 ? (
-        <p className="text-[10px] leading-snug text-muted-foreground/60">
-          No LUTs yet — import a .cube file from the Media panel.
-        </p>
-      ) : (
-        <>
-          <SelectRow
-            label="LUT"
-            value={clip.lutId ?? 'none'}
-            onChange={(v) => updateClip(clip.id, { lutId: v === 'none' ? null : v }, true)}
-          >
-            <SelectItem value="none" className="text-xs">
-              None
-            </SelectItem>
-            {luts.map((l) => (
-              <SelectItem key={l.id} value={l.id} className="text-xs">
+    <CollapsibleSection
+      title="LUT"
+      icon={Sparkles}
+      open={open}
+      onOpenChange={setOpen}
+      sectionId="lut"
+      hint="Built-in looks are procedural 3D tables — same engine path as imported .cube files, mixable with the intensity slider."
+    >
+      {/* built-in library (Day 14) */}
+      <div className="grid grid-cols-4 gap-1.5" data-nc-builtin-luts>
+        {BUILTIN_LUTS.map((l) => {
+          const active = clip.lutId === `builtin:${l.id}`
+          return (
+            <button
+              key={l.id}
+              type="button"
+              data-nc-lut-chip={l.id}
+              title={l.name}
+              aria-pressed={active}
+              onClick={() => updateClip(clip.id, { lutId: active ? null : `builtin:${l.id}`, lutIntensity: 1 }, true)}
+              className={cn(
+                'group flex flex-col items-center gap-1 rounded-lg border p-1 transition-colors',
+                active ? 'border-fuchsia-400/70 bg-fuchsia-500/10' : 'border-(--nc-line) hover:border-white/25',
+              )}
+            >
+              <span
+                className="h-7 w-full rounded"
+                style={{
+                  background:
+                    'linear-gradient(120deg, #ff9a56 0%, #ffd56b 38%, #7ad0ff 100%)',
+                  filter: l.swatch,
+                }}
+              />
+              <span className="w-full truncate text-center text-[8.5px] leading-tight text-muted-foreground group-hover:text-foreground">
                 {l.name}
-              </SelectItem>
-            ))}
-          </SelectRow>
-          {clip.lutId && (
-            <SliderRow
-              label="Mix"
-              min={0}
-              max={1}
-              step={0.01}
-              value={clip.lutIntensity ?? 1}
-              onChange={(v) => updateClip(clip.id, { lutIntensity: v }, `lut-int-${clip.id}`)}
-              format={fmtPct}
-            />
-          )}
-        </>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {luts.length > 0 && (
+        <SelectRow
+          label="Imported"
+          value={isBuiltin || !clip.lutId ? 'none' : clip.lutId}
+          onChange={(v) => updateClip(clip.id, { lutId: v === 'none' ? null : v }, true)}
+        >
+          <SelectItem value="none" className="text-xs">
+            None
+          </SelectItem>
+          {luts.map((l) => (
+            <SelectItem key={l.id} value={l.id} className="text-xs">
+              {l.name}
+            </SelectItem>
+          ))}
+        </SelectRow>
+      )}
+
+      {clip.lutId && (
+        <SliderRow
+          label="Mix"
+          min={0}
+          max={1}
+          step={0.01}
+          value={clip.lutIntensity ?? 1}
+          onChange={(v) => updateClip(clip.id, { lutIntensity: v }, `lut-int-${clip.id}`)}
+          format={fmtPct}
+        />
+      )}
+      {clip.lutId && (
+        <p className="text-[10px] leading-snug text-muted-foreground/60">
+          Active: {isBuiltin ? BUILTIN_LUTS.find((l) => `builtin:${l.id}` === clip.lutId)?.name : importedName}
+        </p>
       )}
     </CollapsibleSection>
   )
