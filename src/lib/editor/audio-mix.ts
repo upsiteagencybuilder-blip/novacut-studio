@@ -22,7 +22,7 @@ import { createFormantNode, ensureFormantModule, formantModuleReady } from './fo
 
 /* ---------------- chain types + builder (shared with the engine) ---------------- */
 
-/** Modulation sub-graph nodes (chorus / flanger / phaser) */
+/** Modulation sub-graph nodes (chorus / flanger / phaser / ringmod) */
 export interface ModNodes {
   dry: GainNode
   wet?: GainNode
@@ -31,6 +31,10 @@ export interface ModNodes {
   lfoGain?: GainNode
   fb?: GainNode
   aps?: BiquadFilterNode[]
+  /** ringmod — carrier oscillator driving the AM gain's AudioParam */
+  carrier?: OscillatorNode
+  /** ringmod — the amplitude-modulation gain the signal passes through */
+  am?: GainNode
 }
 
 /**
@@ -245,7 +249,7 @@ function syncPitchStage(ctx: BaseAudioContext, chain: AudioFxChain, semis: numbe
 export function rebuildModulation(
   ctx: BaseAudioContext,
   chain: AudioFxChain,
-  kind: 'none' | 'chorus' | 'flanger' | 'phaser',
+  kind: 'none' | 'chorus' | 'flanger' | 'phaser' | 'ringmod',
   amount: number
 ) {
   // tear down the previous sub-graph
@@ -260,6 +264,9 @@ export function rebuildModulation(
       chain.mod.fb?.disconnect()
       chain.mod.dly?.disconnect()
       chain.mod.aps?.forEach((ap) => ap.disconnect())
+      chain.mod.carrier?.stop()
+      chain.mod.carrier?.disconnect()
+      chain.mod.am?.disconnect()
     }
   } catch {
     /* best-effort teardown */
@@ -337,6 +344,27 @@ export function rebuildModulation(
     prev.connect(wet)
     wet.connect(chain.modOut)
     Object.assign(mod, { wet, lfo, lfoGain, aps })
+  } else if (kind === 'ringmod') {
+    // Day 22 robot voice — true ring (amplitude) modulation: the signal gain
+    // is driven by a low sine carrier (30–90 Hz), so every input partial
+    // sprouts sidebands at f ± fc and the tone turns metallic/robotic.
+    const am = ctx.createGain()
+    am.gain.value = 0 // carrier supplies the whole modulation swing
+    const carrier = ctx.createOscillator()
+    carrier.type = 'sine'
+    carrier.frequency.value = 30 + 60 * a
+    const depth = ctx.createGain()
+    depth.gain.value = 1.15 * a
+    carrier.connect(depth)
+    depth.connect(am.gain)
+    carrier.start()
+    const wet = ctx.createGain()
+    wet.gain.value = 0.9 * a
+    dry.gain.value = 1 - 0.55 * a
+    chain.modIn.connect(am)
+    am.connect(wet)
+    wet.connect(chain.modOut)
+    Object.assign(mod, { wet, carrier, am, lfoGain: depth })
   }
   chain.mod = mod
   chain.modKind = kind

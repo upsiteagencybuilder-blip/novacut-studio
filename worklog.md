@@ -1312,3 +1312,22 @@ Stage Summary:
 - Day 21 shipped end-to-end: true formant shifting DSP (preview + export), Voice Chain UI (extract → pitch/tempo/formant), woven extract-and-edit flow, honest catalog (+2 live), full undo/redo, both viewports verified with a numeric DSP receipt.
 - Files: formant-worklet.ts (new), audio-mix.ts, engine.ts, types.ts, PropertiesPanel.tsx, sections/sound.ts.
 - Next: Day 22 — voice FX presets (robot, deep, chipmunk, radio, telephone).
+
+---
+Task ID: Day-22
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category C Day 22 — Voice FX presets (robot, deep, chipmunk, radio, telephone).
+
+Work Log:
+- NEW src/lib/editor/voice-presets.ts: five curated voice looks built from the REAL per-clip audio FX chain (preview and offline mixdown ride the same buildFxChain + applyClipFx path) — Robot 🤖 (ring-modulated metal voice), Deep 🐻 (granular pitch −5 st AND formant −6 st), Chipmunk 🐿️ (+7/+7 st), Radio DJ 📻 (450–3200 Hz band-limit + comp 0.7 + whisper slap delay) and Telephone ☎️ (300–3400 Hz handset band + mid push + tight comp); matchVoicePreset signature matcher (preset keys compared with undefined/0/false normalization, extra user keys tolerated); E2E DSP harness on window.__ncVoiceFxHarness rendering probe signals through the real shared chain in OfflineAudioContext with Goertzel analysis.
+- REAL DSP addition — ring modulation: ClipAudioFx.modKind += 'ringmod'; rebuildModulation gains a ringmod branch (AM gain at 0 driven by a 30–90 Hz sine carrier through a depth gain — true sign-flipping ring mod, every partial sprouts f±fc sidebands), ModNodes carry carrier/am nodes, teardown stops+disconnects them; the Modulate select now offers "Ring Mod — robot" so the flavor is first-class, not just preset-internal.
+- PropertiesPanel AudioFxSection: Voice FX gallery block (data-nc-voice-presets) above the Voice Chain — 2-col emoji chips with name + character line, aria-pressed + emerald active ring, live "On: <name>/Off" badge; apply = full audioFx replace in ONE undoable updateClip (history 'voice-preset'), tapping the active chip clears to null; toast per action; superseded legacy chips removed from AUDIO_FX_PRESETS (chipmunk +5st pitch-only, deepvoice, telephone, radio lo-fi — the gallery versions use pitch+formant and real broadcast chains); kind gating inherited (video+audio only).
+- Catalog: +1 live sound-voice-fx-presets with the honest five-look description and open-properties-audiofx deep link.
+- E2E DSP receipts (offline renders through the real chain): Robot — 220 Hz tone → symmetric sidebands at 139/301 Hz (0.2953 each, ratio 0.70 vs theoretical 0.697, zero carrier leak); Deep — harmonic-complex power centroid 481.8 → 372.3 Hz (ratio 0.773 vs expected 0.749, 103.1%); Chipmunk — centroid 481.8 → 856.2 Hz (ratio 1.777 vs expected 1.498 — up-shift confirmed, granular grain-sidebands bias the synthetic-probe centroid upward ~18%, honest note logged); Radio — low band to 1.3% and high band to 7.1% of bypass; Telephone — low 9.7%, high 5.2%. Measurement lessons: pure-tone peak scans are useless through the granular worklet (energy moves to grain-rate sidebands — formant-only control render proved 220 Hz stays put, so the interaction is purely the pitch stage's re-anchor artifacts on pure tones); centroid on a harmonic complex + band-integrated ratios are the right metrics.
+- E2E desktop 1280×800: 5 chips + Off badge render; Robot via real click → full payload {ringmod 0.85, eqMid 3, hp 120, comp} + aria-pressed + emerald ring + "On: Robot" + Modulate select reads "Ring Mod — robot"; Deep → pitch −5/formant −6; Chipmunk → undo chain chipmunk → deep → base (two undos, exact payloads); tap-active-again → audioFx null + badge Off; legacy Radio Lo-Fi/Chipmunk +5st/Deep Voice chips gone; playback smoke (playing true under trusted click, then paused); only the pre-existing Next 16 hydration notice in console (no meta/Suspense in touched trees).
+- E2E mobile 390×844: bottom nav → Edit → audio clip select → properties sheet shows the gallery (5 chips) → Chipmunk tap → payload + ring + badge + Voice Chain chips (Pitch +7 st / Formant +7 st); screenshots both viewports; zero new errors.
+
+Stage Summary:
+- Day 22 shipped: five real voice presets over the shared preview+export chain, true ring-modulation DSP (first-class mod flavor), exclusive-look semantics with one-undo apply/clear, honest catalog entry.
+- Files: voice-presets.ts (new), audio-mix.ts, types.ts, PropertiesPanel.tsx, sections/sound.ts.
+- Next: Day 23 — per-clip + per-track EQ (3-band, then 10-band).

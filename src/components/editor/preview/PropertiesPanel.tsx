@@ -10,6 +10,7 @@ import {
   AudioLines,
   Blend,
   Bold,
+  Bot,
   CaseUpper,
   ChevronDown,
   Copy,
@@ -70,6 +71,7 @@ import {
 } from '@/lib/editor/constants'
 import { clamp, computeHistogram, computeLumaWaveform, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
 import { BUILTIN_LUTS } from '@/lib/editor/builtin-luts'
+import { VOICE_FX_PRESETS, matchVoicePreset, type VoiceFxPreset } from '@/lib/editor/voice-presets'
 import { KeyframeCurveEditor } from '@/components/editor/preview/KeyframeCurve'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -2373,11 +2375,11 @@ const r3 = (v: number) => Math.round(v * 1000) / 1000
 
 /* ================================================================ audio FX */
 
-/** One-tap audio FX recipes — each is a partial ClipAudioFx patch. */
+/** One-tap audio FX recipes — each is a partial ClipAudioFx patch. Voice
+ * looks (robot/deep/chipmunk/radio/telephone) live in the dedicated Day 22
+ * Voice FX gallery above; these stay the generic enhancer/atmosphere set. */
 const AUDIO_FX_PRESETS: { id: string; label: string; patch: Partial<ClipAudioFx> }[] = [
   { id: 'clarity', label: 'Dialogue Clarity', patch: { highPass: 90, eqMid: 3, eqHigh: 2, compressor: true, compAmount: 0.45 } },
-  { id: 'telephone', label: 'Telephone', patch: { highPass: 500, lowPass: 2800, compressor: true, compAmount: 0.5 } },
-  { id: 'radio', label: 'Radio Lo-Fi', patch: { highPass: 800, lowPass: 3400, eqMid: 6 } },
   { id: 'warm', label: 'Warm Tape', patch: { eqLow: 4, eqHigh: -3 } },
   { id: 'bright', label: 'Bright Air', patch: { eqHigh: 5, eqMid: -2 } },
   { id: 'underwater', label: 'Underwater', patch: { lowPass: 600, reverbMix: 0.35, reverbSize: 0.7 } },
@@ -2386,8 +2388,6 @@ const AUDIO_FX_PRESETS: { id: string; label: string; patch: Partial<ClipAudioFx>
   { id: 'hallecho', label: 'Hall Echo', patch: { delayMix: 0.4, delayTime: 0.45, delayFeedback: 0.5, reverbMix: 0.3 } },
   { id: 'chorus', label: 'Chorus Thick', patch: { modKind: 'chorus', modAmount: 0.6 } },
   { id: 'flanger', label: 'Jet Flanger', patch: { modKind: 'flanger', modAmount: 0.7 } },
-  { id: 'chipmunk', label: 'Chipmunk +5st', patch: { pitch: 5, pitchMix: 1 } },
-  { id: 'deepvoice', label: 'Deep Voice −5st', patch: { pitch: -5, pitchMix: 1 } },
   { id: 'harmony', label: 'Octave Harmony', patch: { pitch: -12, pitchMix: 0.5 } },
   { id: 'panl', label: 'Pan Left', patch: { pan: -0.75 } },
   { id: 'panr', label: 'Pan Right', patch: { pan: 0.75 } },
@@ -2411,6 +2411,21 @@ function AudioFxSection({ clip }: { clip: Clip }) {
     // presets start from a clean slate so toggles (e.g. compressor off) reset too
     updateClip(clip.id, { audioFx: { ...p } as ClipAudioFx }, true)
     toast.success(`Audio FX preset applied`)
+  }
+
+  // Day 22 — voice looks are exclusive: a preset replaces the whole voice
+  // chain in one undoable step; tapping the active one clears it.
+  const activeVoicePreset = matchVoicePreset(clip.audioFx)
+  const applyVoicePreset = (id: VoiceFxPreset['id']) => {
+    const preset = VOICE_FX_PRESETS.find((p) => p.id === id)
+    if (!preset) return
+    if (activeVoicePreset === id) {
+      updateClip(clip.id, { audioFx: null }, 'voice-preset')
+      toast('Voice FX cleared')
+      return
+    }
+    updateClip(clip.id, { audioFx: { ...preset.fx } as ClipAudioFx }, 'voice-preset')
+    toast.success(`Voice FX: ${preset.name} ${preset.emoji}`)
   }
 
   const pan = fx.pan ?? 0
@@ -2449,6 +2464,54 @@ function AudioFxSection({ clip }: { clip: Clip }) {
           Pan, EQ, filters, compressor, reverb, echo, modulation and formant for this clip&apos;s sound — heard in preview and baked into exports.
         </p>
       )}
+
+      {/* Day 22 — voice FX presets: robot / deep / chipmunk / radio / telephone */}
+      <div className="space-y-1.5 rounded-lg border border-(--nc-line) bg-(--nc-panel-soft) p-2" data-nc-voice-presets>
+        <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+          <Bot className="h-3 w-3 shrink-0" />
+          Voice FX
+          <span
+            className="ml-auto rounded border border-(--nc-line) px-1 py-px text-[9px]"
+            data-nc-voice-preset-active
+          >
+            {activeVoicePreset
+              ? `On: ${VOICE_FX_PRESETS.find((p) => p.id === activeVoicePreset)?.name ?? activeVoicePreset}`
+              : 'Off'}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {VOICE_FX_PRESETS.map((p) => {
+            const active = activeVoicePreset === p.id
+            return (
+              <button
+                key={p.id}
+                type="button"
+                data-nc-voice-preset={p.id}
+                aria-pressed={active}
+                title={p.desc}
+                onClick={() => applyVoicePreset(p.id)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left transition',
+                  active
+                    ? 'border-emerald-400/70 bg-emerald-400/10 text-foreground'
+                    : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:border-emerald-400/50 hover:text-foreground'
+                )}
+              >
+                <span className="text-sm leading-none" aria-hidden>
+                  {p.emoji}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[11px] font-medium">{p.name}</span>
+                  <span className="block truncate text-[9px] text-muted-foreground/70">{p.desc}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-[9px] leading-snug text-muted-foreground/60">
+          One tap replaces this clip&apos;s voice chain (one undo). Tap the active look again to clear it.
+        </p>
+      </div>
 
       {/* Day 21 — voice chain: extract → pitch / tempo / formant */}
       <div className="space-y-1.5 rounded-lg border border-(--nc-line) bg-(--nc-panel-soft) p-2" data-nc-voice-chain>
@@ -2658,6 +2721,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
         <SelectItem value="chorus" className="text-[11px]">Chorus — thicker</SelectItem>
         <SelectItem value="flanger" className="text-[11px]">Flanger — jet sweep</SelectItem>
         <SelectItem value="phaser" className="text-[11px]">Phaser — swoosh</SelectItem>
+        <SelectItem value="ringmod" className="text-[11px]">Ring Mod — robot</SelectItem>
       </SelectRow>
       {fx.modKind && fx.modKind !== 'none' && (
         <SliderRow

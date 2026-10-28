@@ -359,8 +359,8 @@ export interface ClipAudioFx {
   delayTime?: number
   /** delay feedback 0..0.85 */
   delayFeedback?: number
-  /** modulation flavor — none bypasses */
-  modKind?: 'none' | 'chorus' | 'flanger' | 'phaser'
+  /** modulation flavor — none bypasses; ringmod is the robot-voice carrier */
+  modKind?: 'none' | 'chorus' | 'flanger' | 'phaser' | 'ringmod'
   /** modulation amount 0..1 (depth/wet) */
   modAmount?: number
   /**
