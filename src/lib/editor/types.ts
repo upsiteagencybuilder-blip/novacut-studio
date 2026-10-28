@@ -369,6 +369,18 @@ export interface ClipAudioFx {
    * zeros = transparent. Runs in the shared chain (preview + mixdown).
    */
   eq10?: number[]
+  /** noise gate on/off (Day 24) — envelope follower below the threshold */
+  gate?: boolean
+  /** gate threshold dB −80..−1 (only meaningful when gate is on) */
+  gateThreshold?: number
+  /** gate release ms 20..1500 */
+  gateRelease?: number
+  /**
+   * Spectral de-noise amount 0..1 (Day 24) — STFT spectral gating with a
+   * running minimum noise-floor estimate; 0/undefined = off. Heard in preview
+   * AND baked into the offline mixdown.
+   */
+  denoise?: number
   /**
    * Pitch shift in semitones -12..12 — granular, tempo preserved (preview AND
    * offline mixdown ride the same AudioWorklet). 0/undefined = off.

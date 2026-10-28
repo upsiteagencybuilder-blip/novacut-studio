@@ -19,6 +19,8 @@ import { clamp, goertzelMag, projectDuration } from './utils'
 import { decodeSource } from '@/lib/effects/voice'
 import { createPitchNode, ensurePitchModule, pitchModuleReady } from './pitch-worklet'
 import { createFormantNode, ensureFormantModule, formantModuleReady } from './formant-worklet'
+import { createGateNode, ensureGateModule, gateModuleReady } from './gate-worklet'
+import { createDenoiseNode, ensureDenoiseModule, denoiseModuleReady } from './denoise-worklet'
 
 /* ---------------- chain types + builder (shared with the engine) ---------------- */
 
@@ -42,7 +44,8 @@ export interface ModNodes {
 
 /**
  * Per-clip audio FX chain — stable topology with param-driven bypass.
- * src → pan → eqLow → eqMid → eqHigh → hp → lp → comp → formantIn → [formant] →
+ * src → pan → eqLow → eqMid → eqHigh → eq10 → hp → lp → comp → gateIn → [gate] →
+ * gateSum → denoiseIn → [denoise] → denoiseSum → formantIn → [formant] →
  * formantSum → pitchIn → [pitch] → pitchSum → modIn → [mod] → modOut
  * modOut → dry → sum;  modOut → delay → delayWet → sum (feedback loop);
  * modOut → convolver → reverbWet → sum;  sum → gain (playback envelope).
@@ -57,6 +60,12 @@ export interface AudioFxChain {
   hp: BiquadFilterNode
   lp: BiquadFilterNode
   comp: DynamicsCompressorNode
+  gateIn: GainNode
+  gateDry: GainNode
+  gateSum: GainNode
+  denoiseIn: GainNode
+  denoiseDry: GainNode
+  denoiseSum: GainNode
   formantIn: GainNode
   formantDry: GainNode
   formantSum: GainNode
@@ -69,6 +78,10 @@ export interface AudioFxChain {
   sum: GainNode
   formant?: AudioWorkletNode
   formantWet?: GainNode
+  gate?: AudioWorkletNode
+  gateWet?: GainNode
+  denoise?: AudioWorkletNode
+  denoiseWet?: GainNode
   pitch?: AudioWorkletNode
   pitchWet?: GainNode
   mod?: ModNodes
@@ -120,6 +133,19 @@ export function buildFxChain(ctx: BaseAudioContext): AudioFxChain {
   comp.ratio.value = 1
   comp.attack.value = 0.01
   comp.release.value = 0.25
+  // gate + de-noise stages (Day 24) — bypassed (dry-only) until worklets load
+  const gateIn = ctx.createGain()
+  const gateDry = ctx.createGain()
+  gateDry.gain.value = 1
+  const gateSum = ctx.createGain()
+  gateIn.connect(gateDry)
+  gateDry.connect(gateSum)
+  const denoiseIn = ctx.createGain()
+  const denoiseDry = ctx.createGain()
+  denoiseDry.gain.value = 1
+  const denoiseSum = ctx.createGain()
+  denoiseIn.connect(denoiseDry)
+  denoiseDry.connect(denoiseSum)
   // formant stage (Day 21) — bypassed (dry-only) until the worklet module is ready
   const formantIn = ctx.createGain()
   const formantDry = ctx.createGain()
@@ -149,10 +175,114 @@ export function buildFxChain(ctx: BaseAudioContext): AudioFxChain {
   eq10[eq10.length - 1].connect(hp)
   hp.connect(lp)
   lp.connect(comp)
-  comp.connect(formantIn)
+  comp.connect(gateIn)
+  gateSum.connect(denoiseIn)
+  denoiseSum.connect(formantIn)
   formantSum.connect(pitchIn)
   pitchSum.connect(modIn)
-  return { pan, eqLow, eqMid, eqHigh, eq10, hp, lp, comp, formantIn, formantDry, formantSum, pitchIn, pitchDry, pitchSum, modIn, modOut, dry, sum, modKind: 'none' }
+  return { pan, eqLow, eqMid, eqHigh, eq10, hp, lp, comp, gateIn, gateDry, gateSum, denoiseIn, denoiseDry, denoiseSum, formantIn, formantDry, formantSum, pitchIn, pitchDry, pitchSum, modIn, modOut, dry, sum, modKind: 'none' }
+}
+
+/**
+ * Wire (or unwire) the noise-gate stage (Day 24) — same lazy pattern as the
+ * pitch/formant stages: dry-only until the worklet module is ready.
+ */
+function syncGateStage(ctx: BaseAudioContext, chain: AudioFxChain, fx: ClipAudioFx) {
+  const want = !!fx.gate
+  const t = ctx.currentTime
+  const setNow = (param: AudioParam, v: number) => {
+    try {
+      param.setTargetAtTime(v, t, 0.02)
+    } catch {
+      param.value = v
+    }
+  }
+  if (!want) {
+    setNow(chain.gateDry.gain, 1)
+    if (chain.gateWet) setNow(chain.gateWet.gain, 0)
+    if (chain.gate) {
+      try {
+        chain.gateIn.disconnect(chain.gate)
+        chain.gate.disconnect()
+      } catch {
+        /* already unwired */
+      }
+      chain.gate = undefined
+      chain.gateWet = undefined
+    }
+    return
+  }
+  if (!chain.gate) {
+    if (!gateModuleReady(ctx)) {
+      void ensureGateModule(ctx)
+      return
+    }
+    const node = createGateNode(ctx)
+    if (!node) return
+    const wet = ctx.createGain()
+    wet.gain.value = 0
+    chain.gateIn.connect(node)
+    node.connect(wet)
+    wet.connect(chain.gateSum)
+    chain.gate = node
+    chain.gateWet = wet
+  }
+  const p = chain.gate!.parameters
+  const thr = p.get('threshold')
+  if (thr) setNow(thr, clamp(fx.gateThreshold ?? -45, -80, -1))
+  const rel = p.get('release')
+  if (rel) setNow(rel, clamp(fx.gateRelease ?? 220, 20, 1500))
+  setNow(chain.gateDry.gain, 0)
+  setNow(chain.gateWet!.gain, 1)
+}
+
+/**
+ * Wire (or unwire) the spectral de-noise stage (Day 24) — lazy like the others.
+ */
+function syncDenoiseStage(ctx: BaseAudioContext, chain: AudioFxChain, amount: number) {
+  const want = amount > 0.005
+  const t = ctx.currentTime
+  const setNow = (param: AudioParam, v: number) => {
+    try {
+      param.setTargetAtTime(v, t, 0.02)
+    } catch {
+      param.value = v
+    }
+  }
+  if (!want) {
+    setNow(chain.denoiseDry.gain, 1)
+    if (chain.denoiseWet) setNow(chain.denoiseWet.gain, 0)
+    if (chain.denoise) {
+      try {
+        chain.denoiseIn.disconnect(chain.denoise)
+        chain.denoise.disconnect()
+      } catch {
+        /* already unwired */
+      }
+      chain.denoise = undefined
+      chain.denoiseWet = undefined
+    }
+    return
+  }
+  if (!chain.denoise) {
+    if (!denoiseModuleReady(ctx)) {
+      void ensureDenoiseModule(ctx)
+      return
+    }
+    const node = createDenoiseNode(ctx)
+    if (!node) return
+    const wet = ctx.createGain()
+    wet.gain.value = 0
+    chain.denoiseIn.connect(node)
+    node.connect(wet)
+    wet.connect(chain.denoiseSum)
+    chain.denoise = node
+    chain.denoiseWet = wet
+  }
+  const p = chain.denoise!.parameters.get('amount')
+  if (p) setNow(p, clamp(amount, 0, 1))
+  setNow(chain.denoiseDry.gain, 0)
+  setNow(chain.denoiseWet!.gain, 1)
 }
 
 /**
@@ -418,6 +548,10 @@ export function applyClipFx(ctx: BaseAudioContext, chain: AudioFxChain, fx: Clip
   const ca = clamp(f.compAmount ?? 0.5, 0, 1)
   set(chain.comp.threshold, compOn ? -(6 + 26 * ca) : 0)
   set(chain.comp.ratio, compOn ? 2 + 8 * ca : 1)
+  // noise gate (Day 24)
+  syncGateStage(ctx, chain, f)
+  // spectral de-noise (Day 24)
+  syncDenoiseStage(ctx, chain, clamp(f.denoise ?? 0, 0, 1))
   // granular pitch (tempo-preserving) + wet/dry blend
   syncPitchStage(ctx, chain, clamp(f.pitch ?? 0, -12, 12), clamp(f.pitchMix ?? 1, 0, 1))
   // formant (Day 21) — vocal-tract resonance shift, pitch + tempo preserved
@@ -613,6 +747,13 @@ export async function renderProjectAudio(
   if (audibleClips.some((c) => Math.abs(c.audioFx?.formant ?? 0) > 0.01)) {
     await ensureFormantModule(ctx)
   }
+  // gate + de-noise clips (Day 24) need their worklets inside the offline context
+  if (audibleClips.some((c) => c.audioFx?.gate)) {
+    await ensureGateModule(ctx)
+  }
+  if (audibleClips.some((c) => (c.audioFx?.denoise ?? 0) > 0.005)) {
+    await ensureDenoiseModule(ctx)
+  }
 
   // decode every needed asset once (faster-than-real-time offline decode)
   const bufferCache = new Map<string, AudioBuffer>()
@@ -781,8 +922,10 @@ if (typeof window !== 'undefined') {
  *
  *   'eq10'     → clip 10-band: +12 dB at 1 k, flat elsewhere
  *   'track-eq' → per-track: low +12 dB, high −12 dB (mixer EQ stage)
+ *   'gate'     → Day 24: quiet noise (below threshold) gated down, loud tone passes
+ *   'denoise'  → Day 24: steady noise floor subtracted spectrally
  */
-async function runEqHarness(spec: 'eq10' | 'track-eq') {
+async function runEqHarness(spec: 'eq10' | 'track-eq' | 'gate' | 'denoise') {
   const sr = 44100
   const OfflineCtor =
     typeof OfflineAudioContext !== 'undefined'
@@ -844,6 +987,87 @@ async function runEqHarness(spec: 'eq10' | 'track-eq') {
       inB1kVsNeighbors: +(inB.b1k / midRef(inB)).toFixed(4),
       outB1kVsNeighbors: +(outB.b1k / midRef(outB)).toFixed(4),
       boost: +((outB.b1k / midRef(outB)) / (inB.b1k / midRef(inB))).toFixed(4),
+    }
+  }
+  if (spec === 'gate') {
+    // probe: 0.55 s of −54 dB-peak noise (hiss below threshold) then a 0.5 s
+    // −6 dB tone burst above it — gate must mute the hiss and pass the tone.
+    const renderGate = async (fx: ClipAudioFx | undefined) => {
+      const ctx = new OfflineCtor(2, Math.ceil(sr * 1.4), sr)
+      await ensureGateModule(ctx)
+      const chain = buildFxChain(ctx)
+      applyClipFx(ctx, chain, fx)
+      const buf = ctx.createBuffer(1, Math.ceil(sr * 1.4), sr)
+      const d = buf.getChannelData(0)
+      let seed = 0x1234abcd
+      for (let i = 0; i < d.length; i++) {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+        d[i] = ((seed / 0xffffffff) * 2 - 1) * 0.002 // ~−54 dB peak hiss
+      }
+      for (let i = Math.floor(sr * 0.55); i < Math.min(d.length, Math.floor(sr * 1.05)); i++) {
+        d[i] = 0.5 * Math.sin((2 * Math.PI * 440 * i) / sr)
+      }
+      const s = ctx.createBufferSource()
+      s.buffer = buf
+      s.connect(chain.pan)
+      chain.sum.connect(ctx.destination)
+      s.start(0)
+      s.stop(1.4)
+      const r = await ctx.startRendering()
+      const quiet = r.getChannelData(0).slice(Math.floor(sr * 0.2), Math.floor(sr * 0.5))
+      const tone = r.getChannelData(0).slice(Math.floor(sr * 0.75), Math.floor(sr * 1.0))
+      const rms = (x: Float32Array) => Math.sqrt(x.reduce((a, v) => a + v * v, 0) / x.length)
+      return { quietRms: rms(quiet), toneMag: goertzelMag(tone, sr, 440) }
+    }
+    const [b, g] = await Promise.all([
+      renderGate(undefined),
+      renderGate({ gate: true, gateThreshold: -45, gateRelease: 120 } as ClipAudioFx),
+    ])
+    return {
+      spec,
+      quietRmsBypass: +b.quietRms.toFixed(5),
+      quietRmsGate: +g.quietRms.toFixed(5),
+      gateSuppression: +(g.quietRms / (b.quietRms + 1e-9)).toFixed(4),
+      toneMagBypass: +b.toneMag.toFixed(4),
+      toneMagGate: +g.toneMag.toFixed(4),
+      toneKeep: +(g.toneMag / (b.toneMag + 1e-9)).toFixed(4),
+    }
+  }
+  if (spec === 'denoise') {
+    // probe: steady white noise at a modest level — the auto-learned floor is
+    // the noise itself, so spectral gating should cut broadband RMS hard.
+    const renderDn = async (fx: ClipAudioFx | undefined) => {
+      const ctx = new OfflineCtor(2, Math.ceil(sr * 1.4), sr)
+      await ensureDenoiseModule(ctx)
+      const chain = buildFxChain(ctx)
+      applyClipFx(ctx, chain, fx)
+      const buf = ctx.createBuffer(1, Math.ceil(sr * 1.4), sr)
+      const d = buf.getChannelData(0)
+      let seed = 0x5f3759df
+      for (let i = 0; i < d.length; i++) {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+        d[i] = ((seed / 0xffffffff) * 2 - 1) * 0.12
+      }
+      const s = ctx.createBufferSource()
+      s.buffer = buf
+      s.connect(chain.pan)
+      chain.sum.connect(ctx.destination)
+      s.start(0)
+      s.stop(1.4)
+      const r = await ctx.startRendering()
+      const seg = r.getChannelData(0).slice(Math.floor(sr * 0.3), Math.floor(sr * 1.3))
+      const rms = Math.sqrt(seg.reduce((a, v) => a + v * v, 0) / seg.length)
+      return rms
+    }
+    const [b, g] = await Promise.all([
+      renderDn(undefined),
+      renderDn({ denoise: 0.8 } as ClipAudioFx),
+    ])
+    return {
+      spec,
+      rmsBypass: +b.toFixed(5),
+      rmsDenoise: +g.toFixed(5),
+      noiseReduction: +(g / (b + 1e-9)).toFixed(4),
     }
   }
   // track-eq: low +12 dB, high −12 dB on the mixer's track stage

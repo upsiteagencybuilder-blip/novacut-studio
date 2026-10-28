@@ -2726,6 +2726,59 @@ function AudioFxSection({ clip }: { clip: Clip }) {
         />
       )}
 
+      {/* Day 24 — restoration: noise gate + spectral de-noise */}
+      <div className="space-y-1.5 rounded-lg border border-(--nc-line) bg-(--nc-panel-soft) p-2" data-nc-restoration>
+        <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+          <VolumeX className="h-3 w-3 shrink-0" />
+          Restoration
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Gate</span>
+          <span className="flex-1 text-[10px] text-muted-foreground/60">mute hiss &amp; room tone between words</span>
+          <Switch
+            checked={!!fx.gate}
+            onCheckedChange={(on) => patch({ gate: on }, true)}
+            aria-label="Noise gate"
+            data-nc-gate-switch
+          />
+        </div>
+        {fx.gate && (
+          <>
+            <SliderRow
+              label="Thresh"
+              min={-80}
+              max={-1}
+              step={1}
+              value={fx.gateThreshold ?? -45}
+              onChange={(v) => patch({ gateThreshold: v }, 'gate')}
+              format={(v) => `${v} dB`}
+            />
+            <SliderRow
+              label="Release"
+              min={20}
+              max={1500}
+              step={10}
+              value={fx.gateRelease ?? 220}
+              onChange={(v) => patch({ gateRelease: v }, 'gate')}
+              format={(v) => `${v} ms`}
+            />
+          </>
+        )}
+        <SliderRow
+          label="De-noise"
+          min={0}
+          max={1}
+          step={0.05}
+          value={fx.denoise ?? 0}
+          onChange={(v) => patch({ denoise: v }, 'denoise')}
+          format={(v) => (v < 0.005 ? 'Off' : fmtPct(v))}
+        />
+        <p className="text-[9px] leading-snug text-muted-foreground/60">
+          Gate is an envelope follower; de-noise auto-learns the noise floor and subtracts it
+          spectrally. Both run live and in exports.
+        </p>
+      </div>
+
       {/* granular pitch — tempo-preserving (preview + export) */}
       <SliderRow
         label="Pitch"

@@ -14,6 +14,8 @@ import { applyPixelEffects, buildFilterString, clamp, composeFilters, composeGra
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
 import { applyClipFx, applyTrackEq, buildFxChain, buildTrackEq, makeImpulse, rebuildModulation } from './audio-mix'
 import { ensureFormantModule, getFormantError } from './formant-worklet'
+import { ensureGateModule, getGateError } from './gate-worklet'
+import { ensureDenoiseModule, getDenoiseError } from './denoise-worklet'
 import { ensurePitchModule, getPitchError } from './pitch-worklet'
 import type { AudioFxChain, TrackEqChain } from './audio-mix'
 import { drawStickerArt } from './sticker-render'
@@ -158,10 +160,16 @@ class PreviewEngine {
   private audioCtx: AudioContext | null = null
   private pitchPreloaded = false
   private formantPreloaded = false
+  private gatePreloaded = false
+  private denoisePreloaded = false
   /** diagnostics: pitch worklet load status ('ready' | 'failed: …' | undefined) */
   pitchStatus: string | undefined = undefined
   /** diagnostics: formant worklet load status ('ready' | 'failed: …' | undefined) */
   formantStatus: string | undefined = undefined
+  /** diagnostics: gate worklet load status ('ready' | 'failed: …' | undefined) */
+  gateStatus: string | undefined = undefined
+  /** diagnostics: de-noise worklet load status ('ready' | 'failed: …' | undefined) */
+  denoiseStatus: string | undefined = undefined
   private exportDest: MediaStreamAudioDestinationNode | null = null
   private masterAnalyser: AnalyserNode | null = null
   /** Day 23 — per-track 3-band EQ stages (mixer), keyed by track id */
@@ -400,6 +408,8 @@ class PreviewEngine {
       if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
       this.preloadPitchModule()
       this.preloadFormantModule()
+      this.preloadGateModule()
+      this.preloadDenoiseModule()
       if (!this.exportDest) this.exportDest = this.audioCtx.createMediaStreamDestination()
       // route existing + future elements through their FX chains
       this.ensureAnalyser()
@@ -494,6 +504,8 @@ class PreviewEngine {
       if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
       this.preloadPitchModule()
       this.preloadFormantModule()
+      this.preloadGateModule()
+      this.preloadDenoiseModule()
       this.ensureAnalyser()
       const project = this.snapshotFn?.().project
       if (!project) return
@@ -628,6 +640,38 @@ class PreviewEngine {
         return
       }
       this.formantStatus = 'ready'
+      for (const entry of this.videos.values()) entry.fxSig = undefined
+      for (const entry of this.audios.values()) entry.fxSig = undefined
+    })
+  }
+
+  /** Load the gate worklet once the graph exists; on load, re-sync all chains. */
+  private preloadGateModule() {
+    if (!this.audioCtx || this.gatePreloaded) return
+    this.gatePreloaded = true
+    void ensureGateModule(this.audioCtx).then((ok) => {
+      if (!ok) {
+        this.gateStatus = `failed: ${getGateError(this.audioCtx!) ?? 'unavailable'}`
+        console.warn('[novacut] gate worklet unavailable — gates stay bypassed:', this.gateStatus)
+        return
+      }
+      this.gateStatus = 'ready'
+      for (const entry of this.videos.values()) entry.fxSig = undefined
+      for (const entry of this.audios.values()) entry.fxSig = undefined
+    })
+  }
+
+  /** Load the de-noise worklet once the graph exists; on load, re-sync all chains. */
+  private preloadDenoiseModule() {
+    if (!this.audioCtx || this.denoisePreloaded) return
+    this.denoisePreloaded = true
+    void ensureDenoiseModule(this.audioCtx).then((ok) => {
+      if (!ok) {
+        this.denoiseStatus = `failed: ${getDenoiseError(this.audioCtx!) ?? 'unavailable'}`
+        console.warn('[novacut] de-noise worklet unavailable — de-noise stays bypassed:', this.denoiseStatus)
+        return
+      }
+      this.denoiseStatus = 'ready'
       for (const entry of this.videos.values()) entry.fxSig = undefined
       for (const entry of this.audios.values()) entry.fxSig = undefined
     })

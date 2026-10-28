@@ -1351,3 +1351,24 @@ Stage Summary:
 - Day 23 shipped: real 10-band per-clip graphic EQ (vertical fader strip + curve presets) and per-track 3-band mixer EQ, both in the shared preview + export audio path with honest catalog updates (+1 live, 1 re-described).
 - Files: types.ts, utils.ts (shared goertzelMag), audio-mix.ts, engine.ts, PropertiesPanel.tsx, MixerDialog.tsx, sections/sound.ts.
 - Next: Day 24 — compressor + noise gate + offline de-noise.
+
+---
+Task ID: Day-24
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category C Day 24 — Compressor + noise gate + offline de-noise.
+
+Work Log:
+- NEW src/lib/editor/gate-worklet.ts: time-domain envelope-follower noise gate ('nc-gate') — one-pole |x| envelope (2 ms attack / user release), k-rate threshold (−80..−1 dB; at 0 dB fully bypassed), release 20–1500 ms, closed-floor gain 0.004 with dual-slope gain smoothing for click-free open/close. Streams through the same WeakSet/WeakMap loader pattern (ensure/gateModuleReady/getGateError), code exposed as window.__ncGateWorkletCode.
+- NEW src/lib/editor/denoise-worklet.ts: STFT spectral de-noise ('nc-denoise', Day 21 OLA scaffolding: N=1024, hop 256, Hann² 2/3) — per-bin running minimum-statistics noise floor (instant down on quiet, ~0.6 s release, 8-frame warm-up max capture), β oversubtraction 1→2.5 by amount, per-bin gain smoothed (20 ms open / 120 ms close) with an amount-driven residual floor (−8..−30 dB), phase untouched; k-rate amount 0..1, bypass straight-copy below 0.005. window.__ncDenoiseWorkletCode.
+- audio-mix.ts: chain topology extended comp → gateIn → [gate] → gateSum → denoiseIn → [denoise] → denoiseSum → formantIn (dry/bypass wiring until modules land); syncGateStage (threshold/release params) + syncDenoiseStage (amount) mirror the lazy stage pattern; applyClipFx wires both; offline mixdown preloads gate + denoise modules when any audible clip uses them — preview and export ride the same DSP. ClipAudioFx += gate/gateThreshold/gateRelease/denoise. Harness extended: window.__ncEqHarness 'gate' and 'denoise' specs (bypass-vs-FX dual renders).
+- engine.ts: preloadGateModule/preloadDenoiseModule wired into ensureAudioGraph AND the export path (statuses gateStatus/denoiseStatus, fxSig invalidation on load so chains wire in mid-session).
+- PropertiesPanel AudioFxSection: Restoration block (data-nc-restoration) — Gate switch revealing Thresh (−80..−1 dB) + Release (20–1500 ms) sliders, De-noise amount slider (Off → 100%), honest explainer; history labels 'gate'/'denoise'.
+- Catalog: sound-noise-gate planned→live (envelope-follower gate, thresholds, release, preview+export) and sound-de-noise-tool planned→live (one-knob spectral de-noise with auto-learned floor — honestly described as automatic, not a manual noise print) — both with open-properties-audiofx deep links. Compressor was already live (Day 06 dynamics + amount) and stays.
+- E2E DSP receipts (window.__ncEqHarness): gate — 440 Hz tone burst (−6 dB) passes EXACTLY (toneKeep 1.0000, 0.3535 both) while −54 dB hiss is crushed (quiet RMS 0.00082 → 0, suppression ×0.004); denoise @0.8 — steady noise RMS 0.049 → 0.03575 (×0.73 broadband reduction; min-stats is intentionally conservative on synthetic steady noise, stronger on real speech with pauses).
+- E2E desktop 1280×800: Restoration block renders (gate off hides sliders); gate switch via real click → audioFx.gate true + sliders appear; De-noise set to 0.8 by real pointer click at 80% of the track; LIVE wiring under trusted playback — gateStatus/denoiseStatus 'ready', chain.gate node present (threshold −45), chain.denoise node present (amount 0.8), playback advances (t=2.84 s); undo chain reverts denoise then gate; zero real errors.
+- E2E mobile 390×844: Restoration block in the sheet (gate toggle, sliders, de-noise) — gate on via tap → audioFx.gate true (screenshot); 0 real errors.
+
+Stage Summary:
+- Day 24 shipped: real noise gate + real spectral de-noise in the shared preview+export chain (two new AudioWorklets), Restoration UI, honest catalog flips (+2 live), numeric DSP receipts.
+- Files: gate-worklet.ts (new), denoise-worklet.ts (new), audio-mix.ts, engine.ts, types.ts, PropertiesPanel.tsx, sections/sound.ts.
+- Next: Day 25 — auto-ducking v2 (threshold-based music under speech).

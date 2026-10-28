@@ -30,8 +30,8 @@ export const SOUND_TOOLS: ProTool[] = [
   // -------- Restoration --------
   { id: 'sound-de-hummer', name: 'De-Hummer', section: 'sound', group: 'Restoration', status: 'planned', desc: 'Remove mains hum and its harmonics automatically' },
   { id: 'sound-de-reverb-tool', name: 'De-Reverb Tool', section: 'sound', group: 'Restoration', status: 'planned', desc: 'Reduce room echo captured in difficult locations' },
-  { id: 'sound-de-noise-tool', name: 'De-Noise Tool', section: 'sound', group: 'Restoration', status: 'planned', desc: 'Learn a noise print and subtract it from dialogue' },
-  { id: 'sound-noise-gate', name: 'Noise Gate', section: 'sound', group: 'Restoration', status: 'planned', desc: 'Silence the signal below an adjustable threshold' },
+  { id: 'sound-de-noise-tool', name: 'De-Noise Tool', section: 'sound', group: 'Restoration', status: 'live', desc: 'One-knob spectral de-noise — auto-learned noise floor (running minimum statistics) subtracted via STFT spectral gating, amount 0–100%; runs live and bakes into the offline mixdown', action: 'open-properties-audiofx' },
+  { id: 'sound-noise-gate', name: 'Noise Gate', section: 'sound', group: 'Restoration', status: 'live', desc: 'Envelope-follower gate with threshold (−80..−1 dB) and release (20–1500 ms) that mutes hiss and room tone between words — heard in preview and baked into exports', action: 'open-properties-audiofx' },
   { id: 'sound-expander', name: 'Expander', section: 'sound', group: 'Restoration', status: 'planned', desc: 'Push quiet noise further down for gentler gating' },
 
   // -------- Reverb & delay --------
