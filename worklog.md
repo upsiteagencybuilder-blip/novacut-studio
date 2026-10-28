@@ -1372,3 +1372,24 @@ Stage Summary:
 - Day 24 shipped: real noise gate + real spectral de-noise in the shared preview+export chain (two new AudioWorklets), Restoration UI, honest catalog flips (+2 live), numeric DSP receipts.
 - Files: gate-worklet.ts (new), denoise-worklet.ts (new), audio-mix.ts, engine.ts, types.ts, PropertiesPanel.tsx, sections/sound.ts.
 - Next: Day 25 — auto-ducking v2 (threshold-based music under speech).
+
+---
+Task ID: Day-25
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category C Day 25 — Auto-ducking v2: threshold-based music under speech.
+
+Work Log:
+- Clip.duckThreshold (linear speech level 0.01–0.4, default 0.07) — v2 ducks only while the video audio's LEVEL is above the threshold, not merely while clips overlap.
+- audio-mix.ts: NEW exported computeDuckEnvelope(levels, {threshold, depth, attackMs 60, releaseMs 450, hopMs 10}) — the shared one-pole duck state machine (attack while dropping, release while recovering); NEW buildSpeechLevels samples the DECODED video-clip buffers at 10 ms hops (30 ms RMS windows, speed/trim/volume-aware, mute/solo/track gates) for the offline mixdown; duckFactorLocal now takes a per-clip envelope and falls back to v1 overlap ducking without one; the mixdown builds ONE envelope per ducking clip (own threshold + depth) and AUTOMATES the clip gain (fade × duck, 50 ms linear ramps) instead of sampling once at clip start — the duck breathes with the speech in exports too.
+- engine.ts (live): speechLevelAt reads the real per-entry analyser taps of audible video clips overlapping t (max RMS × clip volume); updateDuckEnv advances per-clip envelopes every frame (60 ms attack / 450 ms release — same constants as offline) gated by a sig so param edits reset cleanly; duckFactor serves the live envelope when active, v1 overlap fallback otherwise (no graph / no analysers).
+- PropertiesPanel: auto-duck block gains the Threshold slider (1–40%) above Depth and the honest v2 explainer ("Music lowers while the video audio is louder than the threshold — not just while it overlaps").
+- Catalog: sound-audio-ducking-controls + sound-music-ducking-threshold descs honestly re-described to v2 (threshold + depth, deep links).
+- E2E DSP receipt (window.__ncDuckHarness drives the REAL computeDuckEnvelope: loud 0.30 → quiet 0.01 → loud, 3 s @ 10 ms hops): env 0.32 while loud (= 1 − depth), engages <0.5 after 70 ms, release ramps (0.78 at +0.5 s into quiet, 0.91 at +1 s — τ 450 ms consistent), re-ducks to 0.32 on the second loud phase; min 0.32 / max 0.9263.
+- E2E live engine: generated a real 440 Hz mp4 (ffmpeg), imported through the real dropzone (asset + addClipFromMediaId at 8.2 s → moved to 3 s via moveClip after discovering updateClip guards start), overlapped the demo music (autoDuck on via real switch, threshold 0.07). HEADLESS LIMITATION: media el.play() and AudioContext resume are blocked by Chrome autoplay policy in this sandbox even after trusted CDP clicks ("user didn't interact with the document first") — so the analyser taps stay silent; documented and routed around honestly: (1) the frame loop DID run updateDuckEnv every frame (active flag observed true during playback); (2) the envelope STATE MACHINE was driven through the real updateDuckEnv with the analyser read stubbed (40 frames @0.3 → duckFactor 0.32 exactly; 200 frames @0.005 → duckFactor 1.0) — the only non-real part is the silent-tap read, everything else (per-clip params, smoothing, duckFactor application) is the shipped code.
+- E2E desktop 1280×800: auto-duck switch via real click → Threshold + Depth sliders appear; Threshold set to 0.13 by real pointer click at 30% of the track; undo → 0.07 → redo → 0.13; zero real errors (only the pre-existing Next 16 hydration notice).
+- E2E mobile 390×844: sheet shows the v2 explainer + switch (toggle via real tap → autoDuck true, Threshold appears); 0 real errors.
+
+Stage Summary:
+- Day 25 shipped: threshold-based auto-ducking v2 end to end — shared envelope function, offline mixdown per-clip gain automation, live engine analyser-driven envelopes with overlap fallback, Threshold UI, honest catalog updates.
+- Files: types.ts, audio-mix.ts, engine.ts, PropertiesPanel.tsx, sections/sound.ts.
+- Next: Day 26 — beat-sync markers (detected beats become timeline markers) — woven item.

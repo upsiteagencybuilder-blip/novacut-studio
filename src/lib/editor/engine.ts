@@ -848,9 +848,87 @@ class PreviewEngine {
     return clip.trimStart + tLocal * clip.speed
   }
 
-  /** Auto-ducking: music/voiceover tracks duck under active video-with-audio clips */
+  /* ---------------- auto-duck v2 (Day 25 — threshold-based) ---------------- */
+
+  /** Per-ducking-clip live envelope state (gain after attack/release smoothing). */
+  private duckEnvs = new Map<string, { env: number; thresh: number; depth: number }>()
+  /** True while the live envelope is being driven by real speech levels. */
+  private duckEnvActive = false
+  private duckScratch: Float32Array<ArrayBuffer> | null = null
+
+  /**
+   * Max RMS across the audible video-with-audio clips at time t, read from
+   * their per-entry analyser taps. Returns null when the audio graph (and its
+   * analysers) is not running — callers fall back to overlap ducking.
+   */
+  private speechLevelAt(project: Project, t: number): number | null {
+    let level: number | null = null
+    const anySolo = project.tracks.some((tr) => tr.solo)
+    for (const other of project.clips) {
+      if (other.kind !== 'video' || other.muted || other.reverse || !other.mediaId) continue
+      if ((other.volume ?? 0) <= 0.02) continue
+      if (t < other.start || t >= other.start + other.duration) continue
+      const track = project.tracks.find((tr) => tr.id === other.trackId)
+      if (!track || track.muted || (anySolo && !track.solo)) continue
+      const entry = this.videos.get(other.id)
+      const an = entry?.analyser
+      if (!an || !this.audioCtx) continue
+      if (!this.duckScratch || this.duckScratch.length !== an.fftSize) {
+        this.duckScratch = new Float32Array(an.fftSize)
+      }
+      an.getFloatTimeDomainData(this.duckScratch)
+      let sum = 0
+      for (let i = 0; i < this.duckScratch.length; i++) sum += this.duckScratch[i] * this.duckScratch[i]
+      const rms = Math.sqrt(sum / this.duckScratch.length) * (other.volume ?? 1)
+      if (level === null || rms > level) level = rms
+    }
+    return level
+  }
+
+  /**
+   * Advance the per-clip duck envelopes once per frame (60 ms attack, 450 ms
+   * release — mirrors the offline computeDuckEnvelope time constants).
+   */
+  private updateDuckEnv(project: Project, t: number) {
+    const duckClips = project.clips.filter((c) => c.autoDuck && c.kind === 'audio')
+    if (!duckClips.length) {
+      this.duckEnvActive = false
+      return
+    }
+    const level = this.speechLevelAt(project, t)
+    if (level === null) {
+      this.duckEnvActive = false
+      return
+    }
+    this.duckEnvActive = true
+    const dt = 1 / 60
+    const aAtt = Math.exp(-dt / 0.06)
+    const aRel = Math.exp(-dt / 0.45)
+    for (const clip of duckClips) {
+      const thresh = clamp(clip.duckThreshold ?? 0.07, 0.005, 0.9)
+      const depth = clamp(clip.duckDepth ?? 0.68, 0, 0.95)
+      let rec = this.duckEnvs.get(clip.id)
+      if (!rec || rec.thresh !== thresh || rec.depth !== depth) {
+        rec = { env: 1, thresh, depth }
+        this.duckEnvs.set(clip.id, rec)
+      }
+      const target = level > thresh ? 1 - depth : 1
+      const a = target < rec.env ? aAtt : aRel
+      rec.env = a * rec.env + (1 - a) * target
+    }
+  }
+
+  /**
+   * Auto-ducking: music/voiceover tracks duck under video audio whose level
+   * is above the clip's threshold (Day 25); falls back to plain overlap
+   * ducking when no live levels are available.
+   */
   private duckFactor(project: Project, clip: Clip, t: number): number {
     if (!clip.autoDuck || clip.kind !== 'audio') return 1
+    if (this.duckEnvActive) {
+      const rec = this.duckEnvs.get(clip.id)
+      if (rec) return rec.env
+    }
     for (const other of project.clips) {
       if (other.kind !== 'video' || other.muted || other.volume <= 0.02) continue
       if (t >= other.start && t < other.start + other.duration) {
@@ -1269,6 +1347,8 @@ class PreviewEngine {
     // audio-only clips: keep their elements in sync even though nothing is drawn
     const tracks = project.tracks
     const anySolo = project.tracks.some((tr) => tr.solo)
+    // Day 25 — advance the threshold-based duck envelopes once per frame
+    this.updateDuckEnv(project, t)
     for (const track of tracks) {
       if (track.kind !== 'audio') continue
       const trackVolume = track.volume ?? 1

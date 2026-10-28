@@ -685,15 +685,106 @@ function fadeFactorLocal(clip: Clip, tLocal: number): number {
   return alpha
 }
 
-/** Engine-mirrored auto-duck: audio tracks duck under audible video clips. */
-function duckFactorLocal(project: Project, clip: Clip, t: number): number {
+/* ---------------- auto-duck v2 (Day 25 — threshold-based) ---------------- */
+
+export const DUCK_HOP_MS = 10
+
+/**
+ * Shared auto-duck envelope (Day 25): given a per-hop speech-level series and
+ * the clip's threshold/depth, returns the duck GAIN per hop — 1 when the
+ * speech is under the threshold, 1 − depth while it is over, smoothed with a
+ * 60 ms attack and a 450 ms release (one-pole per hop). Used verbatim by the
+ * offline mixdown; the live engine runs the same state machine per frame.
+ */
+export function computeDuckEnvelope(
+  levels: Float32Array,
+  opts: { threshold: number; depth: number; attackMs?: number; releaseMs?: number; hopMs?: number }
+): Float32Array {
+  const hopMs = opts.hopMs ?? DUCK_HOP_MS
+  const attack = Math.exp(-hopMs / Math.max(5, opts.attackMs ?? 60))
+  const release = Math.exp(-hopMs / Math.max(20, opts.releaseMs ?? 450))
+  const ducked = 1 - clamp(opts.depth, 0, 0.95)
+  const out = new Float32Array(levels.length)
+  let env = 1
+  for (let i = 0; i < levels.length; i++) {
+    const over = levels[i] > opts.threshold
+    const target = over ? ducked : 1
+    const a = target < env ? attack : release
+    env = a * env + (1 - a) * target
+    out[i] = env
+  }
+  return out
+}
+
+/**
+ * Measure the speech (video-audio) level series for the offline mixdown: max
+ * RMS across audible video clips per hop, sampled from the decoded buffers
+ * with each clip's speed/trim taken into account.
+ */
+function buildSpeechLevels(
+  project: Project,
+  bufferCache: Map<string, AudioBuffer>,
+  sr: number,
+  totalSec: number
+): Float32Array | null {
+  const speechClips = project.clips.filter((c) => {
+    if (c.kind !== 'video' || c.muted || c.reverse || !c.mediaId) return false
+    if ((c.volume ?? 0) <= 0.02) return false
+    const track = project.tracks.find((tr) => tr.id === c.trackId)
+    return !!track && !track.muted
+  })
+  if (!speechClips.length) return null
+  const hops = Math.max(1, Math.ceil((totalSec * 1000) / DUCK_HOP_MS))
+  const levels = new Float32Array(hops)
+  const win = Math.max(1, Math.floor(sr * 0.03)) // 30 ms analysis window
+  for (const clip of speechClips) {
+    const decoded = bufferCache.get(clip.mediaId!)
+    if (!decoded) continue
+    const speed = clamp(clip.speed, 0.0625, 16)
+    const data0 = decoded.getChannelData(0)
+    const data1 = decoded.numberOfChannels > 1 ? decoded.getChannelData(1) : data0
+    for (let h = 0; h < hops; h++) {
+      const t = (h * DUCK_HOP_MS) / 1000
+      if (t < clip.start || t >= clip.start + clip.duration) continue
+      const srcT = clip.trimStart + (t - clip.start) * speed
+      const center = Math.floor(srcT * sr)
+      if (center < 0 || center >= decoded.length) continue
+      let sum = 0
+      let n = 0
+      for (let i = -win / 2; i < win / 2; i++) {
+        const idx = center + i
+        if (idx < 0 || idx >= decoded.length) continue
+        const v = (data0[idx] + data1[idx]) * 0.5 * (clip.volume ?? 1)
+        sum += v * v
+        n++
+      }
+      const rms = n ? Math.sqrt(sum / n) : 0
+      if (rms > levels[h]) levels[h] = rms
+    }
+  }
+  return levels
+}
+
+/** Auto-duck v2: envelope lookup at t (hop index), v1 overlap fallback without one. */
+function duckFactorLocal(
+  project: Project,
+  clip: Clip,
+  t: number,
+  duckEnv?: Float32Array
+): number {
   if (!clip.autoDuck || clip.kind !== 'audio') return 1
+  const depth = clamp(clip.duckDepth ?? 0.68, 0, 0.95)
+  if (duckEnv) {
+    const idx = clamp(Math.floor((t * 1000) / DUCK_HOP_MS), 0, duckEnv.length - 1)
+    return duckEnv[idx]
+  }
+  // fallback: plain overlap ducking (no decoded speech available)
   for (const other of project.clips) {
     if (other.kind !== 'video' || other.muted || other.volume <= 0.02) continue
     if (t >= other.start && t < other.start + other.duration) {
       const otherTrack = project.tracks.find((tr) => tr.id === other.trackId)
       if (otherTrack && !otherTrack.muted) {
-        return 1 - clamp(clip.duckDepth ?? 0.68, 0, 0.95)
+        return 1 - depth
       }
     }
   }
@@ -772,7 +863,25 @@ export async function renderProjectAudio(
   master.gain.value = 1
   master.connect(ctx.destination)
 
-  // Day 23 — one 3-band EQ stage per track that the mixer has shaped
+  // Day 25 — threshold-based auto-duck: one envelope per ducking clip (own
+  // threshold + depth), all driven by the same decoded speech-level series
+  const duckClips = audibleClips.filter((c) => c.autoDuck && c.kind === 'audio')
+  let duckEnvs: Map<string, Float32Array> | undefined
+  if (duckClips.length) {
+    const speechLevels = buildSpeechLevels(project, bufferCache, sr, total)
+    if (speechLevels) {
+      duckEnvs = new Map()
+      for (const c of duckClips) {
+        duckEnvs.set(
+          c.id,
+          computeDuckEnvelope(speechLevels, {
+            threshold: clamp(c.duckThreshold ?? 0.07, 0.005, 0.9),
+            depth: clamp(c.duckDepth ?? 0.68, 0, 0.95),
+          })
+        )
+      }
+    }
+  }
   const trackEqChains = new Map<string, TrackEqChain>()
   for (const tr of project.tracks) {
     const any = (tr.eqLow ?? 0) !== 0 || (tr.eqMid ?? 0) !== 0 || (tr.eqHigh ?? 0) !== 0
@@ -804,27 +913,42 @@ export async function renderProjectAudio(
     if (teq) gain.connect(teq.input)
     else gain.connect(master)
 
-    // volume envelope: clip volume × track volume × duck, with fade ramps
-    const duck = duckFactorLocal(project, clip, clip.start)
-    const peak = clamp((clip.volume ?? 1) * (track.volume ?? 1) * duck, 0, 1)
+    // volume envelope: clip volume × track volume × fade × duck
+    const env = duckEnvs?.get(clip.id)
     const t0 = clip.start
     const t1 = clip.start + clip.duration
     const fadeIn = Math.min(clip.fadeIn > 0.01 ? clip.fadeIn : 0, clip.duration)
     const fadeOut = Math.min(clip.fadeOut > 0.01 ? clip.fadeOut : 0, clip.duration)
     const g = gain.gain
-    g.setValueAtTime(0, Math.max(0, t0 - 0.002))
-    if (fadeIn > 0.01) {
-      g.linearRampToValueAtTime(peak, t0 + fadeIn)
+    if (env) {
+      // Day 25 — ducking changes over time: automate fade × duck every 50 ms
+      const base = clamp((clip.volume ?? 1) * (track.volume ?? 1), 0, 1)
+      const step = 0.05
+      g.setValueAtTime(0, Math.max(0, t0 - 0.002))
+      for (let t = t0; t < t1; t += step) {
+        const tl = t - t0
+        const fade = fadeFactorLocal(clip, tl)
+        const duck = duckFactorLocal(project, clip, t, env)
+        g.linearRampToValueAtTime(clamp(base * fade * duck, 0, 1), t)
+      }
+      g.linearRampToValueAtTime(0, t1 + 0.005)
     } else {
-      g.setValueAtTime(peak, t0)
+      const duck = duckFactorLocal(project, clip, clip.start)
+      const peak = clamp((clip.volume ?? 1) * (track.volume ?? 1) * duck, 0, 1)
+      g.setValueAtTime(0, Math.max(0, t0 - 0.002))
+      if (fadeIn > 0.01) {
+        g.linearRampToValueAtTime(peak, t0 + fadeIn)
+      } else {
+        g.setValueAtTime(peak, t0)
+      }
+      if (fadeOut > 0.01) {
+        g.setValueAtTime(peak, Math.max(t0 + fadeIn + 0.001, t1 - fadeOut))
+        g.linearRampToValueAtTime(0, t1)
+      } else {
+        g.setValueAtTime(peak, t1)
+      }
+      g.linearRampToValueAtTime(0, t1 + 0.005)
     }
-    if (fadeOut > 0.01) {
-      g.setValueAtTime(peak, Math.max(t0 + fadeIn + 0.001, t1 - fadeOut))
-      g.linearRampToValueAtTime(0, t1)
-    } else {
-      g.setValueAtTime(peak, t1)
-    }
-    g.linearRampToValueAtTime(0, t1 + 0.005)
 
     const offset = clamp(clip.trimStart, 0, Math.max(0, decoded.duration - 0.01))
     try {
@@ -1083,5 +1207,47 @@ async function runEqHarness(spec: 'eq10' | 'track-eq' | 'gate' | 'denoise') {
     outHighMid: +(outT.high / outT.mid).toFixed(4),
     lowLift: +((outT.low / outT.mid) / (inT.low / inT.mid)).toFixed(4),
     highDrop: +((outT.high / outT.mid) / (inT.high / inT.mid)).toFixed(4),
+  }
+}
+
+/* ---------------- auto-duck QA harness (Day 25 — real shared function) ---------------- */
+
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __ncDuckHarness?: unknown }).__ncDuckHarness = runDuckHarness
+}
+
+/**
+ * Offline receipt for the Day 25 duck envelope: drives the REAL shared
+ * computeDuckEnvelope with a synthetic speech-level series (loud 0.30 → quiet
+ * 0.01 → loud again, 1 s each at 10 ms hops) and returns the shape stats.
+ */
+function runDuckHarness(threshold = 0.07, depth = 0.68) {
+  const hopsPerSec = 1000 / DUCK_HOP_MS
+  const levels = new Float32Array(Math.ceil(3 * hopsPerSec))
+  for (let i = 0; i < levels.length; i++) {
+    const t = i / hopsPerSec
+    levels[i] = t < 1 ? 0.3 : t < 2 ? 0.01 : 0.3
+  }
+  const env = computeDuckEnvelope(levels, { threshold, depth })
+  const at = (sec: number) => +env[Math.floor(sec * hopsPerSec)].toFixed(4)
+  const duckStart = env.findIndex((v) => v < 0.5) / hopsPerSec
+  const recoverIdx: number[] = []
+  for (let i = Math.floor(1 * hopsPerSec); i < env.length; i++) {
+    if (env[i] >= 0.95) {
+      recoverIdx.push(i)
+      break
+    }
+  }
+  const recover = recoverIdx.length ? recoverIdx[0] / hopsPerSec : -1
+  return {
+    spec: 'duck',
+    envAtLoud1: at(0.9),
+    envAtQuiet: at(1.5),
+    envAtRecoveryEnd: at(1.9),
+    envAtLoud2: at(2.5),
+    duckEngagedAfterSec: +duckStart.toFixed(3),
+    recoveredAfterSec: +recover.toFixed(3),
+    min: +env.reduce((a, v) => Math.min(a, v), 1).toFixed(4),
+    max: +env.reduce((a, v) => Math.max(a, v), 0).toFixed(4),
   }
 }

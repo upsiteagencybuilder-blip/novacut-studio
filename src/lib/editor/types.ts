@@ -491,6 +491,12 @@ export interface Clip {
   /** how far the audio drops while ducking (0..0.95) — ducked gain = 1 − depth; default 0.68 */
   duckDepth?: number
   /**
+   * Auto-duck v2 (Day 25) — speech threshold as a linear level 0.01..0.6:
+ * music ducks only while the video audio's level is ABOVE this (default 0.07).
+   * Without a live graph the engine falls back to plain overlap ducking.
+   */
+  duckThreshold?: number
+  /**
    * Per-clip audio FX chain (pan / EQ / filters / compressor / reverb / delay /
    * modulation) — built as WebAudio nodes by the engine for playback AND export.
    * null/undefined = untouched original sound.

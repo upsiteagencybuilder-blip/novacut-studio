@@ -79,11 +79,11 @@ export const SOUND_TOOLS: ProTool[] = [
   { id: 'sound-foley-sampler', name: 'Foley Sampler', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Pad-based performance instrument for triggering foley hits' },
   { id: 'sound-audio-sync-tool', name: 'Audio Sync Tool (Waveform Matching)', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Align clips by matching their waveforms automatically' },
   { id: 'sound-ltc-timecode-reader', name: 'LTC Timecode Reader', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Decode linear timecode from an audio track' },
-  { id: 'sound-audio-ducking-controls', name: 'Audio Ducking Controls', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Auto-duck toggle in clip properties ducks music under dialogue' },
+  { id: 'sound-audio-ducking-controls', name: 'Audio Ducking Controls', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Auto-duck toggle in clip properties — v2 is threshold-based: music ducks while the video audio level is above the sensitivity threshold (60 ms attack, 450 ms release), with a plain-overlap fallback offline', action: 'open-properties-audiofx' },
   { id: 'sound-extract-audio', name: 'Extract Audio (Detach)', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Detach the video soundtrack into an editable audio clip in one click — Extract & edit voice lands straight on the Voice Chain (pitch / tempo / formant)' },
   { id: 'sound-essential-sound-panel', name: 'Essential Sound Panel', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Tag-based sound workflow stays roadmap, voice FX cover enhancement' },
   { id: 'sound-dialogue-enhancer', name: 'Dialogue Enhancer', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Dialogue Clarity audio FX preset plus voice FX enhancer presets' },
-  { id: 'sound-music-ducking-threshold', name: 'Music Ducking Depth', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Duck depth slider sets how far music drops under video audio' },
+  { id: 'sound-music-ducking-threshold', name: 'Music Ducking Threshold + Depth', section: 'sound', group: 'Sync & post', status: 'live', desc: 'Threshold slider sets the speech level that triggers ducking (1–40%); depth sets how far music drops (0–95%)', action: 'open-properties-audiofx' },
   { id: 'sound-sfx-spatializer', name: 'SFX Spatializer', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Place effects in simulated 3D space around the listener' },
   { id: 'sound-ambience-matcher', name: 'Ambience Matcher', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Match room tone across cuts for seamless dialogue' },
 ]

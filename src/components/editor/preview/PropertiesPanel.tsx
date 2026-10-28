@@ -3725,18 +3725,29 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
                 />
               </div>
               <p className="text-[10px] leading-snug text-muted-foreground/60">
-                Music volume automatically lowers while video sound plays.
+                Music lowers while the video audio is louder than the threshold — not just while it overlaps.
               </p>
               {(clip.autoDuck ?? false) && (
-                <SliderRow
-                  label="Depth"
-                  min={0}
-                  max={0.95}
-                  step={0.05}
-                  value={clip.duckDepth ?? 0.68}
-                  onChange={(v) => updateClip(clip.id, { duckDepth: v }, 'duck-depth')}
-                  format={fmtPct}
-                />
+                <>
+                  <SliderRow
+                    label="Threshold"
+                    min={0.01}
+                    max={0.4}
+                    step={0.01}
+                    value={clip.duckThreshold ?? 0.07}
+                    onChange={(v) => updateClip(clip.id, { duckThreshold: v }, 'duck-threshold')}
+                    format={(v) => `${Math.round(v * 100)}%`}
+                  />
+                  <SliderRow
+                    label="Depth"
+                    min={0}
+                    max={0.95}
+                    step={0.05}
+                    value={clip.duckDepth ?? 0.68}
+                    onChange={(v) => updateClip(clip.id, { duckDepth: v }, 'duck-depth')}
+                    format={fmtPct}
+                  />
+                </>
               )}
             </div>
           )}
