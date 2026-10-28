@@ -175,6 +175,7 @@ class PreviewEngine {
   /** Day 23 — per-track 3-band EQ stages (mixer), keyed by track id */
   private trackEqChains = new Map<string, { chain: TrackEqChain; sig: string }>()
   private analyserData: Uint8Array | null = null
+  private analyserFloat: Float32Array | null = null
   private renderPending = false
   /** cached reverb impulse responses, keyed by seconds bucket */
   private irCache = new Map<string, AudioBuffer>()
@@ -442,6 +443,11 @@ class PreviewEngine {
     }
   }
 
+  /** Day 30 — the live AudioContext (or null) for UI meters that need its sample rate. */
+  get audioContext(): AudioContext | null {
+    return this.audioCtx
+  }
+
   /** RMS master level 0..1 for UI meters (0 when audio graph not yet built) */
   getMasterLevel(): number {
     if (!this.masterAnalyser || !this.analyserData) return 0
@@ -452,6 +458,15 @@ class PreviewEngine {
       sum += v * v
     }
     return Math.min(1, Math.sqrt(sum / this.analyserData.length) * 2.2)
+  }
+
+  /** Day 30 — the master analyser's current time-domain frame (mono down-mix) for the live LUFS meter. */
+  getMasterTimeData(): Float32Array | null {
+    if (!this.masterAnalyser) return null
+    const need = this.masterAnalyser.fftSize
+    if (!this.analyserFloat || this.analyserFloat.length !== need) this.analyserFloat = new Float32Array(need)
+    this.masterAnalyser.getFloatTimeDomainData(this.analyserFloat as Float32Array<ArrayBuffer>)
+    return this.analyserFloat
   }
 
   /** Sample the current preview frame at a small resolution (for scopes) */

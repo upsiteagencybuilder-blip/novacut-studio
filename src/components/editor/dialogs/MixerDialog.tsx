@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AudioLines, ChevronDown, Film, Headphones, Layers, SlidersVertical, Volume2, VolumeX } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
 import { getEngine } from '@/lib/editor/engine'
+import { KWeight } from '@/lib/editor/audio-mix'
 import type { Track } from '@/lib/editor/types'
 import { cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -88,6 +89,77 @@ function MasterMeter() {
         <span className="ml-[12%]">-6</span>
         <span>0dB</span>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Day 30 — live momentary loudness readout next to the master meter: the
+ * engine's master analyser frame runs through the REAL BS.1770 K-weighting
+ * chain and a 400 ms rolling window (the momentary loudness window). The
+ * analyser down-mixes to mono, so the energy is doubled to model a symmetric
+ * stereo master — a close indicator, with the certified number coming from
+ * the export two-pass measure.
+ */
+function MasterLufs() {
+  const ref = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    let raf = 0
+    let alive = true
+    let kw: KWeight | null = null
+    let sampleRate = 0
+    const ring: number[] = []
+    const tick = () => {
+      if (!alive) return
+      let lufsTxt = '—'
+      try {
+        const engine = getEngine()
+        const data = engine.getMasterTimeData()
+        if (data && data.length) {
+          const sr = engine.audioContext?.sampleRate ?? 48000
+          if (!kw || sampleRate !== sr) {
+            kw = new KWeight(sr)
+            sampleRate = sr
+          }
+          const out = new Float32Array(data.length)
+          kw.process(data, out)
+          let ms = 0
+          for (let i = 0; i < out.length; i++) ms += out[i] * out[i]
+          // frame duration → energy per second; ×2 models the L+R stereo sum
+          ring.push((ms / out.length) * 2)
+          const window = Math.max(1, Math.round((0.4 * 1000) / (out.length / sr)))
+          while (ring.length > window) ring.shift()
+          if (ring.length >= window) {
+            const mean = ring.reduce((a, b) => a + b, 0) / ring.length
+            const lufs = -0.691 + 10 * Math.log10(Math.max(mean, 1e-12))
+            lufsTxt = lufs < -69 ? '−∞' : lufs.toFixed(1)
+          }
+        }
+      } catch {
+        lufsTxt = '—'
+      }
+      if (ref.current) ref.current.textContent = lufsTxt
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => {
+      alive = false
+      cancelAnimationFrame(raf)
+    }
+  }, [])
+
+  return (
+    <div className="flex items-center gap-1.5" data-nc-master-lufs>
+      <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Loudness</span>
+      <span
+        ref={ref}
+        className="rounded bg-(--nc-panel-strong) px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-fuchsia-300"
+        title="Momentary LUFS (BS.1770 K-weighted, 400 ms window) — the export two-pass is the certified measure"
+      >
+        —
+      </span>
+      <span className="text-[9px] text-muted-foreground/60">LUFS · M</span>
     </div>
   )
 }
@@ -402,6 +474,7 @@ export function MixerDialog() {
               Output level with peak hold — past the rose zone it&apos;s clipping.
             </p>
           </div>
+          <MasterLufs />
         </div>
       </DialogContent>
     </Dialog>

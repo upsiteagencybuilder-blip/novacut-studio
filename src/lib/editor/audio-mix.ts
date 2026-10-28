@@ -754,6 +754,8 @@ export function applyTrackEq(
 export interface MixdownOptions {
   sampleRate: 44100 | 48000
   channels: 1 | 2
+  /** Day 30 — master trim in dB applied on top of the mix (loudness two-pass uses this) */
+  masterGainDb?: number
   onProgress?: (p: number) => void
 }
 
@@ -944,7 +946,7 @@ export async function renderProjectAudio(
   }
 
   const master = ctx.createGain()
-  master.gain.value = 1
+  master.gain.value = Math.pow(10, (opts.masterGainDb ?? 0) / 20)
   master.connect(ctx.destination)
 
   // Day 25 — threshold-based auto-duck: one envelope per ducking clip (own
@@ -1523,6 +1525,195 @@ if (typeof window !== 'undefined') {
       disabledGain: normalizeGainFor(false, { peakLevel: 0.25 }),
       missingAnalysisGain: normalizeGainFor(true, {}),
       mixdown,
+    }
+  }
+}
+
+/* ---------------- loudness measurement (Day 30 — ITU-R BS.1770-4) ---------------- */
+
+/** One RBJ biquad with persistent state — building block of the K-weighting chain. */
+class Biquad {
+  private b0: number
+  private b1: number
+  private b2: number
+  private a1: number
+  private a2: number
+  private x1 = 0
+  private x2 = 0
+  private y1 = 0
+  private y2 = 0
+
+  constructor(coefs: [number, number, number, number, number, number]) {
+    const [b0, b1, b2, a0, a1, a2] = coefs
+    this.b0 = b0 / a0
+    this.b1 = b1 / a0
+    this.b2 = b2 / a0
+    this.a1 = a1 / a0
+    this.a2 = a2 / a0
+  }
+
+  process(input: Float32Array, output: Float32Array): void {
+    for (let i = 0; i < input.length; i++) {
+      const x = input[i]
+      const y = this.b0 * x + this.b1 * this.x1 + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2
+      this.x2 = this.x1
+      this.x1 = x
+      this.y2 = this.y1
+      this.y1 = y
+      output[i] = y
+    }
+  }
+}
+
+/**
+ * BS.1770-4 K-weighting chain, ITU-accurate DeMan bilinear design:
+ * stage 1 high shelf (+4.0 dB @ 1681.97 Hz, Q 0.70718) and stage 2 RLB
+ * high-pass (38.13 Hz, Q 0.50033). This design reproduces the spec's 48 kHz
+ * coefficients at any sample rate (verified: a 1 kHz stereo sine at 0 dBFS
+ * reads ≈ 0.0 LUFS and at −23 dBFS reads ≈ −23.0 LUFS — EBU Tech 3341 case 1).
+ * State is persistent across process() calls so the live meter feeds frames.
+ */
+export class KWeight {
+  private shelf: Biquad
+  private rlb: Biquad
+
+  constructor(sampleRate: number) {
+    const Ks = Math.tan((Math.PI * 1681.9744509555319) / sampleRate)
+    const Vh = Math.pow(10, 3.999843853973347 / 20)
+    const Vb = Math.pow(Vh, 0.499666774155)
+    const Qs = 0.7071752369554196
+    const a0s = 1 + Ks / Qs + Ks * Ks
+    this.shelf = new Biquad([
+      (Vh + Vb * (Ks / Qs) + Ks * Ks) / a0s,
+      (2 * (Ks * Ks - Vh)) / a0s,
+      (Vh - Vb * (Ks / Qs) + Ks * Ks) / a0s,
+      1,
+      (2 * (Ks * Ks - 1)) / a0s,
+      (1 - Ks / Qs + Ks * Ks) / a0s,
+    ])
+    const Kr = Math.tan((Math.PI * 38.13547087613982) / sampleRate)
+    const Qr = 0.5003270373253953
+    const a0r = 1 + Kr / Qr + Kr * Kr
+    this.rlb = new Biquad([1, -2, 1, 1, (2 * (Kr * Kr - 1)) / a0r, (1 - Kr / Qr + Kr * Kr) / a0r])
+  }
+
+  /** Filter one channel (writes the K-weighted signal into `out`). */
+  process(input: Float32Array, out: Float32Array): Float32Array {
+    const tmp = out === input ? new Float32Array(input.length) : out
+    this.shelf.process(input, tmp)
+    this.rlb.process(tmp, out)
+    return out
+  }
+}
+
+/** −0.691 + 10·log10(z) — the BS.1770 loudness formula for a summed energy z. */
+function lufsFromEnergy(z: number): number {
+  return -0.691 + 10 * Math.log10(Math.max(z, 1e-20))
+}
+
+/**
+ * Integrated loudness (LUFS) of a rendered buffer per BS.1770-4:
+ * K-weighted 400 ms blocks with a 100 ms hop, absolute gate at −70 LUFS and
+ * the relative −10 LU gate. Returns −Infinity for digital silence.
+ */
+export function measureIntegratedLufs(buffer: AudioBuffer): number {
+  const fs = buffer.sampleRate
+  const n = buffer.length
+  const nCh = Math.min(2, buffer.numberOfChannels)
+  if (!n) return -Infinity
+  const weighted: Float32Array[] = []
+  for (let ch = 0; ch < nCh; ch++) {
+    const src = buffer.getChannelData(ch)
+    const kw = new KWeight(fs)
+    const out = new Float32Array(n)
+    kw.process(src, out)
+    weighted.push(out)
+  }
+  const block = Math.max(1, Math.round(0.4 * fs))
+  const hop = Math.max(1, Math.round(0.1 * fs))
+  const energies: number[] = []
+  for (let start = 0; start + block <= n; start += hop) {
+    let z = 0
+    for (const w of weighted) {
+      let s = 0
+      for (let i = start; i < start + block; i++) s += w[i] * w[i]
+      z += s / block
+    }
+    energies.push(z)
+  }
+  if (!energies.length) return -Infinity
+  // absolute gate: keep blocks louder than −70 LUFS
+  const absThresh = Math.pow(10, (-70 + 0.691) / 10)
+  const absGated = energies.filter((z) => z > absThresh)
+  if (!absGated.length) return -Infinity
+  // relative gate: −10 LU under the abs-gated mean
+  const absMean = absGated.reduce((a, b) => a + b, 0) / absGated.length
+  const relL = lufsFromEnergy(absMean)
+  const relThresh = Math.pow(10, (relL - 10 + 0.691) / 10)
+  const relGated = absGated.filter((z) => z > relThresh)
+  const pool = relGated.length ? relGated : absGated
+  return lufsFromEnergy(pool.reduce((a, b) => a + b, 0) / pool.length)
+}
+
+/* ---------------- loudness QA harness (Day 30 — real shared math) ---------------- */
+
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __ncLufsHarness?: unknown }).__ncLufsHarness = async (arg?: {
+    project?: Project
+    mediaMap?: Map<string, MediaAssetRuntime>
+    target?: number
+  }) => {
+    const sr = 44100
+    // NOTE: build one STEREO buffer — a mono source up-mixes to BOTH outputs
+    // (doubling each channel), which would corrupt the loudness receipt.
+    const makeSine = (peak: number, seconds = 3) => {
+      const ctx = new OfflineAudioContext(2, sr * seconds, sr)
+      const buf = ctx.createBuffer(2, sr * seconds, sr)
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch)
+        for (let i = 0; i < d.length; i++) d[i] = Math.sin((2 * Math.PI * 1000 * i) / sr) * peak
+      }
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.connect(ctx.destination)
+      src.start(0)
+      return ctx.startRendering()
+    }
+    const full = await makeSine(1)
+    // EBU Tech 3341 case 1: 1 kHz stereo sine at −23 dBFS must read −23.0 LUFS
+    const minus23 = await makeSine(Math.pow(10, -23 / 20))
+
+    // gating receipt: 2 s at −23 LUFS then 3 s of digital silence — the
+    // integrated number must ignore the silent tail
+    const gated = new OfflineAudioContext(2, sr * 5, sr)
+    const gbuf = gated.createBuffer(2, sr * 5, sr)
+    const quietPeak = Math.pow(10, -23 / 20)
+    for (let ch = 0; ch < 2; ch++) {
+      const d = gbuf.getChannelData(ch)
+      for (let i = 0; i < sr * 2; i++) d[i] = Math.sin((2 * Math.PI * 1000 * i) / sr) * quietPeak
+    }
+    const gsrc = gated.createBufferSource()
+    gsrc.buffer = gbuf
+    gsrc.connect(gated.destination)
+    gsrc.start(0)
+    const gatedBuf = await gated.startRendering()
+
+    // two-pass mixdown receipt through renderProjectAudio (optional, E2E)
+    let pass: { before: number; gainDb: number; after: number; target: number } | null = null
+    if (arg?.project && arg?.mediaMap && arg.mediaMap.size > 0 && arg.target != null) {
+      const before = await renderProjectAudio(arg.project, arg.mediaMap, { sampleRate: sr, channels: 2 })
+      const lufsBefore = measureIntegratedLufs(before)
+      const gainDb = Math.max(-24, Math.min(24, arg.target - lufsBefore))
+      const after = await renderProjectAudio(arg.project, arg.mediaMap, { sampleRate: sr, channels: 2, masterGainDb: gainDb })
+      pass = { before: +lufsBefore.toFixed(2), gainDb: +gainDb.toFixed(2), after: +measureIntegratedLufs(after).toFixed(2), target: arg.target }
+    }
+
+    return {
+      spec: 'lufs',
+      fullScaleSineLufs: +measureIntegratedLufs(full).toFixed(2),
+      minus23SineLufs: +measureIntegratedLufs(minus23).toFixed(2),
+      gatedSineLufs: +measureIntegratedLufs(gatedBuf).toFixed(2),
+      pass,
     }
   }
 }

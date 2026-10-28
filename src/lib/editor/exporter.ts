@@ -5,7 +5,7 @@
  * The timeline plays through once while recording, then the blob is ready for download.
  */
 import { getEngine } from './engine'
-import { encodeMp3, encodeWav, renderProjectAudio } from './audio-mix'
+import { encodeMp3, encodeWav, measureIntegratedLufs, renderProjectAudio } from './audio-mix'
 import type { MediaAssetRuntime, Project } from './types'
 
 export interface ExportOptions {
@@ -144,6 +144,8 @@ export interface AudioExportOptions {
   format: 'wav' | 'mp3'
   /** MP3 bitrate — ignored for WAV */
   mp3Kbps?: 128 | 192 | 320
+  /** Day 30 — normalize the mix to this integrated LUFS target (two-pass; null = off) */
+  loudnessTarget?: number | null
   onProgress?: (p: number) => void
 }
 
@@ -152,6 +154,10 @@ export interface AudioExportResult {
   mimeType: string
   extension: 'wav' | 'mp3'
   durationSec: number
+  /** Day 30 — measured integrated LUFS of the exported mix (null when skipped) */
+  lufs?: number | null
+  /** master trim applied by the loudness two-pass (dB) */
+  loudnessGainDb?: number
 }
 
 /**
@@ -165,18 +171,33 @@ export async function exportProjectAudio(
   mediaMap: Map<string, MediaAssetRuntime>,
   opts: AudioExportOptions
 ): Promise<AudioExportResult> {
-  const buffer = await renderProjectAudio(project, mediaMap, {
-    sampleRate: opts.format === 'mp3' ? 44100 : opts.sampleRate,
-    channels: opts.channels,
-    onProgress: opts.onProgress,
-  })
+  const render = (masterGainDb: number) =>
+    renderProjectAudio(project, mediaMap, {
+      sampleRate: opts.format === 'mp3' ? 44100 : opts.sampleRate,
+      channels: opts.channels,
+      masterGainDb,
+      onProgress: opts.onProgress,
+    })
+  let buffer = await render(0)
+  // Day 30 — loudness normalize: measure the integrated LUFS of the mix,
+  // apply the shortfall as a master trim (±24 dB), re-render, re-measure.
+  let lufs: number | null = null
+  let loudnessGainDb = 0
+  if (opts.loudnessTarget != null) {
+    const measured = measureIntegratedLufs(buffer)
+    if (Number.isFinite(measured)) {
+      loudnessGainDb = Math.max(-24, Math.min(24, opts.loudnessTarget - measured))
+      if (Math.abs(loudnessGainDb) > 0.05) buffer = await render(loudnessGainDb)
+      lufs = +measureIntegratedLufs(buffer).toFixed(2)
+    }
+  }
   opts.onProgress?.(0.96)
   if (opts.format === 'mp3') {
     const blob = await encodeMp3(buffer, opts.mp3Kbps ?? 192)
     opts.onProgress?.(1)
-    return { blob, mimeType: 'audio/mpeg', extension: 'mp3', durationSec: buffer.duration }
+    return { blob, mimeType: 'audio/mpeg', extension: 'mp3', durationSec: buffer.duration, lufs, loudnessGainDb }
   }
   const blob = encodeWav(buffer)
   opts.onProgress?.(1)
-  return { blob, mimeType: 'audio/wav', extension: 'wav', durationSec: buffer.duration }
+  return { blob, mimeType: 'audio/wav', extension: 'wav', durationSec: buffer.duration, lufs, loudnessGainDb }
 }

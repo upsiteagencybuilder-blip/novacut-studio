@@ -76,6 +76,7 @@ export function ExportDialog() {
   const [channels, setChannels] = useState<'1' | '2'>('2')
   const [mp3Kbps, setMp3Kbps] = useState<'192' | '320'>('192')
   const [audioRendering, setAudioRendering] = useState(false)
+  const [loudnessTarget, setLoudnessTarget] = useState<'off' | '-14' | '-16' | '-23'>('off')
   const [audioResult, setAudioResult] = useState<{ url: string; size: number; ext: 'wav' | 'mp3' } | null>(null)
 
   const duration = projectDuration(project)
@@ -194,6 +195,7 @@ export function ExportDialog() {
         channels: channels === '1' ? 1 : 2,
         format: audioFormat,
         mp3Kbps: mp3Kbps === '320' ? 320 : 192,
+        loudnessTarget: loudnessTarget === 'off' ? null : Number(loudnessTarget),
         onProgress: (p) => useEditor.getState().setExportState({ progress: p }),
       })
       const url = URL.createObjectURL(result.blob)
@@ -205,7 +207,11 @@ export function ExportDialog() {
       document.body.appendChild(a)
       a.click()
       a.remove()
-      toast.success(`Audio exported — ${formatBytes(result.blob.size)} ${result.extension.toUpperCase()}`)
+      toast.success(
+        result.lufs != null && loudnessTarget !== 'off'
+          ? `Audio exported — ${result.lufs} LUFS (target ${loudnessTarget}, trim ${(result.loudnessGainDb ?? 0) >= 0 ? '+' : ''}${(result.loudnessGainDb ?? 0).toFixed(1)} dB)`
+          : `Audio exported — ${formatBytes(result.blob.size)} ${result.extension.toUpperCase()}`
+      )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Audio export failed')
     } finally {
@@ -541,6 +547,22 @@ export function ExportDialog() {
                     <SelectItem value="1" className="text-[11px]">Mono</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              {/* Day 30 — loudness normalize: two-pass BS.1770 measurement */}
+              <div className="mt-2 flex items-center gap-2" data-nc-loudness-row>
+                <span className="text-[10px] text-muted-foreground">Loudness</span>
+                <Select value={loudnessTarget} onValueChange={(v) => setLoudnessTarget(v as 'off' | '-14' | '-16' | '-23')}>
+                  <SelectTrigger aria-label="Loudness target" className="h-7 w-36 text-[11px]" data-nc-loudness-select>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off" className="text-[11px]">Off — mix as-is</SelectItem>
+                    <SelectItem value="-14" className="text-[11px]">−14 LUFS · streaming</SelectItem>
+                    <SelectItem value="-16" className="text-[11px]">−16 LUFS · podcast</SelectItem>
+                    <SelectItem value="-23" className="text-[11px]">−23 LUFS · broadcast</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-[10px] text-muted-foreground/70">two-pass measure + trim</span>
               </div>
               {audioFormat === 'mp3' && (
                 <div className="mt-2 flex items-center gap-2">
