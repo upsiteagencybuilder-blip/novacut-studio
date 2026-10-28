@@ -10,7 +10,7 @@ import type { OverlayDraw, VisionDraw } from '@/lib/effects/types'
 import { getEffect, getOverlayDraw } from '@/lib/effects/registry'
 import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
 import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
-import { applyPixelEffects, buildFilterString, clamp, composeFilters, composeGrades, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, formatTimecode, projectDuration, rampSourceFraction } from './utils'
+import { applyPixelEffects, buildFilterString, clamp, composeFilters, composeGrades, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, fadeCurveFactor, formatTimecode, projectDuration, rampSourceFraction } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
 import { applyClipFx, applyTrackEq, buildFxChain, buildTrackEq, makeImpulse, rebuildModulation } from './audio-mix'
 import { ensureFormantModule, getFormantError } from './formant-worklet'
@@ -822,8 +822,12 @@ class PreviewEngine {
     opts?: { skipFadeOut?: boolean; skipFadeIn?: boolean }
   ): number {
     let alpha = 1
-    if (clip.fadeIn > 0.01 && !opts?.skipFadeIn) alpha *= clamp(tLocal / clip.fadeIn, 0, 1)
-    if (clip.fadeOut > 0.01 && !opts?.skipFadeOut) alpha *= clamp((clip.duration - tLocal) / clip.fadeOut, 0, 1)
+    if (clip.fadeIn > 0.01 && !opts?.skipFadeIn) {
+      alpha *= fadeCurveFactor(clip.fadeInCurve, tLocal / clip.fadeIn)
+    }
+    if (clip.fadeOut > 0.01 && !opts?.skipFadeOut) {
+      alpha *= fadeCurveFactor(clip.fadeOutCurve, (clip.duration - tLocal) / clip.fadeOut)
+    }
     return alpha
   }
 

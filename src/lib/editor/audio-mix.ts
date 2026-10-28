@@ -15,7 +15,7 @@
  */
 import type { Clip, ClipAudioFx, MediaAssetRuntime, Project, Track } from './types'
 import { resolveNestedProject } from './nested'
-import { clamp, goertzelMag, projectDuration } from './utils'
+import { clamp, fadeCurveFactor, goertzelMag, projectDuration } from './utils'
 import { decodeSource } from '@/lib/effects/voice'
 import { createPitchNode, ensurePitchModule, pitchModuleReady } from './pitch-worklet'
 import { createFormantNode, ensureFormantModule, formantModuleReady } from './formant-worklet'
@@ -89,8 +89,16 @@ export interface AudioFxChain {
   delay?: DelayNode
   delayWet?: GainNode
   delayFb?: GainNode
+  /** Day 28 ping-pong: the two cross-fed delays (L and R taps) */
+  delayPingL?: DelayNode
+  delayPingR?: DelayNode
+  /** Day 28 ping-pong: the R→L feedback leg (L→R leg rides delayFb) */
+  delayPingFb?: GainNode
   convolver?: ConvolverNode
   reverbWet?: GainNode
+  /** Day 28 reverb pre-delay + damping in the wet path */
+  reverbPredelay?: DelayNode
+  reverbDamp?: BiquadFilterNode
 }
 
 /** Build the always-present core chain with fully neutral (transparent) params. */
@@ -561,10 +569,56 @@ export function applyClipFx(ctx: BaseAudioContext, chain: AudioFxChain, fx: Clip
   const amount = clamp(f.modAmount ?? 0.5, 0, 1)
   if (kind !== chain.modKind || kind !== 'none') rebuildModulation(ctx, chain, kind, amount)
   else if (chain.mod) set(chain.mod.dry.gain, 1)
-  // delay aux
+  // delay aux — mono tap-and-feedback, or Day 28 ping-pong (repeats alternate L/R)
   const dMix = clamp(f.delayMix ?? 0, 0, 1)
+  const wantPing = !!f.delayPingPong
   if (dMix > 0.001) {
-    if (!chain.delay) {
+    // rebuild when the flavor changed (mono ↔ ping-pong)
+    if (wantPing && !chain.delayPingL) {
+      if (chain.delayWet) {
+        try {
+          chain.modOut.disconnect(chain.delay!)
+          chain.delay?.disconnect()
+        } catch {
+          /* best effort */
+        }
+        chain.delay = undefined
+        chain.delayFb = undefined
+      }
+      const dL = ctx.createDelay(1.2)
+      const dR = ctx.createDelay(1.2)
+      const fbLR = ctx.createGain()
+      const fbRL = ctx.createGain()
+      const wet = ctx.createGain()
+      const merger = ctx.createChannelMerger(2)
+      chain.modOut.connect(dL)
+      dL.connect(fbLR)
+      fbLR.connect(dR) // L repeat feeds the R tap
+      dR.connect(fbRL)
+      fbRL.connect(dL) // R repeat feeds the L tap back
+      dL.connect(merger, 0, 0)
+      dR.connect(merger, 0, 1)
+      merger.connect(wet)
+      wet.connect(chain.sum)
+      chain.delayPingL = dL
+      chain.delayPingR = dR
+      chain.delayFb = fbLR // master feedback (mirrored to fbRL below)
+      chain.delayWet = wet
+      chain.delayPingFb = fbRL
+    }
+    if (!wantPing && !chain.delay) {
+      if (chain.delayPingL) {
+        try {
+          chain.modOut.disconnect(chain.delayPingL)
+          chain.delayPingL.disconnect()
+          chain.delayPingR?.disconnect()
+        } catch {
+          /* best effort */
+        }
+        chain.delayPingL = undefined
+        chain.delayPingR = undefined
+        chain.delayPingFb = undefined
+      }
       const dly = ctx.createDelay(1.2)
       const wet = ctx.createGain()
       const fb = ctx.createGain()
@@ -577,26 +631,41 @@ export function applyClipFx(ctx: BaseAudioContext, chain: AudioFxChain, fx: Clip
       chain.delayWet = wet
       chain.delayFb = fb
     }
-    set(chain.delay.delayTime, clamp(f.delayTime ?? 0.25, 0.05, 0.9))
     set(chain.delayFb!.gain, clamp(f.delayFeedback ?? 0.3, 0, 0.85))
+    if (chain.delayPingFb) set(chain.delayPingFb.gain, clamp(f.delayFeedback ?? 0.3, 0, 0.85))
+    const dt = clamp(f.delayTime ?? 0.25, 0.05, 0.9)
+    if (chain.delay) set(chain.delay.delayTime, dt)
+    if (chain.delayPingL) set(chain.delayPingL.delayTime, dt)
+    if (chain.delayPingR) set(chain.delayPingR.delayTime, dt)
     set(chain.delayWet!.gain, dMix * 0.9)
   } else if (chain.delayWet) {
     set(chain.delayWet.gain, 0)
   }
-  // reverb aux (convolver created lazily, IR generated)
+  // reverb aux (convolver created lazily, IR generated) — Day 28: pre-delay
+  // (dry/tail separation) + damping (HF absorption) in the wet path
   const rMix = clamp(f.reverbMix ?? 0, 0, 1)
   if (rMix > 0.001) {
     if (!chain.convolver) {
       const size = clamp(f.reverbSize ?? 0.6, 0.2, 1)
       const conv = ctx.createConvolver()
       conv.buffer = makeImpulse(ctx, 0.4 + 2.8 * size)
+      const predelay = ctx.createDelay(0.25)
+      const damp = ctx.createBiquadFilter()
+      damp.type = 'lowpass'
+      damp.frequency.value = 12000
       const wet = ctx.createGain()
-      chain.modOut.connect(conv)
-      conv.connect(wet)
+      chain.modOut.connect(predelay)
+      predelay.connect(conv)
+      conv.connect(damp)
+      damp.connect(wet)
       wet.connect(chain.sum)
       chain.convolver = conv
       chain.reverbWet = wet
+      chain.reverbPredelay = predelay
+      chain.reverbDamp = damp
     }
+    set(chain.reverbPredelay!.delayTime, clamp(f.reverbPredelay ?? 0, 0, 0.25))
+    set(chain.reverbDamp!.frequency, 1200 + (1 - clamp(f.reverbDamp ?? 0, 0, 1)) * 10800)
     set(chain.reverbWet!.gain, rMix * 0.8)
   } else if (chain.reverbWet) {
     set(chain.reverbWet.gain, 0)
@@ -688,11 +757,11 @@ export interface MixdownOptions {
   onProgress?: (p: number) => void
 }
 
-/** Engine-mirrored fade envelope (fadeIn/fadeOut linear ramps). */
+/** Engine-mirrored fade envelope (fadeIn/fadeOut with Day 28 curve shapes). */
 function fadeFactorLocal(clip: Clip, tLocal: number): number {
   let alpha = 1
-  if (clip.fadeIn > 0.01) alpha *= clamp(tLocal / clip.fadeIn, 0, 1)
-  if (clip.fadeOut > 0.01) alpha *= clamp((clip.duration - tLocal) / clip.fadeOut, 0, 1)
+  if (clip.fadeIn > 0.01) alpha *= fadeCurveFactor(clip.fadeInCurve, tLocal / clip.fadeIn)
+  if (clip.fadeOut > 0.01) alpha *= fadeCurveFactor(clip.fadeOutCurve, (clip.duration - tLocal) / clip.fadeOut)
   return alpha
 }
 
@@ -1060,8 +1129,10 @@ if (typeof window !== 'undefined') {
  *   'gate'     → Day 24: quiet noise (below threshold) gated down, loud tone passes
  *   'denoise'  → Day 24: steady noise floor subtracted spectrally
  *   'track-pan' → Day 27: per-track pan hard L/R vs center (per-channel RMS)
+ *   'fade-curves' → Day 28: linear/ease/hold fade envelopes (shared curve math)
+ *   'pingpong'   → Day 28: ping-pong delay alternates repeats L then R
  */
-async function runEqHarness(spec: 'eq10' | 'track-eq' | 'gate' | 'denoise' | 'track-pan') {
+async function runEqHarness(spec: 'eq10' | 'track-eq' | 'gate' | 'denoise' | 'track-pan' | 'fade-curves' | 'pingpong') {
   const sr = 44100
   const OfflineCtor =
     typeof OfflineAudioContext !== 'undefined'
@@ -1113,6 +1184,90 @@ async function runEqHarness(spec: 'eq10' | 'track-eq' | 'gate' | 'denoise' | 'tr
     }
   }
 
+  if (spec === 'fade-curves') {
+    // Day 28 — render a tone whose gain follows the REAL shared
+    // fadeCurveFactor over a 1 s fade-in; sample RMS at 25% / 60% of the
+    // window for each shape (linear / ease / hold).
+    const renderFade = async (curve: 'linear' | 'ease' | 'hold') => {
+      const ctx = new OfflineCtor(1, Math.ceil(sr * 1.2), sr)
+      const osc = ctx.createOscillator()
+      osc.type = 'sine'
+      osc.frequency.value = 440
+      const g = ctx.createGain()
+      // envelope automation stepping the shared curve every 10 ms
+      const step = 0.01
+      g.gain.setValueAtTime(fadeCurveFactor(curve, 0), 0)
+      for (let t = step; t <= 1.0 + 1e-9; t += step) {
+        g.gain.linearRampToValueAtTime(fadeCurveFactor(curve, Math.min(1, t)), t)
+      }
+      osc.connect(g)
+      g.connect(ctx.destination)
+      osc.start(0)
+      osc.stop(1.2)
+      const r = await ctx.startRendering()
+      const d = r.getChannelData(0)
+      const rmsAt = (from: number, to: number) => {
+        let a = 0
+        const i0 = Math.floor(sr * from)
+        const i1 = Math.floor(sr * to)
+        for (let i = i0; i < i1; i++) a += d[i] * d[i]
+        return Math.sqrt(a / (i1 - i0))
+      }
+      return { at25: rmsAt(0.2, 0.3), at60: rmsAt(0.55, 0.65), full: rmsAt(1.05, 1.15) }
+    }
+    const [lin, ea, hd] = await Promise.all([renderFade('linear'), renderFade('ease'), renderFade('hold')])
+    return {
+      spec,
+      linearAt25: +lin.at25.toFixed(4),
+      easeAt25: +ea.at25.toFixed(4),
+      holdAt25: +hd.at25.toFixed(4),
+      linearAt60: +lin.at60.toFixed(4),
+      easeAt60: +ea.at60.toFixed(4),
+      holdAt60: +hd.at60.toFixed(4),
+      allFull: +((lin.full + ea.full + hd.full) / 3).toFixed(4),
+    }
+  }
+  if (spec === 'pingpong') {
+    // Day 28 — impulse into the real chain with ping-pong delay: repeats must
+    // alternate L (first) then R, with delayTime spacing.
+    const ctx = new OfflineCtor(2, Math.ceil(sr * 1.5), sr)
+    const chain = buildFxChain(ctx)
+    applyClipFx(ctx, chain, {
+      delayMix: 1,
+      delayTime: 0.2,
+      delayFeedback: 0.5,
+      delayPingPong: true,
+      highPass: 0,
+      lowPass: 0,
+    } as ClipAudioFx)
+    const buf = ctx.createBuffer(1, Math.ceil(sr * 0.005), sr)
+    const d = buf.getChannelData(0)
+    for (let i = 0; i < d.length; i++) d[i] = (1 - i / d.length) * 0.9
+    const src = ctx.createBufferSource()
+    src.buffer = buf
+    src.connect(chain.pan)
+    chain.sum.connect(ctx.destination)
+    src.start(0)
+    const r = await ctx.startRendering()
+    const l = r.getChannelData(0)
+    const r0 = r.getChannelData(1)
+    const rmsWin = (x: Float32Array, from: number, to: number) => {
+      let a = 0
+      const i0 = Math.floor(sr * from)
+      const i1 = Math.floor(sr * to)
+      for (let i = i0; i < i1; i++) a += x[i] * x[i]
+      return Math.sqrt(a / (i1 - i0))
+    }
+    // window 1: 0.21–0.28 s (first repeat, LEFT); window 2: 0.41–0.48 s (second, RIGHT)
+    return {
+      spec,
+      firstRepeatL: +rmsWin(l, 0.21, 0.28).toFixed(4),
+      firstRepeatR: +rmsWin(r0, 0.21, 0.28).toFixed(4),
+      secondRepeatL: +rmsWin(l, 0.41, 0.48).toFixed(4),
+      secondRepeatR: +rmsWin(r0, 0.41, 0.48).toFixed(4),
+      alternation: +((rmsWin(r0, 0.41, 0.48) / (rmsWin(l, 0.41, 0.48) + 1e-9)) / (rmsWin(r0, 0.21, 0.28) / (rmsWin(l, 0.21, 0.28) + 1e-9))).toFixed(4),
+    }
+  }
   if (spec === 'track-pan') {
     // Day 27 — pan the whole track hard left/right: mono noise through the
     // real strip; compare per-channel band energies.

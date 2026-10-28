@@ -35,10 +35,10 @@ export const SOUND_TOOLS: ProTool[] = [
   { id: 'sound-expander', name: 'Expander', section: 'sound', group: 'Restoration', status: 'planned', desc: 'Push quiet noise further down for gentler gating' },
 
   // -------- Reverb & delay --------
-  { id: 'sound-studio-reverb', name: 'Studio Reverb', section: 'sound', group: 'Reverb & delay', status: 'live', desc: 'Convolution reverb per clip with Room / Hall / Stadium sizes' },
+  { id: 'sound-studio-reverb', name: 'Studio Reverb', section: 'sound', group: 'Reverb & delay', status: 'live', desc: 'Convolution reverb per clip with Room / Hall / Stadium sizes, pre-delay (0–250 ms) and damping (HF absorption) in the wet path' },
   { id: 'sound-surround-reverb', name: 'Surround Reverb', section: 'sound', group: 'Reverb & delay', status: 'planned', desc: 'Multichannel reverb tails for 5.1 and 7.1 mixes' },
   { id: 'sound-convolution-reverb', name: 'Convolution Reverb', section: 'sound', group: 'Reverb & delay', status: 'planned', desc: 'Impulse-response reverb sampled from real spaces (generated IR ships today)' },
-  { id: 'sound-delay-effect', name: 'Delay Effect', section: 'sound', group: 'Reverb & delay', status: 'live', desc: 'Feedback delay unit with time, repeat and wet mix per clip' },
+  { id: 'sound-delay-effect', name: 'Delay Effect', section: 'sound', group: 'Reverb & delay', status: 'live', desc: 'Feedback delay unit with time, repeat and wet mix per clip — plus a ping-pong mode whose repeats alternate left/right' },
   { id: 'sound-analog-delay', name: 'Analog Delay', section: 'sound', group: 'Reverb & delay', status: 'planned', desc: 'Tape-style delay with drift, wow and saturation' },
 
   // -------- Modulation --------
@@ -57,7 +57,7 @@ export const SOUND_TOOLS: ProTool[] = [
   // -------- Mixing & routing --------
   { id: 'sound-gain-control-slider', name: 'Gain Control Slider', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Volume slider per clip plus master volume in the audio panel' },
   { id: 'sound-volume-keyframe-tool', name: 'Volume Keyframe Tool', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Keyframe volume like any property, easing applies between keys' },
-  { id: 'sound-audio-fades', name: 'Audio Fade In / Out', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Per-clip gain ramps drawn as fade wedges on the timeline', action: 'open-effects' },
+  { id: 'sound-audio-fades', name: 'Audio Fade In / Out', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Per-clip gain ramps with curve shapes — linear, ease (smoothstep) and hold — drawn as shaped wedges on the timeline and baked into preview + exports' },
   { id: 'sound-pan-slider', name: 'Pan Slider (Left/Right)', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Balance a clip across the stereo field (Audio FX Pan)' },
   { id: 'sound-track-pan', name: 'Per-Track Pan (Mixer)', section: 'sound', group: 'Mixing & routing', status: 'live', desc: 'Pan an entire track in the mixer strip (−100 L … 100 R, double-click to center) — the strip stage sits between every routed clip and the master, in preview and the offline mixdown', action: 'open-mixer' },
   { id: 'sound-surround-panner', name: 'Surround Panner (5.1/7.1)', section: 'sound', group: 'Mixing & routing', status: 'planned', desc: 'Position sounds around multichannel speaker layouts' },

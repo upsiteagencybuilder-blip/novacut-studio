@@ -994,3 +994,25 @@ export function goertzelMag(data: Float32Array, sr: number, freq: number): numbe
   }
   return Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2) / (data.length / 2)
 }
+
+/** Fade curve shapes (Day 28): progress x 0..1 through the fade window → gain 0..1. */
+export type FadeCurve = 'linear' | 'ease' | 'hold'
+
+/**
+ * Shared fade-curve math used by the live engine, the offline mixdown and the
+ * timeline wedge overlays:
+ *  • linear — the classic straight ramp (previous default)
+ *  • ease   — smoothstep (slow-fast-slow)
+ *  • hold   — stays silent/quiet through the first 80% of the window, then a
+ *             fast ramp to full (a "held" fade with a punchy release)
+ */
+export function fadeCurveFactor(curve: FadeCurve | undefined, x: number): number {
+  const t = clamp01(x)
+  if (curve === 'ease') return t * t * (3 - 2 * t)
+  if (curve === 'hold') return t < 0.8 ? 0 : (t - 0.8) / 0.2
+  return t
+}
+
+function clamp01(v: number): number {
+  return v < 0 ? 0 : v > 1 ? 1 : v
+}

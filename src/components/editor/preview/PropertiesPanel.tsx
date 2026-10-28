@@ -2820,15 +2820,35 @@ function AudioFxSection({ clip }: { clip: Clip }) {
         format={fmtPct}
       />
       {(fx.reverbMix ?? 0) > 0.001 && (
-        <SliderRow
-          label="Room"
-          min={0.2}
-          max={1}
-          step={0.05}
-          value={fx.reverbSize ?? 0.6}
-          onChange={(v) => patch({ reverbSize: v })}
-          format={(v) => (v < 0.4 ? 'Room' : v < 0.7 ? 'Hall' : 'Stadium')}
-        />
+        <>
+          <SliderRow
+            label="Room"
+            min={0.2}
+            max={1}
+            step={0.05}
+            value={fx.reverbSize ?? 0.6}
+            onChange={(v) => patch({ reverbSize: v })}
+            format={(v) => (v < 0.4 ? 'Room' : v < 0.7 ? 'Hall' : 'Stadium')}
+          />
+          <SliderRow
+            label="Pre-dly"
+            min={0}
+            max={0.25}
+            step={0.005}
+            value={fx.reverbPredelay ?? 0}
+            onChange={(v) => patch({ reverbPredelay: v }, 'reverb-predelay')}
+            format={(v) => `${Math.round(v * 1000)} ms`}
+          />
+          <SliderRow
+            label="Damp"
+            min={0}
+            max={1}
+            step={0.05}
+            value={fx.reverbDamp ?? 0}
+            onChange={(v) => patch({ reverbDamp: v }, 'reverb-damp')}
+            format={fmtPct}
+          />
+        </>
       )}
 
       {/* delay */}
@@ -2845,6 +2865,16 @@ function AudioFxSection({ clip }: { clip: Clip }) {
         <>
           <SliderRow label="Time" min={0.05} max={0.9} step={0.01} value={fx.delayTime ?? 0.25} onChange={(v) => patch({ delayTime: v })} format={fmtSec} />
           <SliderRow label="Repeat" min={0} max={0.85} step={0.05} value={fx.delayFeedback ?? 0.3} onChange={(v) => patch({ delayFeedback: v })} format={fmtPct} />
+          <div className="flex items-center gap-2" data-nc-pingpong-row>
+            <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Ping-Pong</span>
+            <span className="flex-1 text-[10px] text-muted-foreground/60">repeats alternate L/R</span>
+            <Switch
+              checked={!!fx.delayPingPong}
+              onCheckedChange={(on) => patch({ delayPingPong: on }, true)}
+              aria-label="Ping-pong echo"
+              data-nc-pingpong-switch
+            />
+          </div>
         </>
       )}
 
@@ -3940,6 +3970,51 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
           onChange={(v) => updateClip(clip.id, { fadeOut: v }, 'fade-out')}
           format={fmtSec}
         />
+        {/* Day 28 — fade curve shapes (shared by engine, mixdown and wedges) */}
+        {clip.fadeIn > 0.01 && (
+          <div className="flex items-center gap-1" data-nc-fade-curve-in>
+            <span className="w-14 shrink-0 text-[10px] text-muted-foreground">In shape</span>
+            {(['linear', 'ease', 'hold'] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                data-nc-fade-curve={c}
+                aria-pressed={(clip.fadeInCurve ?? 'linear') === c}
+                onClick={() => updateClip(clip.id, { fadeInCurve: c }, 'fade-curve')}
+                className={cn(
+                  'rounded-full border px-2 py-0.5 text-[9px] capitalize transition',
+                  (clip.fadeInCurve ?? 'linear') === c
+                    ? 'border-emerald-400/70 bg-emerald-400/10 text-foreground'
+                    : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+        {clip.fadeOut > 0.01 && (
+          <div className="flex items-center gap-1" data-nc-fade-curve-out>
+            <span className="w-14 shrink-0 text-[10px] text-muted-foreground">Out shape</span>
+            {(['linear', 'ease', 'hold'] as const).map((c) => (
+              <button
+                key={c}
+                type="button"
+                data-nc-fade-curve={c}
+                aria-pressed={(clip.fadeOutCurve ?? 'linear') === c}
+                onClick={() => updateClip(clip.id, { fadeOutCurve: c }, 'fade-curve')}
+                className={cn(
+                  'rounded-full border px-2 py-0.5 text-[9px] capitalize transition',
+                  (clip.fadeOutCurve ?? 'linear') === c
+                    ? 'border-emerald-400/70 bg-emerald-400/10 text-foreground'
+                    : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* image duration */}

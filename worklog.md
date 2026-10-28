@@ -1432,3 +1432,25 @@ Stage Summary:
 - Day 27 shipped: the mixing console is now a full strip set — fader, pan, mute, solo, 3-band EQ disclosure, live meters per track + master section — with the strip DSP shared by preview and mixdown, plus a real sig bug fix.
 - Files: types.ts, audio-mix.ts, engine.ts, MixerDialog.tsx, sections/sound.ts.
 - Next: Day 28 — reverb + delay sends; fade-curve editor (linear / ease / hold).
+
+---
+Task ID: Day-28
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category C Day 28 — Reverb + delay sends; fade-curve editor (linear / ease / hold).
+
+Work Log:
+- NEW shared fade-curve math (utils.fadeCurveFactor): linear (classic ramp), ease (smoothstep), hold (silent/quiet through the first 80% of the window, fast release in the last 20%). Clip.fadeInCurve/fadeOutCurve typed fields; the LIVE engine fadeFactor, the OFFLINE mixdown fadeFactorLocal and the TIMELINE wedge overlays (shaped gradients — flat-then-drop for hold, steep-mid for ease) all read the same function, so a curve heard in preview is exactly what exports show and play.
+- Reverb upgrade (sends character): the wet path gains a pre-delay DelayNode (0–250 ms — separates dry from tail) and a damping lowpass (damp 0–100% → 12 kHz → 1.2 kHz HF absorption), both live-adjustable after creation; ClipAudioFx += reverbPredelay/reverbDamp.
+- Delay upgrade: ping-pong mode (ClipAudioFx.delayPingPong) — two cross-fed delays with L→R→L feedback legs and a channel merger, so repeats alternate left/right; the chain rebuilds when the flavor flips (mono ↔ ping-pong) and shares the feedback/time/wet params.
+- PropertiesPanel: fade In-shape/Out-shape chip rows (aria-pressed + emerald active, shown only when that fade > 0); Reverb block gains Pre-dly + Damp sliders; Echo block gains a Ping-Pong switch (data-nc-pingpong*).
+- Catalog: sound-studio-reverb + sound-delay-effect + sound-audio-fades descs honestly extended (pre-delay/damping, ping-pong, curve shapes).
+- E2E DSP receipts (real chain / real shared math): fade-curves — linear RMS 0.178 @25% of the window (theory 0.177), ease 0.1137, hold 0; ease overtakes linear mid-window (0.4588 vs 0.4248 @60%); all curves reach unity (full 0.7072 = sine RMS). pingpong — impulse through the real chain: first repeat LEFT only (L 0.0087 / R 0), second repeat RIGHT only (R 0.0167 / L 0) — true alternation.
+- E2E desktop 1280×800: fade chips render (linear pressed by default); ease tap → clip.fadeInCurve 'ease'; reverb sliders read "Pre-dly 50 ms / Damp 30%" after store set; ping-pong switch appears when echo is on, tap → delayPingPong true, undo reverts, redo re-applies.
+- E2E mobile 390×844: Edit sheet → fade section shows all 6 shape chips (In + Out).
+- Debug note: the agent-browser session error buffer accumulates pageerror events across reloads AND tabs — stale pre-fix entries kept resurfacing (4 "DropdownMenuLabel" ghosts from Day 26's interim build); fresh isolated sessions show 0 errors both days. Trust the Next dev overlay + fresh sessions for the zero-error bar.
+- Zero real errors (fresh session 0 total), eslint + tsc clean.
+
+Stage Summary:
+- Day 28 shipped: fade curves (linear/ease/hold) end to end — engine + mixdown + timeline wedges on one shared function — plus real reverb pre-delay/damping and ping-pong delay DSP with full UI, honest catalog updates.
+- Files: utils.ts, types.ts, engine.ts, audio-mix.ts, PropertiesPanel.tsx, ClipBlock.tsx, sections/sound.ts.
+- Next: Day 29 — waveform upgrades: RMS view, per-clip normalize, zoom.

@@ -91,6 +91,27 @@ function neighborAt(clips: Clip[], trackId: string, edge: number, side: 'left' |
   )
 }
 
+export 
+/** Day 28 — fade overlay shading per curve shape (mirrors the audio math). */
+function fadeGradient(curve: 'linear' | 'ease' | 'hold', side: 'in' | 'out'): string {
+  const dark = 'rgba(0,0,0,0.72)'
+  if (curve === 'hold') {
+    // flat (transparent = full level) through 80%, then a fast drop
+    return side === 'in'
+      ? `linear-gradient(to right, ${dark} 0%, ${dark} 80%, transparent 100%)`
+      : `linear-gradient(to left, ${dark} 0%, ${dark} 80%, transparent 100%)`
+  }
+  if (curve === 'ease') {
+    // smoothstep: steeper around the middle
+    return side === 'in'
+      ? `linear-gradient(to right, ${dark} 0%, rgba(0,0,0,0.28) 50%, transparent 100%)`
+      : `linear-gradient(to left, ${dark} 0%, rgba(0,0,0,0.28) 50%, transparent 100%)`
+  }
+  return side === 'in'
+    ? `linear-gradient(to right, ${dark}, transparent)`
+    : `linear-gradient(to left, ${dark}, transparent)`
+}
+
 export function ClipBlock({
   clip,
   track,
@@ -648,13 +669,13 @@ export function ClipBlock({
           </div>
         )}
 
-        {/* fade in / out overlays */}
+        {/* fade in / out overlays — shape follows the Day 28 curve */}
         {clip.fadeIn > 0 && (
           <div
             className="pointer-events-none absolute bottom-0 left-0 top-[3px]"
             style={{
               width: Math.min(clip.fadeIn * zoom, widthPx),
-              background: 'linear-gradient(to right, rgba(0,0,0,0.72), transparent)',
+              background: fadeGradient(clip.fadeInCurve ?? 'linear', 'in'),
             }}
           />
         )}
@@ -663,7 +684,7 @@ export function ClipBlock({
             className="pointer-events-none absolute bottom-0 right-0 top-[3px]"
             style={{
               width: Math.min(clip.fadeOut * zoom, widthPx),
-              background: 'linear-gradient(to left, rgba(0,0,0,0.72), transparent)',
+              background: fadeGradient(clip.fadeOutCurve ?? 'linear', 'out'),
             }}
           />
         )}

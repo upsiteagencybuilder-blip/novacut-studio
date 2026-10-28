@@ -369,6 +369,12 @@ export interface ClipAudioFx {
    * zeros = transparent. Runs in the shared chain (preview + mixdown).
    */
   eq10?: number[]
+  /** reverb pre-delay seconds 0..0.25 (Day 28) — separates the dry from the tail */
+  reverbPredelay?: number
+  /** reverb damping 0..1 (Day 28) — high-frequency absorption in the tail */
+  reverbDamp?: number
+  /** ping-pong echo (Day 28) — repeats alternate left/right */
+  delayPingPong?: boolean
   /** noise gate on/off (Day 24) — envelope follower below the threshold */
   gate?: boolean
   /** gate threshold dB −80..−1 (only meaningful when gate is on) */
@@ -501,6 +507,10 @@ export interface Clip {
    * modulation) — built as WebAudio nodes by the engine for playback AND export.
    * null/undefined = untouched original sound.
    */
+  /** fade-in curve shape (Day 28) — linear (default) / ease / hold */
+  fadeInCurve?: 'linear' | 'ease' | 'hold'
+  /** fade-out curve shape (Day 28) — linear (default) / ease / hold */
+  fadeOutCurve?: 'linear' | 'ease' | 'hold'
   audioFx?: ClipAudioFx | null
   /** mega-effects overlay (particles/grain/vignette/leaks...) drawn over this clip */
   overlay?: { effectId: string; intensity: number } | null
