@@ -624,16 +624,18 @@ export function makeImpulse(ctx: BaseAudioContext, seconds: number): AudioBuffer
 
 /* ---------------- per-track 3-band EQ (Day 23 — mixer) ---------------- */
 
-/** Per-track 3-band EQ stage — input → low shelf 200 → mid peak 1.2k → high shelf 4.2k → output. */
+/** Per-track strip stage (Day 23/27) — input → low shelf 200 → mid peak 1.2k → high shelf 4.2k → pan → output. */
 export interface TrackEqChain {
   input: GainNode
   output: GainNode
   low: BiquadFilterNode
   mid: BiquadFilterNode
   high: BiquadFilterNode
+  /** stereo position of the whole track (Day 27) */
+  pan: AudioNode
 }
 
-/** Build a transparent (0 dB) per-track EQ stage. */
+/** Build a transparent (0 dB, centered) per-track strip stage. */
 export function buildTrackEq(ctx: BaseAudioContext): TrackEqChain {
   const input = ctx.createGain()
   const output = ctx.createGain()
@@ -647,26 +649,35 @@ export function buildTrackEq(ctx: BaseAudioContext): TrackEqChain {
   const high = ctx.createBiquadFilter()
   high.type = 'highshelf'
   high.frequency.value = 4200
+  const pan: AudioNode =
+    typeof ctx.createStereoPanner === 'function' ? ctx.createStereoPanner() : ctx.createGain()
   input.connect(low)
   low.connect(mid)
   mid.connect(high)
-  high.connect(output)
-  return { input, output, low, mid, high }
+  high.connect(pan)
+  pan.connect(output)
+  return { input, output, low, mid, high, pan }
 }
 
-/** Push a Track's EQ values into its stage (setTargetAtTime for click-free moves). */
-export function applyTrackEq(ctx: BaseAudioContext, teq: TrackEqChain, track: Pick<Track, 'eqLow' | 'eqMid' | 'eqHigh'>) {
+/** Push a Track's EQ + pan values into its strip (setTargetAtTime for click-free moves). */
+export function applyTrackEq(
+  ctx: BaseAudioContext,
+  teq: TrackEqChain,
+  track: Pick<Track, 'eqLow' | 'eqMid' | 'eqHigh' | 'pan'>
+) {
   const t = ctx.currentTime
   const set = (param: AudioParam, v: number) => {
     try {
-      param.setTargetAtTime(clamp(v, -24, 24), t, 0.02)
+      param.setTargetAtTime(v, t, 0.02)
     } catch {
-      param.value = clamp(v, -24, 24)
+      param.value = v
     }
   }
-  set(teq.low.gain, track.eqLow ?? 0)
-  set(teq.mid.gain, track.eqMid ?? 0)
-  set(teq.high.gain, track.eqHigh ?? 0)
+  set(teq.low.gain, clamp(track.eqLow ?? 0, -24, 24))
+  set(teq.mid.gain, clamp(track.eqMid ?? 0, -24, 24))
+  set(teq.high.gain, clamp(track.eqHigh ?? 0, -24, 24))
+  const panParam = (teq.pan as StereoPannerNode).pan
+  if (panParam) set(panParam, clamp(track.pan ?? 0, -1, 1))
 }
 
 /* ---------------- offline project mixdown ---------------- */
@@ -1048,8 +1059,9 @@ if (typeof window !== 'undefined') {
  *   'track-eq' → per-track: low +12 dB, high −12 dB (mixer EQ stage)
  *   'gate'     → Day 24: quiet noise (below threshold) gated down, loud tone passes
  *   'denoise'  → Day 24: steady noise floor subtracted spectrally
+ *   'track-pan' → Day 27: per-track pan hard L/R vs center (per-channel RMS)
  */
-async function runEqHarness(spec: 'eq10' | 'track-eq' | 'gate' | 'denoise') {
+async function runEqHarness(spec: 'eq10' | 'track-eq' | 'gate' | 'denoise' | 'track-pan') {
   const sr = 44100
   const OfflineCtor =
     typeof OfflineAudioContext !== 'undefined'
@@ -1101,6 +1113,47 @@ async function runEqHarness(spec: 'eq10' | 'track-eq' | 'gate' | 'denoise') {
     }
   }
 
+  if (spec === 'track-pan') {
+    // Day 27 — pan the whole track hard left/right: mono noise through the
+    // real strip; compare per-channel band energies.
+    const renderPan = async (pan: number) => {
+      const ctx = new OfflineCtor(2, Math.ceil(sr * 1.2), sr)
+      const chain = buildFxChain(ctx)
+      applyClipFx(ctx, chain, undefined)
+      const teq = buildTrackEq(ctx)
+      applyTrackEq(ctx, teq, { eqLow: 0, eqMid: 0, eqHigh: 0, pan })
+      chain.sum.connect(teq.input)
+      teq.output.connect(ctx.destination)
+      const buf = ctx.createBuffer(1, Math.ceil(sr * 1.2), sr)
+      const d = buf.getChannelData(0)
+      let seed = 0x5f3759df
+      for (let i = 0; i < d.length; i++) {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+        d[i] = (seed / 0xffffffff) * 2 - 1
+      }
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.connect(chain.pan)
+      src.start(0)
+      src.stop(1.2)
+      const r = await ctx.startRendering()
+      const l = r.getChannelData(0)
+      const r0 = r.getChannelData(1)
+      const rms = (x: Float32Array) => {
+        let a = 0
+        for (let i = Math.floor(sr * 0.15); i < Math.floor(sr * 1.1); i++) a += x[i] * x[i]
+        return Math.sqrt(a / (sr * 0.95))
+      }
+      return { l: rms(l), r: rms(r0) }
+    }
+    const [c, lft, rgt] = await Promise.all([renderPan(0), renderPan(-1), renderPan(1)])
+    return {
+      spec,
+      centerLR: +(c.l / (c.r + 1e-9)).toFixed(4),
+      leftLR: +(lft.l / (lft.r + 1e-9)).toFixed(4),
+      rightLR: +(rgt.r / (rgt.l + 1e-9)).toFixed(4),
+    }
+  }
   if (spec === 'eq10') {
     const eq10 = [0, 0, 0, 0, 0, 12, 0, 0, 0, 0]
     const [inB, outB] = await Promise.all([render(undefined, undefined), render({ eq10 } as ClipAudioFx, undefined)])

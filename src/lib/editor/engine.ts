@@ -588,11 +588,11 @@ class PreviewEngine {
     }
   }
 
-  /** Push a track's mixer EQ values into its stage when they changed. */
-  private syncTrackEq(track: { id: string; eqLow?: number; eqMid?: number; eqHigh?: number }) {
+  /** Push a track's mixer EQ + pan values into its strip when they changed. */
+  private syncTrackEq(track: { id: string; eqLow?: number; eqMid?: number; eqHigh?: number; pan?: number }) {
     if (!this.audioCtx) return
-    const sig = `${track.eqLow ?? 0}|${track.eqMid ?? 0}|${track.eqHigh ?? 0}`
-    if (sig === '0|0|0' && !this.trackEqChains.has(track.id)) return
+    const sig = `${track.eqLow ?? 0}|${track.eqMid ?? 0}|${track.eqHigh ?? 0}|${track.pan ?? 0}`
+    if (sig === '0|0|0|0' && !this.trackEqChains.has(track.id)) return
     const rec = this.ensureTrackEqChain(track.id)
     if (!rec || rec.sig === sig) return
     rec.sig = sig

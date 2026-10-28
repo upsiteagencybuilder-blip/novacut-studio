@@ -535,6 +535,8 @@ export interface Track {
   eqLow?: number
   eqMid?: number
   eqHigh?: number
+  /** per-track pan (mixer) — −1 hard left .. 1 hard right, 0 = center (Day 27) */
+  pan?: number
 }
 
 export interface Project {

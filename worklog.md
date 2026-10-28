@@ -1413,3 +1413,22 @@ Stage Summary:
 - Day 26 shipped: detected beats become real timeline markers — toolbar conversion with stride choices + woven inspector one-tap, all in one undoable step; honest catalog update.
 - Files: store.ts, TimelineToolbar.tsx, PropertiesPanel.tsx, sections/timeline.ts.
 - Next: Day 27 — multi-track mixing console polish (volume/pan/mute/solo strips).
+
+---
+Task ID: Day-27
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category C Day 27 — Multi-track mixing console (volume / pan / mute / solo strips).
+
+Work Log:
+- Track.pan (−1 hard left … 1 hard right) completes the mixer strip: the per-track strip stage (Day 23's buildTrackEq) now ends in a StereoPanner — input → low → mid → high → pan → output — so live routing (engine routeEntry) AND the offline mixdown both pan the whole track through the same node; applyTrackEq sets pan alongside the EQ bands with the same click-free setTargetAtTime.
+- MixerDialog: PAN row per strip (slider −1..1 step 0.05, double-click centers, live readout Center/L50…L100/R50…R100, data-nc-track-pan* hooks, history 'track-pan').
+- Catalog: +1 live sound-track-pan (open-mixer deep link) describing the strip position between every routed clip and the master.
+- REAL BUG caught by E2E and fixed: the engine's syncTrackEq change-signature covered only the three EQ bands — a pan-only change mid-playback was silently ignored. Sig is now `low|mid|high|pan` (fresh load proves it: sig "0|0|0|-0.5" after a pan edit).
+- E2E DSP receipt (window.__ncEqHarness 'track-pan', mono noise through the REAL strip in a stereo OfflineAudioContext): center L/R = 1.0000; hard left → L/R 24076 (right channel at digital silence); hard right mirrored 24076.
+- E2E desktop 1280×800: three strips render with Pan rows + Center readouts; pan thumb keyboard End → pan 1 / readout R100, Home → −1 / L100; updateTrack −0.5 → undo restores 1; live engine builds the Audio 1 chain with the pan node carrying the strip value during playback.
+- E2E mobile 390×844: mixer dialog renders PAN rows on all three strips; keyboard End on Overlay 1 → pan 1 / R100, reset to center via UI; screenshot; zero real errors.
+
+Stage Summary:
+- Day 27 shipped: the mixing console is now a full strip set — fader, pan, mute, solo, 3-band EQ disclosure, live meters per track + master section — with the strip DSP shared by preview and mixdown, plus a real sig bug fix.
+- Files: types.ts, audio-mix.ts, engine.ts, MixerDialog.tsx, sections/sound.ts.
+- Next: Day 28 — reverb + delay sends; fade-curve editor (linear / ease / hold).

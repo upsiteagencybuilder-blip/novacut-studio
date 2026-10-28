@@ -132,6 +132,13 @@ function TrackMeter({ trackId }: { trackId: string }) {
   )
 }
 
+/** Day 27 — pan readout: Center / L50…L100 / R50…R100 */
+function panReadout(p: number): string {
+  if (Math.abs(p) < 0.03) return 'Center'
+  const n = Math.round(Math.abs(p) * 100)
+  return p < 0 ? `L${n}` : `R${n}`
+}
+
 function TrackFaderRow({ track }: { track: Track }) {
   const setTrackVolume = useEditor((s) => s.setTrackVolume)
   const updateTrack = useEditor((s) => s.updateTrack)
@@ -211,6 +218,28 @@ function TrackFaderRow({ track }: { track: Track }) {
         >
           {track.muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
         </button>
+      </div>
+
+      {/* Day 27 — per-track pan strip */}
+      <div className="mt-2 flex items-center gap-2" data-nc-track-pan>
+        <span className="w-8 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/70">Pan</span>
+        <Slider
+          min={-1}
+          max={1}
+          step={0.05}
+          value={[track.pan ?? 0]}
+          onValueChange={(v) => updateTrack(track.id, { pan: v[0] ?? 0 }, 'track-pan')}
+          onDoubleClick={() => updateTrack(track.id, { pan: 0 }, 'track-pan')}
+          className="flex-1"
+          aria-label={`${track.name} pan`}
+          data-nc-track-pan-slider
+        />
+        <span
+          className="w-12 text-right font-mono text-[9px] tabular-nums text-muted-foreground"
+          data-nc-track-pan-readout
+        >
+          {panReadout(track.pan ?? 0)}
+        </span>
       </div>
 
       {/* Day 23 — per-track 3-band EQ (engine + offline mixdown both route through it) */}
