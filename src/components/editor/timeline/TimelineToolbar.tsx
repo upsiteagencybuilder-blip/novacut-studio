@@ -28,6 +28,7 @@ import {
   Magnet,
   Maximize2,
   MoveHorizontal,
+  Pin,
   Scissors,
   SlidersHorizontal,
   Snowflake,
@@ -47,7 +48,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu'
+// Day 26 — beat-to-marker conversion menu
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { detectBeats } from '@/lib/effects/beat-detect'
 import { HEADER_WIDTH } from '@/lib/editor/constants'
@@ -470,6 +473,30 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             {showBeatMarkers ? <EyeOff className="mr-2 size-3.5" /> : <Eye className="mr-2 size-3.5" />}
             {showBeatMarkers ? 'Hide beat markers' : 'Show beat markers'}
           </DropdownMenuItem>
+          {/* Day 26 — detected beats become real timeline marker pins */}
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Beats → timeline markers
+          </DropdownMenuLabel>
+          {[
+            { stride: 1, label: 'Every beat' },
+            { stride: 2, label: 'Every 2nd beat' },
+            { stride: 4, label: 'Every 4th (downbeats)' },
+          ].map(({ stride, label }) => (
+            <DropdownMenuItem
+              key={stride}
+              disabled={beatMarkers.length === 0}
+              data-nc-beats-to-markers={stride}
+              onClick={() => {
+                const added = useEditor.getState().addBeatMarkersToTimeline(stride)
+                if (added > 0) toast.success(`${added} beat marker${added === 1 ? '' : 's'} added to the timeline`)
+                else toast('All detected beats already have markers here')
+              }}
+            >
+              <Pin className="mr-2 size-3.5" />
+              {label}
+            </DropdownMenuItem>
+          ))}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             disabled={beatMarkers.length === 0}

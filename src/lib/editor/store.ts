@@ -256,6 +256,8 @@ interface EditorStore {
   toggleSnap: () => void
   setBeatMarkers: (times: number[], bpm: number | null) => void
   clearBeatMarkers: () => void
+  /** Day 26 — convert detected beats into real timeline marker pins (one undo); returns count added */
+  addBeatMarkersToTimeline: (stride?: number) => number
   toggleShowBeatMarkers: () => void
   setPanelTab: (tab: PanelTab) => void
   /** which card group is open inside the AI panel (deep-link target) */
@@ -1863,6 +1865,33 @@ export const useEditor = create<EditorStore>((set, get) => ({
   // zoomFit lives with the pro-tools cluster above (needs the project duration)
   setBeatMarkers: (times, bpm) => set({ beatMarkers: times, beatBpm: bpm, showBeatMarkers: true }),
   clearBeatMarkers: () => set({ beatMarkers: [], beatBpm: null }),
+
+  // Day 26 — detected beats become REAL timeline markers (Day 08 pins:
+  // colored, labeled, jumpable, project-persisted). Stride thins the grid
+  // (1 = every beat, 2 = half notes, 4 = downbeats). One undoable step.
+  addBeatMarkersToTimeline: (stride) => {
+    const s = get()
+    const beats = s.beatMarkers
+    if (!beats.length) return 0
+    const n = Math.max(1, Math.floor(stride ?? 1))
+    const existing = s.project.markers ?? []
+    const added: TimelineMarker[] = []
+    beats.forEach((t, i) => {
+      if (i % n !== 0) return
+      if (existing.some((m) => Math.abs(m.t - t) < 0.05)) return
+      if (added.some((m) => Math.abs(m.t - t) < 0.05)) return
+      added.push({
+        id: uid('mk_'),
+        t: round2(t),
+        label: `♪ Beat ${i + 1}`,
+        color: MARKER_COLORS[(existing.length + added.length) % MARKER_COLORS.length],
+      })
+    })
+    if (!added.length) return 0
+    s.pushHistory('beat-markers')
+    set((st) => ({ project: withUpdatedAt({ ...st.project, markers: [...(st.project.markers ?? []), ...added] }) }))
+    return added.length
+  },
   toggleShowBeatMarkers: () => set((s) => ({ showBeatMarkers: !s.showBeatMarkers })),
   setPanelTab: (tab) => set({ panelTab: tab }),
   setAiSubTab: (tab) => set({ aiSubTab: tab }),

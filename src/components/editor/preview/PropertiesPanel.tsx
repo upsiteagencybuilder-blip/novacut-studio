@@ -8,7 +8,9 @@ import {
   AlignLeft,
   AlignRight,
   AudioLines,
+  AudioWaveform,
   Blend,
+  Loader2,
   Bold,
   Bot,
   CaseUpper,
@@ -73,6 +75,7 @@ import { clamp, computeHistogram, computeLumaWaveform, defaultSpeedRamp, evalCur
 import { BUILTIN_LUTS } from '@/lib/editor/builtin-luts'
 import { VOICE_FX_PRESETS, matchVoicePreset, type VoiceFxPreset } from '@/lib/editor/voice-presets'
 import { EQ10_FREQS } from '@/lib/editor/audio-mix'
+import { detectBeats } from '@/lib/effects/beat-detect'
 import { KeyframeCurveEditor } from '@/components/editor/preview/KeyframeCurve'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -3337,6 +3340,47 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
   const currentTime = useEditor((s) => s.currentTime)
   const addKeyframeAtPlayhead = useEditor((s) => s.addKeyframeAtPlayhead)
   const removeKeyframe = useEditor((s) => s.removeKeyframe)
+  const beatMarkers = useEditor((s) => s.beatMarkers)
+  const [beatDetecting, setBeatDetecting] = useState(false)
+
+  /** Day 26 — woven beat sync: detect (if needed) then convert to markers. */
+  const detectAndConvertBeats = async () => {
+    if (clip.kind !== 'audio' && clip.kind !== 'video') return
+    const st = useEditor.getState()
+    let times = st.beatMarkers
+    let bpm = st.beatBpm
+    if (!times.length) {
+      const asset = st.media.find((m) => m.id === clip.mediaId)
+      if (!asset) {
+        toast.error('Source media for this clip was not found')
+        return
+      }
+      setBeatDetecting(true)
+      try {
+        const res = await detectBeats(asset.rawBlob)
+        if (!res.times.length) {
+          toast('No clear beats found in this clip')
+          return
+        }
+        times = res.times
+          .map((t) => clip.start + (t - clip.trimStart) / (clip.speed || 1))
+          .filter((t) => t >= 0)
+        bpm = res.bpm
+        st.setBeatMarkers(times, bpm)
+      } catch {
+        toast.error('Beat detection failed')
+        return
+      } finally {
+        setBeatDetecting(false)
+      }
+    }
+    const added = useEditor.getState().addBeatMarkersToTimeline(4)
+    if (added > 0) {
+      toast.success(`${added} downbeat marker${added === 1 ? '' : 's'} added${bpm !== null ? ` — ${Math.round(bpm)} BPM` : ''} 🎵`)
+    } else {
+      toast('Downbeats already have markers')
+    }
+  }
 
   // compounds get their own inspector — transform/FX belong to their contents
   if (clip.kind === 'nested') return <NestedClipPanel clip={clip} />
@@ -3749,6 +3793,20 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
                   />
                 </>
               )}
+
+              {/* Day 26 — woven beat sync: detect beats and drop them on the
+                  ruler as real timeline markers (downbeats by default) */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 w-full gap-1.5 text-[11px]"
+                data-nc-beats-detect-convert
+                disabled={beatDetecting}
+                onClick={() => void detectAndConvertBeats()}
+              >
+                {beatDetecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <AudioWaveform className="h-3 w-3" />}
+                {beatDetecting ? 'Detecting beats…' : 'Detect beats → markers'}
+              </Button>
             </div>
           )}
         </Section>

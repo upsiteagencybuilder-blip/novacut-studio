@@ -1393,3 +1393,23 @@ Stage Summary:
 - Day 25 shipped: threshold-based auto-ducking v2 end to end — shared envelope function, offline mixdown per-clip gain automation, live engine analyser-driven envelopes with overlap fallback, Threshold UI, honest catalog updates.
 - Files: types.ts, audio-mix.ts, engine.ts, PropertiesPanel.tsx, sections/sound.ts.
 - Next: Day 26 — beat-sync markers (detected beats become timeline markers) — woven item.
+
+---
+Task ID: Day-26
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category C Day 26 — Beat-sync markers: detected beats become timeline markers (woven).
+
+Work Log:
+- Store: NEW addBeatMarkersToTimeline(stride?) — converts the detected beat grid into REAL Day-08 timeline marker pins (colored, labeled "♪ Beat N", jumpable, project-persisted). Stride thins the grid (1 = every beat, 2 = every 2nd, 4 = downbeats); dedupes against existing markers within 50 ms (repeat taps add 0); ONE pushHistory('beat-markers') step so a single undo removes a whole conversion.
+- TimelineToolbar beat menu: "Beats → timeline markers" group with three stride items (Every beat / Every 2nd beat / Every 4th (downbeats)), disabled while no detection exists, data-nc-beats-to-markers hooks, toasts naming the count.
+- Woven into the clip inspector (SingleClipEditor Media section, under auto-duck): "Detect beats → markers" one-tap button (data-nc-beats-detect-convert) — runs detectBeats on the selected clip's source when the beat grid is empty (same source→timeline shift math as the toolbar: start + (t − trimStart)/speed), then converts downbeats (stride 4) in one undoable step, with a busy state + BPM-aware toast.
+- Catalog: timeline-beat-sync-markers desc honestly extended (detect + snap guides + convert-to-pins via toolbar AND inspector).
+- E2E (real toolbar + real menus via trusted locator/pointer clicks): generated a deterministic 120 BPM click WAV (0.5 s grid); toolbar "Detect beats (selected clip)" → 117.5 BPM / 7 beats at 16.49/16.998/17.486… (0.5 s grid landed within ±12 ms — energy-flux hop resolution, honest ±2%); "Every beat" → 7 pins (♪ Beat 1-7, cycled MARKER_COLORS) in project.markers; single undo → 0; stride 4 → exactly 2 downbeat pins; repeat tap → 0 added (dedup); "Every 2nd beat" → 10 pins (Beat 1,3,5,…); demo music detection → 161.5 BPM / 19 beats.
+- Inspector woven button: desktop (fresh detect + stride 4) → ♪ Beat 1 @16.49 + ♪ Beat 5 @18.49; mobile 390×844 (Edit sheet → Media section) → demo music 19 beats @161.5 BPM → 5 downbeat pins (Beat 1/5/9/13/17) in one tap.
+- Debug notes: (1) updateClip guards `start` — clip moves must go through moveClip (measurement lesson). (2) A pre-fix DropdownMenuLabel build poisoned the agent-browser error buffer: the session error log keeps accumulating across reloads/tabs — a fresh isolated browser session shows 0 errors and the Next dev overlay is clean; the dev server restart + SW unregister were precautionary, the real fix was the import (stale-chunk noise documented). (3) Radix dropdown menus need trusted pointer or Playwright locator clicks — plain elementFromPoint clicks can be intercepted by the Next dev-tools portal.
+- Zero real errors (fresh isolated session: 0 total), eslint + tsc clean.
+
+Stage Summary:
+- Day 26 shipped: detected beats become real timeline markers — toolbar conversion with stride choices + woven inspector one-tap, all in one undoable step; honest catalog update.
+- Files: store.ts, TimelineToolbar.tsx, PropertiesPanel.tsx, sections/timeline.ts.
+- Next: Day 27 — multi-track mixing console polish (volume/pan/mute/solo strips).
