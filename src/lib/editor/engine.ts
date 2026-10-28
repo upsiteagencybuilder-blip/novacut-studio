@@ -12,10 +12,10 @@ import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoo
 import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
 import { applyPixelEffects, buildFilterString, clamp, composeFilters, composeGrades, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, formatTimecode, projectDuration, rampSourceFraction } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
-import { applyClipFx, buildFxChain, makeImpulse, rebuildModulation } from './audio-mix'
+import { applyClipFx, applyTrackEq, buildFxChain, buildTrackEq, makeImpulse, rebuildModulation } from './audio-mix'
 import { ensureFormantModule, getFormantError } from './formant-worklet'
 import { ensurePitchModule, getPitchError } from './pitch-worklet'
-import type { AudioFxChain } from './audio-mix'
+import type { AudioFxChain, TrackEqChain } from './audio-mix'
 import { drawStickerArt } from './sticker-render'
 import { getBuiltinLutData } from './builtin-luts'
 import { CANVAS_FONT_LOAD_LIST, DEFAULT_COLOR_GRADE, DEFAULT_FILTERS, MIN_CLIP_DURATION } from './constants'
@@ -164,6 +164,8 @@ class PreviewEngine {
   formantStatus: string | undefined = undefined
   private exportDest: MediaStreamAudioDestinationNode | null = null
   private masterAnalyser: AnalyserNode | null = null
+  /** Day 23 — per-track 3-band EQ stages (mixer), keyed by track id */
+  private trackEqChains = new Map<string, { chain: TrackEqChain; sig: string }>()
   private analyserData: Uint8Array | null = null
   private renderPending = false
   /** cached reverb impulse responses, keyed by seconds bucket */
@@ -523,9 +525,13 @@ class PreviewEngine {
       const gain = this.audioCtx.createGain()
       src.connect(chain.pan)
       chain.sum.connect(gain)
-      if (this.masterAnalyser) gain.connect(this.masterAnalyser)
-      else gain.connect(this.audioCtx.destination)
-      if (this.exportDest) gain.connect(this.exportDest)
+      // Day 23 — every routed clip flows through its track's 3-band EQ stage
+      const teq = this.ensureTrackEqChain(clip.trackId)
+      const out: AudioNode = teq ? teq.chain.output : gain
+      if (teq) gain.connect(teq.chain.input)
+      if (this.masterAnalyser) out.connect(this.masterAnalyser)
+      else out.connect(this.audioCtx.destination)
+      if (this.exportDest) out.connect(this.exportDest)
       // passive tap for per-track meters
       try {
         const an = this.audioCtx.createAnalyser()
@@ -549,6 +555,36 @@ class PreviewEngine {
   /** Build the always-present core chain (shared topology — see audio-mix.ts). */
   private buildCoreChain(): AudioFxChain {
     return buildFxChain(this.audioCtx!)
+  }
+
+  /**
+   * Day 23 — get (or lazily create) a track's 3-band EQ stage. The output is
+   * wired to master/destination/export at creation; clips routed later join
+   * via their gain node.
+   */
+  private ensureTrackEqChain(trackId: string): { chain: TrackEqChain; sig: string } | null {
+    if (!this.audioCtx) return null
+    const existing = this.trackEqChains.get(trackId)
+    if (existing) return existing
+    try {
+      const chain = buildTrackEq(this.audioCtx)
+      const rec = { chain, sig: '' }
+      this.trackEqChains.set(trackId, rec)
+      return rec
+    } catch {
+      return null
+    }
+  }
+
+  /** Push a track's mixer EQ values into its stage when they changed. */
+  private syncTrackEq(track: { id: string; eqLow?: number; eqMid?: number; eqHigh?: number }) {
+    if (!this.audioCtx) return
+    const sig = `${track.eqLow ?? 0}|${track.eqMid ?? 0}|${track.eqHigh ?? 0}`
+    if (sig === '0|0|0' && !this.trackEqChains.has(track.id)) return
+    const rec = this.ensureTrackEqChain(track.id)
+    if (!rec || rec.sig === sig) return
+    rec.sig = sig
+    applyTrackEq(this.audioCtx, rec.chain, track)
   }
 
   /** Push a clip's ClipAudioFx values into its chain nodes (called on signature change). */
@@ -1192,6 +1228,7 @@ class PreviewEngine {
     for (const track of tracks) {
       if (track.kind !== 'audio') continue
       const trackVolume = track.volume ?? 1
+      this.syncTrackEq(track)
       const clips = project.clips.filter((c) => c.trackId === track.id && t >= c.start - 0.0001 && t < c.start + c.duration)
       for (const clip of clips) {
         if (!clip.mediaId) continue
@@ -1436,6 +1473,7 @@ class PreviewEngine {
         if (el) {
           const routed = this.videos.get(clip.id)!
           this.ensureAudioChain(clip, routed)
+          if (track) this.syncTrackEq(track)
           // solo — when any track is soloed, unsoloed tracks go silent
           const anySolo = project.tracks.some((tr) => tr.solo)
           const audible = !!track && !track.muted && (!anySolo || !!track.solo)

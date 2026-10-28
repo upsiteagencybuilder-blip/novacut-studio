@@ -364,6 +364,12 @@ export interface ClipAudioFx {
   /** modulation amount 0..1 (depth/wet) */
   modAmount?: number
   /**
+   * 10-band graphic EQ gains in dB (−12..+12) at the ISO octave centers
+   * 31/62/125/250/500/1k/2k/4k/8k/16k Hz (see EQ10_FREQS). Undefined or all
+   * zeros = transparent. Runs in the shared chain (preview + mixdown).
+   */
+  eq10?: number[]
+  /**
    * Pitch shift in semitones -12..12 — granular, tempo preserved (preview AND
    * offline mixdown ride the same AudioWorklet). 0/undefined = off.
    */
@@ -507,6 +513,10 @@ export interface Track {
   solo?: boolean
   /** track fader 0..1.5 (1 = unity) */
   volume?: number
+  /** per-track 3-band EQ (mixer) — low shelf 200 Hz, mid peak 1.2 kHz, high shelf 4.2 kHz, −24..+24 dB */
+  eqLow?: number
+  eqMid?: number
+  eqHigh?: number
 }
 
 export interface Project {

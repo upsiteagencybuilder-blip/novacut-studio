@@ -13,7 +13,8 @@ import type { ProTool } from '../types'
 export const SOUND_TOOLS: ProTool[] = [
   // -------- EQ & filters --------
   { id: 'sound-parametric-equalizer', name: 'Parametric Equalizer', section: 'sound', group: 'EQ & filters', status: 'live', desc: 'Audio FX 3-band EQ — low shelf, mid peak, high shelf — on any clip' },
-  { id: 'sound-graphic-equalizer', name: 'Graphic Equalizer', section: 'sound', group: 'EQ & filters', status: 'live', desc: 'Three EQ sliders (±24dB) for broad tonal shaping per clip' },
+  { id: 'sound-graphic-equalizer', name: 'Graphic Equalizer', section: 'sound', group: 'EQ & filters', status: 'live', desc: '10-band ISO graphic EQ (31 Hz–16 kHz, ±12 dB) with vertical faders and one-tap curve presets — Flat, Bass Boost, Vocal, Treble, Loudness, V-Shape — baked into preview and exports', action: 'open-properties-audiofx' },
+  { id: 'sound-track-equalizer', name: 'Per-Track EQ (Mixer)', section: 'sound', group: 'EQ & filters', status: 'live', desc: '3-band EQ (low shelf 200 Hz, mid peak 1.2 kHz, high shelf 4.2 kHz) on every track in the mixer — the engine routes each clip through its track stage and the offline mixdown matches', action: 'open-mixer' },
   { id: 'sound-high-pass-filter', name: 'High Pass Filter', section: 'sound', group: 'EQ & filters', status: 'live', desc: 'Cut rumble and wind below a chosen frequency (Audio FX Cut Low)' },
   { id: 'sound-low-pass-filter', name: 'Low Pass Filter', section: 'sound', group: 'EQ & filters', status: 'live', desc: 'Roll off highs for muffled or distant perspectives (Audio FX Cut High)' },
   { id: 'sound-notch-filter', name: 'Notch Filter', section: 'sound', group: 'EQ & filters', status: 'planned', desc: 'Surgically remove a narrow whine or hum band' },

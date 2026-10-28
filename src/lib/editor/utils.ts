@@ -977,3 +977,20 @@ export function buildSrtFromCaptions(clips: Clip[]): string {
       .join('\n\n') + '\n'
   )
 }
+
+/**
+ * Goertzel magnitude at one frequency over a mono slice — the shared DSP
+ * measurement used by the audio QA harnesses (voice FX, EQ).
+ */
+export function goertzelMag(data: Float32Array, sr: number, freq: number): number {
+  const k = (2 * Math.PI * freq) / sr
+  const coeff = 2 * Math.cos(k)
+  let s1 = 0
+  let s2 = 0
+  for (let i = 0; i < data.length; i++) {
+    const s0 = data[i] + coeff * s1 - s2
+    s2 = s1
+    s1 = s0
+  }
+  return Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2) / (data.length / 2)
+}

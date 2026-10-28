@@ -13,14 +13,17 @@
  * fade in/out ramps, mute/solo, auto-duck. Reversed clips are silent in the
  * engine (seek-driven) so the mixdown skips them too.
  */
-import type { Clip, ClipAudioFx, MediaAssetRuntime, Project } from './types'
+import type { Clip, ClipAudioFx, MediaAssetRuntime, Project, Track } from './types'
 import { resolveNestedProject } from './nested'
-import { clamp, projectDuration } from './utils'
+import { clamp, goertzelMag, projectDuration } from './utils'
 import { decodeSource } from '@/lib/effects/voice'
 import { createPitchNode, ensurePitchModule, pitchModuleReady } from './pitch-worklet'
 import { createFormantNode, ensureFormantModule, formantModuleReady } from './formant-worklet'
 
 /* ---------------- chain types + builder (shared with the engine) ---------------- */
+
+/** ISO octave center frequencies of the 10-band graphic EQ. */
+export const EQ10_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
 
 /** Modulation sub-graph nodes (chorus / flanger / phaser / ringmod) */
 export interface ModNodes {
@@ -49,6 +52,8 @@ export interface AudioFxChain {
   eqLow: BiquadFilterNode
   eqMid: BiquadFilterNode
   eqHigh: BiquadFilterNode
+  /** 10-band graphic EQ stage (Day 23) — all gains 0 = transparent */
+  eq10: BiquadFilterNode[]
   hp: BiquadFilterNode
   lp: BiquadFilterNode
   comp: DynamicsCompressorNode
@@ -91,6 +96,16 @@ export function buildFxChain(ctx: BaseAudioContext): AudioFxChain {
   eqHigh.type = 'highshelf'
   eqHigh.frequency.value = 4200
   eqHigh.gain.value = 0
+  // 10-band graphic EQ (Day 23) — ISO octave centers, lowshelf/peaking/highshelf
+  const eq10: BiquadFilterNode[] = EQ10_FREQS.map((f, i) => {
+    const b = ctx.createBiquadFilter()
+    b.type = i === 0 ? 'lowshelf' : i === EQ10_FREQS.length - 1 ? 'highshelf' : 'peaking'
+    b.frequency.value = f
+    b.Q.value = 1
+    b.gain.value = 0
+    return b
+  })
+  for (let i = 0; i < eq10.length - 1; i++) eq10[i].connect(eq10[i + 1])
   const hp = ctx.createBiquadFilter()
   hp.type = 'allpass' // transparent until the user asks for a high-pass
   hp.frequency.value = 500
@@ -130,13 +145,14 @@ export function buildFxChain(ctx: BaseAudioContext): AudioFxChain {
   pan.connect(eqLow)
   eqLow.connect(eqMid)
   eqMid.connect(eqHigh)
-  eqHigh.connect(hp)
+  eqHigh.connect(eq10[0])
+  eq10[eq10.length - 1].connect(hp)
   hp.connect(lp)
   lp.connect(comp)
   comp.connect(formantIn)
   formantSum.connect(pitchIn)
   pitchSum.connect(modIn)
-  return { pan, eqLow, eqMid, eqHigh, hp, lp, comp, formantIn, formantDry, formantSum, pitchIn, pitchDry, pitchSum, modIn, modOut, dry, sum, modKind: 'none' }
+  return { pan, eqLow, eqMid, eqHigh, eq10, hp, lp, comp, formantIn, formantDry, formantSum, pitchIn, pitchDry, pitchSum, modIn, modOut, dry, sum, modKind: 'none' }
 }
 
 /**
@@ -385,6 +401,11 @@ export function applyClipFx(ctx: BaseAudioContext, chain: AudioFxChain, fx: Clip
   set(chain.eqLow.gain, clamp(f.eqLow ?? 0, -24, 24))
   set(chain.eqMid.gain, clamp(f.eqMid ?? 0, -24, 24))
   set(chain.eqHigh.gain, clamp(f.eqHigh ?? 0, -24, 24))
+  // 10-band graphic EQ (Day 23) — undefined/zeros stay transparent
+  const eq10 = f.eq10
+  for (let i = 0; i < chain.eq10.length; i++) {
+    set(chain.eq10[i].gain, clamp(eq10?.[i] ?? 0, -12, 12))
+  }
   // filters — swap to allpass when off (transparent, keeps the topology stable)
   const hpOn = (f.highPass ?? 0) > 20
   chain.hp.type = hpOn ? 'highpass' : 'allpass'
@@ -465,6 +486,53 @@ export function makeImpulse(ctx: BaseAudioContext, seconds: number): AudioBuffer
     }
   }
   return buf
+}
+
+/* ---------------- per-track 3-band EQ (Day 23 — mixer) ---------------- */
+
+/** Per-track 3-band EQ stage — input → low shelf 200 → mid peak 1.2k → high shelf 4.2k → output. */
+export interface TrackEqChain {
+  input: GainNode
+  output: GainNode
+  low: BiquadFilterNode
+  mid: BiquadFilterNode
+  high: BiquadFilterNode
+}
+
+/** Build a transparent (0 dB) per-track EQ stage. */
+export function buildTrackEq(ctx: BaseAudioContext): TrackEqChain {
+  const input = ctx.createGain()
+  const output = ctx.createGain()
+  const low = ctx.createBiquadFilter()
+  low.type = 'lowshelf'
+  low.frequency.value = 200
+  const mid = ctx.createBiquadFilter()
+  mid.type = 'peaking'
+  mid.frequency.value = 1200
+  mid.Q.value = 0.9
+  const high = ctx.createBiquadFilter()
+  high.type = 'highshelf'
+  high.frequency.value = 4200
+  input.connect(low)
+  low.connect(mid)
+  mid.connect(high)
+  high.connect(output)
+  return { input, output, low, mid, high }
+}
+
+/** Push a Track's EQ values into its stage (setTargetAtTime for click-free moves). */
+export function applyTrackEq(ctx: BaseAudioContext, teq: TrackEqChain, track: Pick<Track, 'eqLow' | 'eqMid' | 'eqHigh'>) {
+  const t = ctx.currentTime
+  const set = (param: AudioParam, v: number) => {
+    try {
+      param.setTargetAtTime(clamp(v, -24, 24), t, 0.02)
+    } catch {
+      param.value = clamp(v, -24, 24)
+    }
+  }
+  set(teq.low.gain, track.eqLow ?? 0)
+  set(teq.mid.gain, track.eqMid ?? 0)
+  set(teq.high.gain, track.eqHigh ?? 0)
 }
 
 /* ---------------- offline project mixdown ---------------- */
@@ -563,6 +631,17 @@ export async function renderProjectAudio(
   master.gain.value = 1
   master.connect(ctx.destination)
 
+  // Day 23 — one 3-band EQ stage per track that the mixer has shaped
+  const trackEqChains = new Map<string, TrackEqChain>()
+  for (const tr of project.tracks) {
+    const any = (tr.eqLow ?? 0) !== 0 || (tr.eqMid ?? 0) !== 0 || (tr.eqHigh ?? 0) !== 0
+    if (!any) continue
+    const teq = buildTrackEq(ctx)
+    applyTrackEq(ctx, teq, tr)
+    teq.output.connect(master)
+    trackEqChains.set(tr.id, teq)
+  }
+
   for (const clip of audibleClips) {
     const decoded = bufferCache.get(clip.mediaId!)
     if (!decoded) continue
@@ -579,7 +658,10 @@ export async function renderProjectAudio(
 
     const gain = ctx.createGain()
     chain.sum.connect(gain)
-    gain.connect(master)
+    // Day 23 — route through the track's 3-band EQ stage when the mixer has one
+    const teq = trackEqChains.get(clip.trackId)
+    if (teq) gain.connect(teq.input)
+    else gain.connect(master)
 
     // volume envelope: clip volume × track volume × duck, with fade ramps
     const duck = duckFactorLocal(project, clip, clip.start)
@@ -683,4 +765,99 @@ export async function encodeMp3(buffer: AudioBuffer, kbps: 128 | 192 | 320): Pro
   const end = enc.flush()
   if (end.length > 0) chunks.push(new Uint8Array(end))
   return new Blob(chunks as BlobPart[], { type: 'audio/mpeg' })
+}
+
+/* ---------------- EQ QA harness (Day 23 — real-DSP receipts) ---------------- */
+
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __ncEqHarness?: unknown }).__ncEqHarness = runEqHarness
+}
+
+/**
+ * Offline EQ receipt: renders deterministic white noise through the REAL
+ * shared chain (buildFxChain + applyClipFx) and optionally a real per-track
+ * EQ stage (buildTrackEq + applyTrackEq), then returns integrated band
+ * energies (Goertzel grid) for bypass vs EQ so QA can verify the shaping.
+ *
+ *   'eq10'     → clip 10-band: +12 dB at 1 k, flat elsewhere
+ *   'track-eq' → per-track: low +12 dB, high −12 dB (mixer EQ stage)
+ */
+async function runEqHarness(spec: 'eq10' | 'track-eq') {
+  const sr = 44100
+  const OfflineCtor =
+    typeof OfflineAudioContext !== 'undefined'
+      ? OfflineAudioContext
+      : (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext
+  if (!OfflineCtor) throw new Error('OfflineAudioContext unavailable')
+
+  const render = async (fx: ClipAudioFx | undefined, track: Pick<Track, 'eqLow' | 'eqMid' | 'eqHigh'> | undefined) => {
+    const ctx = new OfflineCtor(1, Math.ceil(sr * 1.2), sr)
+    const chain = buildFxChain(ctx)
+    applyClipFx(ctx, chain, fx)
+    let out: AudioNode = chain.sum
+    if (track) {
+      const teq = buildTrackEq(ctx)
+      applyTrackEq(ctx, teq, track)
+      chain.sum.connect(teq.input)
+      out = teq.output
+    }
+    const buf = ctx.createBuffer(1, Math.ceil(sr * 1.2), sr)
+    const d = buf.getChannelData(0)
+    let seed = 0x5f3759df
+    for (let i = 0; i < d.length; i++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      d[i] = (seed / 0xffffffff) * 2 - 1
+    }
+    const s = ctx.createBufferSource()
+    s.buffer = buf
+    s.connect(chain.pan)
+    out.connect(ctx.destination)
+    s.start(0)
+    s.stop(1.2)
+    const rendered = await ctx.startRendering()
+    const seg = rendered.getChannelData(0).slice(Math.floor(sr * 0.15), Math.floor(sr * 1.1))
+    const band = (lo: number, hi: number, step: number) => {
+      let e = 0
+      for (let f = lo; f <= hi; f += step) {
+        const m = goertzelMag(seg, sr, f)
+        e += m * m
+      }
+      return e
+    }
+    return {
+      b250: band(180, 320, 10),
+      b1k: band(700, 1400, 20),
+      b4k: band(3200, 5200, 40),
+      low: band(60, 250, 10),
+      mid: band(500, 2500, 25),
+      high: band(4000, 8000, 40),
+    }
+  }
+
+  if (spec === 'eq10') {
+    const eq10 = [0, 0, 0, 0, 0, 12, 0, 0, 0, 0]
+    const [inB, outB] = await Promise.all([render(undefined, undefined), render({ eq10 } as ClipAudioFx, undefined)])
+    const midRef = (b: { b250: number; b1k: number; b4k: number; low: number; mid: number; high: number }) =>
+      Math.max(b.b250, b.b4k, 1e-9)
+    return {
+      spec,
+      inB1kVsNeighbors: +(inB.b1k / midRef(inB)).toFixed(4),
+      outB1kVsNeighbors: +(outB.b1k / midRef(outB)).toFixed(4),
+      boost: +((outB.b1k / midRef(outB)) / (inB.b1k / midRef(inB))).toFixed(4),
+    }
+  }
+  // track-eq: low +12 dB, high −12 dB on the mixer's track stage
+  const [inT, outT] = await Promise.all([
+    render(undefined, undefined),
+    render(undefined, { eqLow: 12, eqMid: 0, eqHigh: -12 }),
+  ])
+  return {
+    spec,
+    inLowMid: +(inT.low / inT.mid).toFixed(4),
+    outLowMid: +(outT.low / outT.mid).toFixed(4),
+    inHighMid: +(inT.high / inT.mid).toFixed(4),
+    outHighMid: +(outT.high / outT.mid).toFixed(4),
+    lowLift: +((outT.low / outT.mid) / (inT.low / inT.mid)).toFixed(4),
+    highDrop: +((outT.high / outT.mid) / (inT.high / inT.mid)).toFixed(4),
+  }
 }

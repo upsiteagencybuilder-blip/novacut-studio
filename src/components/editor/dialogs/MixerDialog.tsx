@@ -1,12 +1,12 @@
 'use client'
 
 /**
- * Audio mixer — per-track faders (0..×1.5), mute + solo switches, live
- * per-track level meters and a master output meter (dB scale + peak hold)
- * driven by the engine analysers.
+ * Audio mixer — per-track faders (0..×1.5), mute + solo switches, per-track
+ * 3-band EQ (Day 23), live per-track level meters and a master output meter
+ * (dB scale + peak hold) driven by the engine analysers.
  */
-import { useEffect, useRef } from 'react'
-import { AudioLines, Film, Headphones, Layers, SlidersVertical, Volume2, VolumeX } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { AudioLines, ChevronDown, Film, Headphones, Layers, SlidersVertical, Volume2, VolumeX } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
 import { getEngine } from '@/lib/editor/engine'
 import type { Track } from '@/lib/editor/types'
@@ -213,11 +213,94 @@ function TrackFaderRow({ track }: { track: Track }) {
         </button>
       </div>
 
+      {/* Day 23 — per-track 3-band EQ (engine + offline mixdown both route through it) */}
+      <TrackEq track={track} updateTrack={updateTrack} />
+
       {/* live track output */}
       <div className="mt-2 flex items-center gap-2">
         <span className="w-10 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/60">Level</span>
         <TrackMeter trackId={track.id} />
       </div>
+    </div>
+  )
+}
+
+/** Day 23 — per-track 3-band EQ disclosure (low shelf 200 / mid peak 1.2k / high shelf 4.2k). */
+function TrackEq({ track, updateTrack }: { track: Track; updateTrack: (id: string, patch: Partial<Track>, history?: boolean | string) => void }) {
+  const [open, setOpen] = useState(false)
+  const low = track.eqLow ?? 0
+  const mid = track.eqMid ?? 0
+  const high = track.eqHigh ?? 0
+  const any = low !== 0 || mid !== 0 || high !== 0
+  const bands: { key: 'eqLow' | 'eqMid' | 'eqHigh'; label: string; value: number }[] = [
+    { key: 'eqLow', label: 'Low', value: low },
+    { key: 'eqMid', label: 'Mid', value: mid },
+    { key: 'eqHigh', label: 'High', value: high },
+  ]
+  return (
+    <div className="mt-2" data-nc-track-eq>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        data-nc-track-eq-toggle
+        className="flex w-full items-center gap-1.5 text-[9px] uppercase tracking-wider text-muted-foreground/70 transition hover:text-foreground"
+      >
+        <ChevronDown className={cn('size-3 transition-transform', open && 'rotate-180')} />
+        EQ
+        <span
+          className={cn(
+            'rounded border px-1 py-px text-[8px] normal-case tracking-normal',
+            any ? 'border-emerald-400/40 text-emerald-300' : 'border-(--nc-line) text-muted-foreground/60'
+          )}
+          data-nc-track-eq-state
+        >
+          {any ? `L${low > 0 ? '+' : ''}${low} M${mid > 0 ? '+' : ''}${mid} H${high > 0 ? '+' : ''}${high}` : 'flat'}
+        </span>
+        {any && (
+          <span
+            role="button"
+            tabIndex={0}
+            className="ml-auto normal-case tracking-normal underline-offset-2 hover:text-foreground hover:underline"
+            onClick={(e) => {
+              e.stopPropagation()
+              updateTrack(track.id, { eqLow: 0, eqMid: 0, eqHigh: 0 }, 'track-eq')
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation()
+                updateTrack(track.id, { eqLow: 0, eqMid: 0, eqHigh: 0 }, 'track-eq')
+              }
+            }}
+            data-nc-track-eq-reset
+          >
+            Reset
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-1">
+          {bands.map((b) => (
+            <div key={b.key} className="flex items-center gap-2">
+              <span className="w-8 shrink-0 text-[9px] text-muted-foreground">{b.label}</span>
+              <Slider
+                min={-24}
+                max={24}
+                step={1}
+                value={[b.value]}
+                onValueChange={(v) => updateTrack(track.id, { [b.key]: v[0] ?? 0 }, 'track-eq')}
+                className="flex-1"
+                aria-label={`${track.name} ${b.label} EQ`}
+                data-nc-track-eq-band={b.key}
+              />
+              <span className="w-9 text-right font-mono text-[9px] tabular-nums text-muted-foreground">
+                {b.value > 0 ? '+' : ''}
+                {b.value}dB
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

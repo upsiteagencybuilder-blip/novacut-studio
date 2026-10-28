@@ -1331,3 +1331,23 @@ Stage Summary:
 - Day 22 shipped: five real voice presets over the shared preview+export chain, true ring-modulation DSP (first-class mod flavor), exclusive-look semantics with one-undo apply/clear, honest catalog entry.
 - Files: voice-presets.ts (new), audio-mix.ts, types.ts, PropertiesPanel.tsx, sections/sound.ts.
 - Next: Day 23 — per-clip + per-track EQ (3-band, then 10-band).
+
+---
+Task ID: Day-23
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category C Day 23 — Per-clip + per-track EQ (3-band, then 10-band).
+
+Work Log:
+- Per-clip 10-BAND graphic EQ: ClipAudioFx.eq10 (dB −12..+12 at the ISO octave centers, EQ10_FREQS 31/62/125/250/500/1k/2k/4k/8k/16k) — buildFxChain inserts a 10-biquad stage (lowshelf 31 → peaking Q1 ×8 → highshelf 16k) between the 3-band EQ and the HP filter, applyClipFx syncs all ten gains (undefined/zeros stay transparent), so preview AND the offline mixdown ride the same stage. PropertiesPanel gains the Eq10Band block: 10 compact VERTICAL faders (classic graphic-EQ strip) with live dB readouts, 6 one-tap curve presets (Flat / Bass Boost / Vocal / Treble / Loudness / V-Shape), Reset link, data-nc-eq10* hooks, history label 'eq10' (drag-merge).
+- Per-track 3-BAND EQ (mixer): Track.eqLow/eqMid/eqHigh (−24..+24) — NEW buildTrackEq/applyTrackEq in audio-mix.ts (low shelf 200 Hz, mid peak 1.2 kHz, high shelf 4.2 kHz); the ENGINE lazily builds one stage per track (trackEqChains, sig-gated syncTrackEq) and every routed clip's gain now flows input→low→mid→high→master/destination/export (routeEntry rewired); sync called from the audio-track loop AND the video render path, so mixer moves land click-free mid-playback. The offline mixdown builds the same stages for tracks with any EQ ≠ 0 and routes clip gains through them — mixer EQ bakes into exports.
+- MixerDialog: per-track EQ disclosure (chevron + live state chip "L+12 M0 H0"/flat + Reset) with 3 compact sliders (Low/Mid/High), updateTrack history 'track-eq'; MixerDialog header docs updated.
+- Catalog: sound-graphic-equalizer honestly re-described (three sliders → 10-band ISO strip with presets, deep link open-properties-audiofx) + NEW live sound-track-equalizer (per-track mixer EQ, deep link open-mixer).
+- DSP receipts (window.__ncEqHarness — white noise through the REAL shared builders, integrated Goertzel band energies, bypass-vs-EQ dual render): eq10 +12 dB @ 1k → 1k-to-neighbors ratio 0.5616 → 4.7631 (boost ×8.48); track-eq low +12/high −12 → lowLift ×7.05, highDrop ×0.15.
+- E2E desktop 1280×800: EQ10 block renders (10 faders + 6 presets + hidden-until-dirty Reset); Vocal preset via real click → eq10 [-2,-1,1,3,4,4,3,1,0,-1] + fader readouts + Reset appears; mixer → audio track EQ disclosure → REAL pointer sets on the Radix track: low +12 (state chip "L+12 M0 H0"), high −12 → store track.eqLow/eqHigh persisted; undo/redo cycle clean; LIVE engine proof — engine.trackEqChains holds the Audio 1 stage with sig "12|0|-12" and actual node gains low=12/high=−12; playback from 0 advances (t=2.87 s) with the EQ active; console shows only the pre-existing Next 16 hydration notice (0 real errors).
+- E2E mobile 390×844: props sheet → Audio FX → 10-Band strip visible (10 faders + 6 presets) → Bass Boost tap → eq10 [7,6,5,3,1,0,0,0,0,0] (screenshot); mixer dialog → Audio 1 EQ → mid +12 via pointer → store persisted; 0 real errors.
+- QA note: Radix track clicks need the exact live rect (scrollIntoView + fresh getBoundingClientRect + track-edge Y) — the thumb is also a SPAN and stale rects after disclosure toggles silently miss (measurement lesson).
+
+Stage Summary:
+- Day 23 shipped: real 10-band per-clip graphic EQ (vertical fader strip + curve presets) and per-track 3-band mixer EQ, both in the shared preview + export audio path with honest catalog updates (+1 live, 1 re-described).
+- Files: types.ts, utils.ts (shared goertzelMag), audio-mix.ts, engine.ts, PropertiesPanel.tsx, MixerDialog.tsx, sections/sound.ts.
+- Next: Day 24 — compressor + noise gate + offline de-noise.

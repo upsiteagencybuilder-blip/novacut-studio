@@ -72,6 +72,7 @@ import {
 import { clamp, computeHistogram, computeLumaWaveform, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
 import { BUILTIN_LUTS } from '@/lib/editor/builtin-luts'
 import { VOICE_FX_PRESETS, matchVoicePreset, type VoiceFxPreset } from '@/lib/editor/voice-presets'
+import { EQ10_FREQS } from '@/lib/editor/audio-mix'
 import { KeyframeCurveEditor } from '@/components/editor/preview/KeyframeCurve'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -2394,6 +2395,83 @@ const AUDIO_FX_PRESETS: { id: string; label: string; patch: Partial<ClipAudioFx>
 ]
 
 /**
+ * Day 23 — 10-band graphic EQ: ISO octave centers 31 Hz…16 kHz, ±12 dB each,
+ * rendered as compact vertical faders (the classic graphic-EQ strip) with
+ * one-tap curve presets. Runs in the shared chain — preview and mixdown both.
+ */
+const EQ10_PRESETS: { id: string; label: string; gains: number[] }[] = [
+  { id: 'flat', label: 'Flat', gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { id: 'bass', label: 'Bass Boost', gains: [7, 6, 5, 3, 1, 0, 0, 0, 0, 0] },
+  { id: 'vocal', label: 'Vocal', gains: [-2, -1, 1, 3, 4, 4, 3, 1, 0, -1] },
+  { id: 'treble', label: 'Treble', gains: [0, 0, 0, 0, 0, 1, 2, 4, 6, 7] },
+  { id: 'loudness', label: 'Loudness', gains: [6, 4, 2, 0, -1, -1, 0, 2, 4, 6] },
+  { id: 'vshape', label: 'V-Shape', gains: [6, 5, 3, 1, 0, 0, -1, 1, 4, 6] },
+]
+
+function Eq10Band({ eq10, onChange }: { eq10?: number[]; onChange: (gains: number[]) => void }) {
+  const gains = EQ10_FREQS.map((_, i) => eq10?.[i] ?? 0)
+  const any = gains.some((g) => g !== 0)
+  return (
+    <div className="space-y-1.5 rounded-lg border border-(--nc-line) bg-(--nc-panel-soft) p-2" data-nc-eq10>
+      <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+        <Activity className="h-3 w-3 shrink-0" />
+        10-Band EQ
+        {any && (
+          <button
+            type="button"
+            className="ml-auto text-[9px] text-muted-foreground/70 underline-offset-2 hover:text-foreground hover:underline"
+            onClick={() => onChange([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])}
+            data-nc-eq10-reset
+          >
+            Reset
+          </button>
+        )}
+      </div>
+      <div className="flex items-end justify-between gap-1 px-0.5">
+        {EQ10_FREQS.map((f, i) => (
+          <div key={f} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+            <span className="font-mono text-[8px] tabular-nums text-muted-foreground/70" data-nc-eq10-val={i}>
+              {gains[i] > 0 ? `+${gains[i]}` : gains[i]}
+            </span>
+            <Slider
+              orientation="vertical"
+              min={-12}
+              max={12}
+              step={1}
+              value={[gains[i]]}
+              onValueChange={(v) => {
+                const next = [...gains]
+                next[i] = v[0] ?? 0
+                onChange(next)
+              }}
+              className="h-20 min-h-0 data-[orientation=vertical]:min-h-0"
+              aria-label={`${f} hertz band`}
+              data-nc-eq10-band={i}
+            />
+            <span className="text-[8px] leading-none text-muted-foreground/60">
+              {f >= 1000 ? `${f / 1000}k` : f}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {EQ10_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            data-nc-eq10-preset={p.id}
+            onClick={() => onChange([...p.gains])}
+            className="rounded-full border border-(--nc-line) bg-(--nc-panel) px-2 py-0.5 text-[9px] text-muted-foreground transition hover:border-emerald-400/50 hover:text-foreground"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
  * Per-clip audio FX chain — pan, 3-band EQ, high/low-pass filters, compressor,
  * reverb, delay, modulation (chorus/flanger/phaser) and the Day 21 voice chain
  * (extract → pitch / tempo / formant). The engine builds the matching WebAudio
@@ -2606,6 +2684,9 @@ function AudioFxSection({ clip }: { clip: Clip }) {
       <SliderRow label="EQ Low" min={-24} max={24} step={1} value={fx.eqLow ?? 0} onChange={(v) => patch({ eqLow: v })} format={fmtDb} />
       <SliderRow label="EQ Mid" min={-24} max={24} step={1} value={fx.eqMid ?? 0} onChange={(v) => patch({ eqMid: v })} format={fmtDb} />
       <SliderRow label="EQ High" min={-24} max={24} step={1} value={fx.eqHigh ?? 0} onChange={(v) => patch({ eqHigh: v })} format={fmtDb} />
+
+      {/* Day 23 — 10-band graphic EQ (ISO octave centers, ±12 dB) */}
+      <Eq10Band eq10={fx.eq10} onChange={(g) => patch({ eq10: g }, 'eq10')} />
 
       {/* filters */}
       <SliderRow
