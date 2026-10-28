@@ -10,7 +10,7 @@ import type { OverlayDraw, VisionDraw } from '@/lib/effects/types'
 import { getEffect, getOverlayDraw } from '@/lib/effects/registry'
 import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
 import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
-import { applyPixelEffects, buildFilterString, clamp, composeFilters, composeGrades, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, fadeCurveFactor, formatTimecode, projectDuration, rampSourceFraction } from './utils'
+import { applyPixelEffects, buildFilterString, clamp, composeFilters, composeGrades, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, fadeCurveFactor, formatTimecode, normalizeGainFor, projectDuration, rampSourceFraction } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
 import { applyClipFx, applyTrackEq, buildFxChain, buildTrackEq, makeImpulse, rebuildModulation } from './audio-mix'
 import { ensureFormantModule, getFormantError } from './formant-worklet'
@@ -963,7 +963,7 @@ class PreviewEngine {
       el.volume = 1
       entry.gain.gain.value = vol
     } else {
-      el.volume = vol
+      el.volume = Math.min(1, vol)
     }
 
     // reversed playback is seek-driven (browsers can't play media backwards):
@@ -1035,7 +1035,7 @@ class PreviewEngine {
       el.volume = 1
       entry.gain.gain.value = vol
     } else {
-      el.volume = vol
+      el.volume = Math.min(1, vol)
     }
     el.muted = vol <= 0.001 && !entry.gain
 
@@ -1077,7 +1077,21 @@ class PreviewEngine {
   ): number {
     const master = this.masterMuted ? 0 : this.masterVolume
     const base = evaluateKeyframeProperty(clip, 'volume', tLocal) ?? clip.volume
-    return clamp(base * master * this.fadeFactor(clip, tLocal, fadeOpts), 0, 1)
+    // Day 29 — normalize pushes the gain above 1 when the source is quiet;
+    // the ceiling is +12 dB (×4). Only the WebAudio gain path can exceed 1 —
+    // the element-volume fallback clamps at the set sites.
+    const norm = normalizeGainFor(clip.normalize, this.assetFor(clip.mediaId))
+    return clamp(base * master * norm * this.fadeFactor(clip, tLocal, fadeOpts), 0, 4)
+  }
+
+  /** Day 29 — the runtime asset for a mediaId (for normalize's true peak). */
+  private assetFor(mediaId?: string | null): { peakLevel?: number } | undefined {
+    if (!mediaId || !this.snapshotFn) return undefined
+    try {
+      return this.snapshotFn().mediaMap.get(mediaId)
+    } catch {
+      return undefined
+    }
   }
 
   /* -------------------------------------------------- pixel fx (chroma / grade / LUT) */

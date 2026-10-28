@@ -15,7 +15,7 @@
  */
 import type { Clip, ClipAudioFx, MediaAssetRuntime, Project, Track } from './types'
 import { resolveNestedProject } from './nested'
-import { clamp, fadeCurveFactor, goertzelMag, projectDuration } from './utils'
+import { clamp, fadeCurveFactor, goertzelMag, normalizeGainFor, projectDuration } from './utils'
 import { decodeSource } from '@/lib/effects/voice'
 import { createPitchNode, ensurePitchModule, pitchModuleReady } from './pitch-worklet'
 import { createFormantNode, ensureFormantModule, formantModuleReady } from './formant-worklet'
@@ -805,7 +805,8 @@ function buildSpeechLevels(
   project: Project,
   bufferCache: Map<string, AudioBuffer>,
   sr: number,
-  totalSec: number
+  totalSec: number,
+  mediaMap?: Map<string, MediaAssetRuntime>
 ): Float32Array | null {
   const speechClips = project.clips.filter((c) => {
     if (c.kind !== 'video' || c.muted || c.reverse || !c.mediaId) return false
@@ -829,12 +830,15 @@ function buildSpeechLevels(
       const srcT = clip.trimStart + (t - clip.start) * speed
       const center = Math.floor(srcT * sr)
       if (center < 0 || center >= decoded.length) continue
+      // Day 29 — a normalized video clip speaks louder; the duck threshold
+      // hears the normalized level, same as the live engine.
+      const speechGain = (clip.volume ?? 1) * normalizeGainFor(clip.normalize, mediaMap?.get(clip.mediaId!))
       let sum = 0
       let n = 0
       for (let i = -win / 2; i < win / 2; i++) {
         const idx = center + i
         if (idx < 0 || idx >= decoded.length) continue
-        const v = (data0[idx] + data1[idx]) * 0.5 * (clip.volume ?? 1)
+        const v = (data0[idx] + data1[idx]) * 0.5 * speechGain
         sum += v * v
         n++
       }
@@ -948,7 +952,7 @@ export async function renderProjectAudio(
   const duckClips = audibleClips.filter((c) => c.autoDuck && c.kind === 'audio')
   let duckEnvs: Map<string, Float32Array> | undefined
   if (duckClips.length) {
-    const speechLevels = buildSpeechLevels(project, bufferCache, sr, total)
+    const speechLevels = buildSpeechLevels(project, bufferCache, sr, total, mediaMap)
     if (speechLevels) {
       duckEnvs = new Map()
       for (const c of duckClips) {
@@ -993,8 +997,9 @@ export async function renderProjectAudio(
     if (teq) gain.connect(teq.input)
     else gain.connect(master)
 
-    // volume envelope: clip volume × track volume × fade × duck
+    // volume envelope: clip volume × normalize × track volume × fade × duck
     const env = duckEnvs?.get(clip.id)
+    const norm = normalizeGainFor(clip.normalize, mediaMap.get(clip.mediaId!))
     const t0 = clip.start
     const t1 = clip.start + clip.duration
     const fadeIn = Math.min(clip.fadeIn > 0.01 ? clip.fadeIn : 0, clip.duration)
@@ -1002,19 +1007,19 @@ export async function renderProjectAudio(
     const g = gain.gain
     if (env) {
       // Day 25 — ducking changes over time: automate fade × duck every 50 ms
-      const base = clamp((clip.volume ?? 1) * (track.volume ?? 1), 0, 1)
+      const base = clamp((clip.volume ?? 1) * (track.volume ?? 1) * norm, 0, 4)
       const step = 0.05
       g.setValueAtTime(0, Math.max(0, t0 - 0.002))
       for (let t = t0; t < t1; t += step) {
         const tl = t - t0
         const fade = fadeFactorLocal(clip, tl)
         const duck = duckFactorLocal(project, clip, t, env)
-        g.linearRampToValueAtTime(clamp(base * fade * duck, 0, 1), t)
+        g.linearRampToValueAtTime(clamp(base * fade * duck, 0, 4), t)
       }
       g.linearRampToValueAtTime(0, t1 + 0.005)
     } else {
       const duck = duckFactorLocal(project, clip, clip.start)
-      const peak = clamp((clip.volume ?? 1) * (track.volume ?? 1) * duck, 0, 1)
+      const peak = clamp((clip.volume ?? 1) * (track.volume ?? 1) * duck * norm, 0, 4)
       g.setValueAtTime(0, Math.max(0, t0 - 0.002))
       if (fadeIn > 0.01) {
         g.linearRampToValueAtTime(peak, t0 + fadeIn)
@@ -1457,5 +1462,67 @@ function runDuckHarness(threshold = 0.07, depth = 0.68) {
     recoveredAfterSec: +recover.toFixed(3),
     min: +env.reduce((a, v) => Math.min(a, v), 1).toFixed(4),
     max: +env.reduce((a, v) => Math.max(a, v), 0).toFixed(4),
+  }
+}
+
+/* ---------------- normalize QA harness (Day 29 — real shared math + real mixdown) ---------------- */
+
+/** Measure the true peak (max abs sample) across every channel of a buffer. */
+function truePeakOf(buf: AudioBuffer): number {
+  let tp = 0
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const d = buf.getChannelData(ch)
+    for (let i = 0; i < d.length; i++) {
+      const v = Math.abs(d[i])
+      if (v > tp) tp = v
+    }
+  }
+  return tp
+}
+
+if (typeof window !== 'undefined') {
+  ;(window as unknown as { __ncNormalizeHarness?: unknown }).__ncNormalizeHarness = async (
+    arg?: { project?: Project; mediaMap?: Map<string, MediaAssetRuntime>; normalize?: boolean }
+  ) => {
+    // part 1 — the shared math against a real offline render:
+    // −12 dBFS sine (peak 0.25) gains +11.04 dB to a −1 dBFS output;
+    // a −30 dBFS source hits the +12 dB ceiling (output −18 dBFS).
+    const sr = 44100
+    const makeSine = (peak: number) => {
+      const ctx = new OfflineAudioContext(1, sr, sr)
+      const src = ctx.createBufferSource()
+      const buf = ctx.createBuffer(1, sr, sr)
+      const d = buf.getChannelData(0)
+      for (let i = 0; i < sr; i++) d[i] = Math.sin((2 * Math.PI * 440 * i) / sr) * peak
+      src.buffer = buf
+      const g = ctx.createGain()
+      g.gain.value = normalizeGainFor(true, { peakLevel: peak })
+      src.connect(g).connect(ctx.destination)
+      src.start(0)
+      return ctx.startRendering()
+    }
+    const outExact = await makeSine(0.25)
+    const outCapped = await makeSine(0.0312)
+
+    // part 2 — optional REAL mixdown through renderProjectAudio (E2E passes
+    // the live store project + runtime mediaMap with the imported file)
+    let mixdown: { truePeak: number; gain: number } | null = null
+    if (arg?.project && arg?.mediaMap && arg.mediaMap.size > 0) {
+      const off = await renderProjectAudio(arg.project, arg.mediaMap, { sampleRate: sr, channels: 2 })
+      const tp = truePeakOf(off)
+      const first = [...arg.mediaMap.values()].find((m) => m.peakLevel && m.peakLevel > 0)
+      mixdown = { truePeak: +tp.toFixed(4), gain: +(tp / (first?.peakLevel ?? 1)).toFixed(4) }
+    }
+
+    return {
+      spec: 'normalize',
+      exactGainDb: +(20 * Math.log10(normalizeGainFor(true, { peakLevel: 0.25 }))).toFixed(2),
+      exactOutTruePeak: +truePeakOf(outExact).toFixed(4),
+      capGain: +normalizeGainFor(true, { peakLevel: 0.0312 }).toFixed(4),
+      capOutTruePeak: +truePeakOf(outCapped).toFixed(4),
+      disabledGain: normalizeGainFor(false, { peakLevel: 0.25 }),
+      missingAnalysisGain: normalizeGainFor(true, {}),
+      mixdown,
+    }
   }
 }

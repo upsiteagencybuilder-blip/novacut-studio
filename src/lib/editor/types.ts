@@ -27,8 +27,12 @@ export interface MediaAsset {
   thumbnail: string
   /** extra sampled thumbnails (video/image), dataURLs */
   thumbs?: string[]
-  /** normalized 0..1 audio peaks for waveform (audio only) */
+  /** normalized 0..1 audio peaks for waveform (audio + video-with-audio) */
   peaks?: number[]
+  /** normalized 0..1 per-bucket RMS envelope (Day 29) — drawn under the peak bars */
+  rms?: number[]
+  /** true max absolute sample across ALL source samples (0..1) — feeds per-clip normalize gain */
+  peakLevel?: number
   /** parsed .cube LUT data (lut assets only) */
   lutData?: LutData
   createdAt: number
@@ -507,6 +511,8 @@ export interface Clip {
    * modulation) — built as WebAudio nodes by the engine for playback AND export.
    * null/undefined = untouched original sound.
    */
+  /** Day 29 — normalize this clip's audio true peak to −1 dBFS (gain capped at +12 dB) */
+  normalize?: boolean
   /** fade-in curve shape (Day 28) — linear (default) / ease / hold */
   fadeInCurve?: 'linear' | 'ease' | 'hold'
   /** fade-out curve shape (Day 28) — linear (default) / ease / hold */

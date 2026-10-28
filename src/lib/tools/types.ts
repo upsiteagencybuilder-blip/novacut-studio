@@ -39,6 +39,7 @@ export type ToolAction =
   | 'open-properties-animation'
   | 'open-properties-speed-ramp'
   | 'open-properties-audiofx'
+  | 'open-properties-media'
   | 'open-properties-transform'
   | 'open-properties-adjustment'
   | 'open-properties-curves'

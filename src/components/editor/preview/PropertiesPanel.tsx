@@ -71,7 +71,7 @@ import {
   TEXT_FONTS,
   TRANSFORM_PRESETS_KEY,
 } from '@/lib/editor/constants'
-import { clamp, computeHistogram, computeLumaWaveform, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
+import { clamp, computeHistogram, computeLumaWaveform, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, levelToDbfs, normalizeGainFor, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
 import { BUILTIN_LUTS } from '@/lib/editor/builtin-luts'
 import { VOICE_FX_PRESETS, matchVoicePreset, type VoiceFxPreset } from '@/lib/editor/voice-presets'
 import { EQ10_FREQS } from '@/lib/editor/audio-mix'
@@ -203,14 +203,17 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'curves' | 'wheels' | 'lut' | 'scopes' | 'chroma' | 'animation' | 'speed-ramp' | 'audiofx' | 'transform' | 'adjustment'
+export type PropsSectionId = 'filters' | 'grade' | 'curves' | 'wheels' | 'lut' | 'scopes' | 'chroma' | 'animation' | 'speed-ramp' | 'audiofx' | 'media' | 'transform' | 'adjustment'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
  * into view and flashes a highlight ring. Returns a ref to attach to the
  * section element.
  */
-function usePropsSectionFocus(sectionId: PropsSectionId | undefined, onTarget?: () => void) {
+function usePropsSectionFocus(
+  sectionId: PropsSectionId | PropsSectionId[] | undefined,
+  onTarget?: () => void
+) {
   const ref = useRef<HTMLElement | null>(null)
   const cbRef = useRef(onTarget)
   useEffect(() => {
@@ -219,6 +222,7 @@ function usePropsSectionFocus(sectionId: PropsSectionId | undefined, onTarget?: 
 
   useEffect(() => {
     if (!sectionId) return
+    const ids = Array.isArray(sectionId) ? sectionId : [sectionId]
     let flashTimer: number | undefined
     const focus = () => {
       cbRef.current?.()
@@ -235,12 +239,12 @@ function usePropsSectionFocus(sectionId: PropsSectionId | undefined, onTarget?: 
       }, 60)
     }
     const onEvt = (e: Event) => {
-      if ((e as CustomEvent<string>).detail === sectionId) focus()
+      if (ids.includes((e as CustomEvent<string>).detail as PropsSectionId)) focus()
     }
     window.addEventListener('nc-props-section', onEvt)
     // mount race: the request fired before this panel (mobile sheet) mounted
     const w = window as unknown as { __ncPropsSectionRequest?: string }
-    if (w.__ncPropsSectionRequest === sectionId) {
+    if (w.__ncPropsSectionRequest && ids.includes(w.__ncPropsSectionRequest as PropsSectionId)) {
       w.__ncPropsSectionRequest = undefined
       focus()
     }
@@ -248,7 +252,7 @@ function usePropsSectionFocus(sectionId: PropsSectionId | undefined, onTarget?: 
       window.removeEventListener('nc-props-section', onEvt)
       window.clearTimeout(flashTimer)
     }
-  }, [sectionId])
+  }, [Array.isArray(sectionId) ? sectionId.join('|') : sectionId])
 
   return ref
 }
@@ -420,7 +424,7 @@ function Section({
   icon: LucideIcon
   onReset?: () => void
   /** deep-link target for Pro Toolkit `open-properties-*` actions */
-  sectionId?: PropsSectionId
+  sectionId?: PropsSectionId | PropsSectionId[]
   children: ReactNode
 }) {
   const ref = usePropsSectionFocus(sectionId)
@@ -3360,6 +3364,47 @@ function AdjustmentPanel({ clip }: { clip: Clip }) {
   )
 }
 
+/**
+ * Day 29 — per-clip normalize block. Reads the asset's true-peak analysis
+ * (computed at import over EVERY sample, not a bucket estimate) and shows the
+ * gain it will apply to reach −1 dBFS; the same math drives the live engine
+ * and the offline mixdown.
+ */
+function NormalizeBlock({ clip }: { clip: Clip }) {
+  const media = useEditor((s) => s.media)
+  const updateClip = useEditor((s) => s.updateClip)
+  const asset = clip.mediaId ? media.find((m) => m.id === clip.mediaId) : undefined
+  const peak = asset?.peakLevel ?? 0
+  const analyzed = peak > 0.001
+  // the readout always shows the PROSPECTIVE gain (what enabling would apply),
+  // so "0.0 dB" only ever means "already at target"
+  const gain = normalizeGainFor(true, asset)
+  const peakDb = analyzed ? levelToDbfs(peak).toFixed(1) : null
+  const gainDb = analyzed ? 20 * Math.log10(gain) : 0
+
+  return (
+    <div className="space-y-1 rounded-lg border border-(--nc-line) bg-(--nc-panel-soft) p-2" data-nc-normalize-block>
+      <div className="flex items-center gap-2">
+        <span className="flex flex-1 items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Activity className="h-3 w-3" />
+          Normalize loudness
+        </span>
+        <Switch
+          checked={clip.normalize ?? false}
+          onCheckedChange={(on) => updateClip(clip.id, { normalize: on }, true)}
+          aria-label="Normalize clip loudness"
+          data-nc-normalize-switch
+        />
+      </div>
+      <p className="text-[10px] leading-snug text-muted-foreground/60" data-nc-normalize-readout>
+        {analyzed
+          ? `True peak ${peakDb} dBFS → ${gainDb > 0.05 ? `+${gainDb.toFixed(1)} dB` : gainDb < -0.05 ? `${gainDb.toFixed(1)} dB` : '0.0 dB'} gain targets −1 dBFS (capped +12 dB) in preview and exports.`
+          : 'Peak analysis unavailable for this asset (older import) — re-import the file to enable.'}
+      </p>
+    </div>
+  )
+}
+
 function SingleClipEditor({ clip }: { clip: Clip }) {
   const project = useEditor((s) => s.project)
   const media = useEditor((s) => s.media)
@@ -3651,7 +3696,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
 
       {/* media — video / audio */}
       {(clip.kind === 'video' || clip.kind === 'audio') && (
-        <Section title="Media" icon={Gauge} sectionId="speed-ramp">
+        <Section title="Media" icon={Gauge} sectionId={['speed-ramp', 'media']}>
           <SliderRow
             label="Speed"
             min={0.25}
@@ -3784,6 +3829,12 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
                 </div>
               )
             })()}
+
+          {/* Day 29 — per-clip normalize: true-peak analysis from import drives
+              a gain that brings the clip to −1 dBFS in preview AND exports */}
+          {(clip.kind === 'video' || clip.kind === 'audio') && clip.mediaId && (
+            <NormalizeBlock clip={clip} />
+          )}
 
           {/* auto-duck — audio clips only */}
           {clip.kind === 'audio' && (

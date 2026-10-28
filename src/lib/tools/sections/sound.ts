@@ -75,6 +75,8 @@ export const SOUND_TOOLS: ProTool[] = [
   { id: 'sound-loudness-radar-meter', name: 'Loudness Radar Meter', section: 'sound', group: 'Meters & analysis', status: 'planned', desc: 'Track program loudness over time against a target' },
   { id: 'sound-lufs-indicator', name: 'LUFS Indicator', section: 'sound', group: 'Meters & analysis', status: 'planned', desc: 'Integrated LUFS number for streaming delivery specs' },
   { id: 'sound-true-peak-meter', name: 'True Peak Meter', section: 'sound', group: 'Meters & analysis', status: 'planned', desc: 'Oversampled peak readings to prevent encoder clipping' },
+  { id: 'sound-audio-waveform-rms', name: 'Waveform RMS + Peak View', section: 'sound', group: 'Meters & analysis', status: 'live', desc: 'Timeline waveforms draw solid RMS loudness under dim peak bars, from a 1200-bucket import analysis; bars honor trims/speed and reveal more detail as you zoom (video clips get a slim audio strip too)', action: 'open-properties-media' },
+  { id: 'sound-audio-normalize', name: 'Per-Clip Loudness Normalize', section: 'sound', group: 'Meters & analysis', status: 'live', desc: 'One switch scales a clip to a −1 dBFS true peak (gain capped at +12 dB) — the same gain runs in live preview and the offline mixdown, and ducking hears normalized speech', action: 'open-properties-media' },
 
   // -------- Sync & post --------
   { id: 'sound-foley-sampler', name: 'Foley Sampler', section: 'sound', group: 'Sync & post', status: 'planned', desc: 'Pad-based performance instrument for triggering foley hits' },

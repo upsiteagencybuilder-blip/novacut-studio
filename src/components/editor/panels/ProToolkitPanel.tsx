@@ -122,6 +122,7 @@ function useToolAction() {
       'open-properties-animation': () => openPropsSection('animation'),
       'open-properties-speed-ramp': () => openPropsSection('speed-ramp'),
       'open-properties-audiofx': () => openPropsSection('audiofx'),
+      'open-properties-media': () => openPropsSection('media'),
       'open-properties-transform': () => openPropsSection('transform'),
       'open-properties-adjustment': () => openPropsSection('adjustment'),
       'open-properties-curves': () => openPropsSection('curves'),

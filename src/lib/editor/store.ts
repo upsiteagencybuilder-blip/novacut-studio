@@ -586,6 +586,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
         thumbnail: asset.thumbnail,
         thumbs: asset.thumbs,
         peaks: asset.peaks,
+        rms: asset.rms,
+        peakLevel: asset.peakLevel,
         createdAt: asset.createdAt,
       },
       asset.rawBlob

@@ -1454,3 +1454,25 @@ Stage Summary:
 - Day 28 shipped: fade curves (linear/ease/hold) end to end — engine + mixdown + timeline wedges on one shared function — plus real reverb pre-delay/damping and ping-pong delay DSP with full UI, honest catalog updates.
 - Files: utils.ts, types.ts, engine.ts, audio-mix.ts, PropertiesPanel.tsx, ClipBlock.tsx, sections/sound.ts.
 - Next: Day 29 — waveform upgrades: RMS view, per-clip normalize, zoom.
+
+---
+Task ID: Day-29
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category C Day 29 — Waveform upgrades: RMS view, per-clip normalize, zoom.
+
+Work Log:
+- Importer: shared analyzeMediaAudio decodes ANY media file's audio (audio files AND video containers via decodeAudioData) into a 1200-bucket analysis — per-bucket max PEAKS, per-bucket RMS, and a TRUE PEAK (max abs over every single sample, no skipping). Video imports now analyze their soundtrack too (try/catch → silent for silent videos), so video clips gain waveforms + normalize. MediaAsset += rms/peakLevel; persistence (addMediaAsset → IndexedDB) now stores both (hydration spread already complete).
+- Waveform render (ClipBlock): trim-aware + zoom-aware sampling — bars map the actually-played source window [trimStart, trimStart + duration×speed] onto the asset arrays with max-per-bar over-sampling, so trims are honored and zooming in reveals more detail (bars = clamp(widthPx/3, 6, 240) fed by 5× more buckets). DAW-style dual view: dim full-range peak bars UNDER solid RMS bars (RMS body = perceived loudness). Video clips with analyzed audio draw a slim bottom strip (36%, dark backdrop) under the thumbnails.
+- Per-clip normalize: Clip.normalize boolean + shared normalizeGainFor (target −1 dBFS on the asset's true peak, gain capped at +12 dB ×4, honest no-op without analysis). The SAME gain runs in three places: live engine effectiveVolume (ceiling raised to ×4; element-volume fallback clamps at set sites since HTMLMediaElement.volume cannot exceed 1), the offline mixdown per-clip envelope (base × norm, env ceiling ×4), and the duck speech-level series (normalized speech is heard by the threshold, live and offline).
+- PropertiesPanel: NormalizeBlock (video/audio clips) — switch + honest readout showing the PROSPECTIVE gain ("True peak −12.0 dBFS → +11.0 dB gain targets −1 dBFS (capped +12 dB) in preview and exports") or the re-import hint for legacy assets; one undoable updateClip. Deep links: new 'open-properties-media' ToolAction lands on the Media section (usePropsSectionFocus now accepts multiple ids per section — Media keeps its 'speed-ramp' link too).
+- Catalog: +2 live (sound-audio-waveform-rms "Waveform RMS + Peak View", sound-audio-normalize "Per-Clip Loudness Normalize") with honest descs.
+- REAL BUGS caught by E2E and fixed: (1) the normalize readout computed the CURRENT gain (0 dB while disabled) instead of the prospective gain — misleading "0.0 dB" on untouched clips; (2) addMediaAsset persisted peaks but silently dropped rms/peakLevel, so reloads lost normalize analysis.
+- E2E DSP receipts: harness part 1 (shared math → real offline render): −12 dBFS sine gains +11.04 dB → output true peak 0.8910 (theory 0.891 exactly); −30 dBFS source caps at gain 4.0000 → 0.1248 (−18 dBFS); disabled/missing-analysis return 1. Import analysis: test WAV peakLevel 0.24995 (matches ffmpeg sample-exact), video mp4 0.0164 (matches ffmpeg decode 0.0164).
+- E2E mixdown receipt (renderProjectAudio on the real imported file): bypass true peak 0.1894 vs normalized 0.6753 → ratio 3.5655 vs expected gain 3.5646 (the chain's compressor attenuates both runs equally — the ratio isolates the normalize gain to 4 decimals).
+- E2E waveform receipts: sine asset RMS-body/peak-outline ratio 0.735 vs theory 0.7071 (per-bucket RMS mean is 0.1767 = exact peak/√2; the drawn max-per-bar picks one +4% resampler-ripple bucket — disclosed); zoom bar count 26 @ zoom 40 → 46 @ 70 → 133 @ 200; trimStart 1.5 on the demo music shifts the whole profile (first bars 6.0/6.2 → 19.1/17.1).
+- E2E UI: readout "+11.0 dB" after fix; switch via real pointer → clip.normalize true, undo → off, redo → on; video clip slim strip (70 bars) + normalize block "−35.7 dBFS → +12.0 dB (capped)"; deep link 'media' flashes the Media section; mobile 390×844 Edit sheet renders the block with checked switch; fresh isolated session 0 errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 29 shipped: waveforms upgraded end to end — RMS+peak dual view on 1200-bucket import analysis, trim/zoom-aware rendering, video-clip audio strips, per-clip true-peak normalize (−1 dBFS, +12 dB cap) shared by preview, mixdown and ducking, with honest UI readouts and deep links.
+- Files: types.ts, importer.ts, utils.ts, ClipBlock.tsx, engine.ts, audio-mix.ts, PropertiesPanel.tsx, store.ts, ProToolkitPanel.tsx, tools/types.ts, sections/sound.ts.
+- Next: Day 30 — loudness normalize (target LUFS) + master meters + Category C audit.

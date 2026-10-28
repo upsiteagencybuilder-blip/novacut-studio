@@ -88,7 +88,53 @@ async function importVideo(file: File, objectUrl: string): Promise<{ duration: n
   return { duration, width, height, thumbnail: thumbs[0] ?? '', thumbs }
 }
 
-async function importAudio(file: File, objectUrl: string): Promise<{ duration: number; peaks: number[] }> {
+/** Day 29 — shared audio analysis: per-bucket peaks + RMS + true peak level */
+interface AudioMeta {
+  peaks: number[]
+  rms: number[]
+  peakLevel: number
+}
+
+/**
+ * Decode a media file's audio track and analyze it. Works for audio files AND
+ * video containers with an audio track (Chrome decodes mp4/AAC via
+ * decodeAudioData). Returns null when there is no decodable audio.
+ */
+async function analyzeMediaAudio(file: File): Promise<AudioMeta | null> {
+  try {
+    const arrayBuffer = await file.arrayBuffer()
+    const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const ctx = new AudioCtx()
+    const buffer = await ctx.decodeAudioData(arrayBuffer)
+    const channel = buffer.getChannelData(0)
+    const buckets = 1200
+    const block = Math.max(1, Math.floor(channel.length / buckets))
+    const peaks: number[] = []
+    const rms: number[] = []
+    let truePeak = 0
+    for (let i = 0; i < buckets; i++) {
+      let max = 0
+      let sum = 0
+      let n = 0
+      const start = i * block
+      for (let j = 0; j < block; j++) {
+        const v = Math.abs(channel[start + j] ?? 0)
+        if (v > max) max = v
+        sum += v * v
+        n++
+        if (v > truePeak) truePeak = v
+      }
+      peaks.push(Math.min(1, max))
+      rms.push(Math.min(1, n ? Math.sqrt(sum / n) : 0))
+    }
+    ctx.close().catch(() => undefined)
+    return { peaks, rms, peakLevel: truePeak }
+  } catch {
+    return null
+  }
+}
+
+async function importAudio(file: File, objectUrl: string): Promise<{ duration: number; peaks: number[]; rms: number[]; peakLevel: number }> {
   const temp = document.createElement('audio')
   temp.preload = 'metadata'
   temp.src = objectUrl
@@ -98,30 +144,8 @@ async function importAudio(file: File, objectUrl: string): Promise<{ duration: n
     setTimeout(() => resolve(10), 6000)
   })
 
-  let peaks: number[] = []
-  try {
-    const arrayBuffer = await file.arrayBuffer()
-    const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-    const ctx = new AudioCtx()
-    const buffer = await ctx.decodeAudioData(arrayBuffer)
-    const channel = buffer.getChannelData(0)
-    const buckets = 240
-    const block = Math.floor(channel.length / buckets)
-    peaks = []
-    for (let i = 0; i < buckets; i++) {
-      let max = 0
-      const start = i * block
-      for (let j = 0; j < block; j += 16) {
-        const v = Math.abs(channel[start + j] ?? 0)
-        if (v > max) max = v
-      }
-      peaks.push(Math.min(1, max))
-    }
-    ctx.close().catch(() => undefined)
-  } catch {
-    peaks = []
-  }
-  return { duration, peaks }
+  const meta = await analyzeMediaAudio(file)
+  return { duration, peaks: meta?.peaks ?? [], rms: meta?.rms ?? [], peakLevel: meta?.peakLevel ?? 0 }
 }
 
 /** Parse & import a .cube LUT file as a lut asset */
@@ -177,7 +201,7 @@ export async function importFile(file: File): Promise<MediaAssetRuntime | null> 
   const objectUrl = URL.createObjectURL(file)
 
   try {
-    let meta: Pick<MediaAsset, 'duration' | 'width' | 'height' | 'thumbnail' | 'thumbs' | 'peaks'> = {
+    let meta: Pick<MediaAsset, 'duration' | 'width' | 'height' | 'thumbnail' | 'thumbs' | 'peaks' | 'rms' | 'peakLevel'> = {
       duration: 0,
       width: 0,
       height: 0,
@@ -190,9 +214,16 @@ export async function importFile(file: File): Promise<MediaAssetRuntime | null> 
     } else if (kind === 'video') {
       const r = await importVideo(file, objectUrl)
       meta = { ...r }
+      // Day 29 — analyze the video's audio track too (waveform + normalize)
+      const am = await analyzeMediaAudio(file)
+      if (am) {
+        meta.peaks = am.peaks
+        meta.rms = am.rms
+        meta.peakLevel = am.peakLevel
+      }
     } else {
       const r = await importAudio(file, objectUrl)
-      meta = { duration: r.duration, width: 0, height: 0, thumbnail: '', thumbs: [], peaks: r.peaks }
+      meta = { duration: r.duration, width: 0, height: 0, thumbnail: '', thumbs: [], peaks: r.peaks, rms: r.rms, peakLevel: r.peakLevel }
     }
 
     const asset: MediaAssetRuntime = {

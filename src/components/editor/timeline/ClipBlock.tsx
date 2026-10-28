@@ -599,8 +599,12 @@ export function ClipBlock({
           />
         )}
 
-        {/* waveform for audio */}
-        {clip.kind === 'audio' && <Waveform peaks={asset?.peaks} widthPx={widthPx} />}
+        {/* waveform — audio clips full-height; video clips show a slim strip
+            when the file's audio track was analyzed (Day 29) */}
+        {clip.kind === 'audio' && <Waveform peaks={asset?.peaks} rms={asset?.rms} clip={clip} widthPx={widthPx} />}
+        {clip.kind === 'video' && asset?.peaks && asset.peaks.length > 0 && (
+          <Waveform peaks={asset.peaks} rms={asset.rms} clip={clip} widthPx={widthPx} slim />
+        )}
 
         {/* label row */}
         {clip.kind === 'adjustment' ? (
@@ -731,24 +735,69 @@ export function ClipBlock({
   )
 }
 
-/** SVG waveform bars from normalized peaks (0..1); sine placeholder when absent */
-function Waveform({ peaks, widthPx }: { peaks?: number[]; widthPx: number }) {
+/**
+ * Day 29 — trim/zoom-aware waveform: solid RMS bars under dimmer peak bars.
+ * The bars sample the source window actually played — [trimStart,
+ * trimStart + duration × speed] of the asset — so the drawn shape matches what
+ * is heard: trims are honored and zooming in (more px/sec) reveals more
+ * detail via higher-resolution sampling of the 1200-bucket analysis.
+ * Sine placeholder when the asset has no audio analysis.
+ */
+function Waveform({
+  peaks,
+  rms,
+  clip,
+  widthPx,
+  slim = false,
+}: {
+  peaks?: number[]
+  rms?: number[]
+  clip: Clip
+  widthPx: number
+  slim?: boolean
+}) {
   const bars = useMemo(() => {
     const n = clamp(Math.floor(widthPx / 3), 6, 240)
+    const has = !!peaks && peaks.length > 0
+    const srcDur = clip.sourceDuration || clip.duration || 1
+    const speed = Math.max(clip.speed || 1, 0.01)
+    const span = Math.min(1, (clip.duration * speed) / srcDur)
+    const start = Math.max(0, Math.min(1 - span, clip.trimStart / srcDur))
     return Array.from({ length: n }, (_, i) => {
-      if (peaks && peaks.length > 0) {
-        const v = peaks[Math.min(peaks.length - 1, Math.floor((i / n) * peaks.length))] ?? 0
-        return clamp(Math.abs(v), 0.06, 1) * 100
+      if (has) {
+        const a0 = Math.floor((start + (span * i) / n) * peaks!.length)
+        const a1 = Math.max(a0 + 1, Math.floor((start + (span * (i + 1)) / n) * peaks!.length))
+        let pk = 0
+        let rm = 0
+        for (let k = a0; k < a1 && k < peaks!.length; k++) {
+          if (peaks![k] > pk) pk = peaks![k]
+          const r = rms?.[k] ?? 0
+          if (r > rm) rm = r
+        }
+        return { peak: clamp(pk, 0.06, 1) * 100, rms: clamp(rm, 0.04, 1) * 100 }
       }
-      return (0.35 + 0.3 * Math.sin(i * 0.9)) * 100
+      const s = 0.35 + 0.3 * Math.sin(i * 0.9)
+      return { peak: s * 100, rms: s * 0.7 * 100 }
     })
-  }, [peaks, widthPx])
+  }, [peaks, rms, clip.trimStart, clip.duration, clip.speed, clip.sourceDuration, widthPx])
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-[20%] h-[60%]">
+    <div
+      className={
+        slim
+          ? 'pointer-events-none absolute inset-x-0 bottom-0 h-[36%] rounded-b-sm bg-black/35'
+          : 'pointer-events-none absolute inset-x-0 top-[20%] h-[60%]'
+      }
+      aria-hidden
+    >
       <svg width="100%" height="100%" viewBox={`0 0 ${bars.length} 100`} preserveAspectRatio="none" className="block">
-        {bars.map((h, i) => (
-          <rect key={i} x={i + 0.2} y={50 - h / 2} width={0.6} height={h} className="fill-(--nc-audio)" opacity={0.8} />
+        {bars.map((b, i) => (
+          <g key={i}>
+            {/* dim full-range peak bar */}
+            <rect x={i + 0.2} y={50 - b.peak / 2} width={0.6} height={b.peak} className="fill-(--nc-audio)" opacity={slim ? 0.28 : 0.35} />
+            {/* solid RMS body — the perceived loudness */}
+            <rect x={i + 0.2} y={50 - b.rms / 2} width={0.6} height={b.rms} className="fill-(--nc-audio)" opacity={slim ? 0.8 : 0.9} />
+          </g>
         ))}
       </svg>
     </div>

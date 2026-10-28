@@ -1016,3 +1016,27 @@ export function fadeCurveFactor(curve: FadeCurve | undefined, x: number): number
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v
 }
+
+/* ---------------- Day 29 — per-clip normalize + waveform helpers ---------------- */
+
+/** Convert a linear level (0..1) to dBFS (−Infinity at silence). */
+export function levelToDbfs(level: number): number {
+  return level <= 0.00001 ? -120 : 20 * Math.log10(level)
+}
+
+/**
+ * Per-clip normalize gain: when enabled, scales the clip's audio so its TRUE
+ * peak (analyzed at import, asset.peakLevel) lands at −1 dBFS. Boost is
+ * capped at +12 dB (×4) so a nearly-silent clip can never explode. Returns 1
+ * when disabled or when no analysis is available (honest no-op).
+ */
+export function normalizeGainFor(
+  enabled: boolean | undefined,
+  asset?: { peakLevel?: number } | null
+): number {
+  if (!enabled) return 1
+  const peak = asset?.peakLevel ?? 0
+  if (peak <= 0.001) return 1
+  const target = 0.891 // −1 dBFS
+  return Math.min(4, target / peak)
+}
