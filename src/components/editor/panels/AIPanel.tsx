@@ -43,6 +43,7 @@ import { renderEffectToWav } from '@/lib/effects/audio-render'
 import { MUSIC_EFFECTS } from '@/lib/effects/music'
 import { applyCopilotActions, buildCopilotContext } from '@/lib/editor/copilot'
 import { importFiles } from '@/lib/editor/importer'
+import { rankFrames, renderTitleCard, scoreFrame, TITLE_CARD_STYLES, captureCurrentFrame, type FrameScore } from '@/lib/editor/thumbnail'
 import { useEditor } from '@/lib/editor/store'
 import { clamp, round2 } from '@/lib/editor/utils'
 import type { AiSubTab } from '@/lib/editor/types'
@@ -985,6 +986,343 @@ function BgmDirectorCard() {
         </div>
       )}
       <NoteRow icon={AudioLines}>Arrangements come from the 64 procedural loops — rendered on your device, royalty-free.</NoteRow>
+    </FeatureCard>
+  )
+}
+
+/* ================= AI thumbnails (Day 36) ================= */
+
+const THUMB_STYLES = TITLE_CARD_STYLES
+
+function ThumbnailsCard() {
+  const selectedClip = useEditor((s) => s.project.clips.find((c) => s.selectedClipIds.includes(c.id)) ?? null)
+  const addMediaAsset = useEditor((s) => s.addMediaAsset)
+  const setCurrentTime = useEditor((s) => s.setCurrentTime)
+  const project = useEditor((s) => s.project)
+  const media = useEditor((s) => s.media)
+
+  const isVisual = !!selectedClip && (selectedClip.kind === 'video' || selectedClip.kind === 'image')
+  const asset = selectedClip?.mediaId ? media.find((m) => m.id === selectedClip.mediaId) ?? null : null
+
+  /* ---------- best-frame picker ---------- */
+  const [scanning, setScanning] = useState(false)
+  const [candidates, setCandidates] = useState<FrameScore[]>([])
+  const [capturingT, setCapturingT] = useState<number | null>(null)
+
+  const scanFrames = useCallback(async () => {
+    if (!selectedClip || scanning) return
+    const engine = (
+      window as unknown as { __ncEngineInstance?: { seekTo: (t: number) => void; sampleFrame: (n: number) => Uint8ClampedArray | null } }
+    ).__ncEngineInstance
+    if (!engine) {
+      toast.error('Preview engine not ready')
+      return
+    }
+    setScanning(true)
+    setCandidates([])
+    try {
+      const st = useEditor.getState()
+      const savedTime = st.currentTime
+      const frames: FrameScore[] = []
+      for (let i = 0; i < 7; i++) {
+        const t = round2(selectedClip.start + (selectedClip.duration * (i + 0.5)) / 7)
+        engine.seekTo(Math.min(t, selectedClip.start + selectedClip.duration - 0.05))
+        await new Promise((r) => setTimeout(r, 140))
+        const px = engine.sampleFrame(96)
+        if (px && px.length >= 64) {
+          const side = Math.round(Math.sqrt(px.length / 4))
+          frames.push(scoreFrame(px, side, side, t, 96))
+        }
+      }
+      engine.seekTo(savedTime)
+      if (!frames.length) {
+        toast.error('Could not read frames from this clip')
+        return
+      }
+      setCandidates(rankFrames(frames).slice(0, 3))
+    } finally {
+      setScanning(false)
+    }
+  }, [selectedClip, scanning])
+
+  const captureFrame = useCallback(
+    async (t: number) => {
+      if (capturingT !== null) return
+      setCapturingT(t)
+      try {
+        const engine = (
+          window as unknown as { __ncEngineInstance?: { seekTo: (t: number) => void } }
+        ).__ncEngineInstance
+        engine?.seekTo(t)
+        await new Promise((r) => setTimeout(r, 220))
+        const blob = await captureCurrentFrame(project.canvasWidth, project.canvasHeight)
+        const file = new File([blob], `best-frame-${round2(t)}s.png`, { type: 'image/png' })
+        const assets = await importFiles([file])
+        if (assets.length) {
+          assets.forEach(addMediaAsset)
+          toast.success('Frame captured to the media library')
+        } else {
+          toast.error('Capture import failed')
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Frame capture failed')
+      } finally {
+        setCapturingT(null)
+      }
+    },
+    [capturingT, project.canvasWidth, project.canvasHeight, addMediaAsset],
+  )
+
+  /* ---------- title-card generator ---------- */
+  const [cardTitle, setCardTitle] = useState('')
+  const [cardSubtitle, setCardSubtitle] = useState('')
+  const [cardStyleId, setCardStyleId] = useState(THUMB_STYLES[0]!.id)
+  const [usePhoto, setUsePhoto] = useState(true)
+  const [cardBusy, setCardBusy] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [cardPreview, setCardPreview] = useState<string | null>(null)
+
+  const suggestTitles = useCallback(async () => {
+    if (suggesting) return
+    const topic = cardTitle.trim() || project.name
+    requireOnline()
+    setSuggesting(true)
+    try {
+      const res = await fetch('/api/ai/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'titles', topic: topic.slice(0, 200) }),
+      })
+      const data = (await res.json().catch(() => null)) as { text?: string; error?: string } | null
+      if (!res.ok || !data?.text) throw new Error(data?.error ?? `Title ideas failed (${res.status})`)
+      const lines = data.text
+        .split('\n')
+        .map((l) => l.replace(/^\s*\d+[.)]\s*/, '').trim())
+        .filter((l) => l.length > 2)
+        .slice(0, 8)
+      setSuggestions(lines)
+      if (!lines.length) toast('No title ideas came back — try a different topic')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Title suggestions failed')
+    } finally {
+      setSuggesting(false)
+    }
+  }, [suggesting, cardTitle, project.name])
+
+  const generateCard = useCallback(async () => {
+    if (cardBusy) return
+    const title = cardTitle.trim()
+    if (!title) {
+      toast.error('Write the thumbnail title first')
+      return
+    }
+    setCardBusy(true)
+    try {
+      let frameDataUrl: string | null = null
+      if (usePhoto) {
+        const blob = await captureCurrentFrame(project.canvasWidth, project.canvasHeight)
+        frameDataUrl = await new Promise<string>((resolve) => {
+          const fr = new FileReader()
+          fr.onload = () => resolve(String(fr.result))
+          fr.readAsDataURL(blob)
+        })
+      }
+      const style = THUMB_STYLES.find((s) => s.id === cardStyleId) ?? THUMB_STYLES[0]!
+      const { blob, preview } = await renderTitleCard({
+        title,
+        subtitle: cardSubtitle,
+        style,
+        frameDataUrl,
+      })
+      setCardPreview(preview)
+      const file = new File([blob], `title-card-${style.id}.png`, { type: 'image/png' })
+      const assets = await importFiles([file])
+      if (assets.length) {
+        assets.forEach(addMediaAsset)
+        toast.success('Title card added to the media library')
+      } else {
+        toast.error('Card import failed')
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Title card failed')
+    } finally {
+      setCardBusy(false)
+    }
+  }, [cardBusy, cardTitle, cardSubtitle, cardStyleId, usePhoto, project.canvasWidth, project.canvasHeight, addMediaAsset])
+
+  return (
+    <FeatureCard icon={ImageIcon} title="AI Thumbnails" subtitle="Best-frame picker + title-card generator">
+      {/* ---------- best frames ---------- */}
+      <div className="space-y-1.5" data-nc-thumb-frames>
+        <div className="flex items-center justify-between">
+          <FieldLabel>Best frame</FieldLabel>
+          {selectedClip ? (
+            <span className="max-w-[55%] truncate text-[9.5px] text-muted-foreground">
+              {selectedClip.name.slice(0, 22)}
+              {asset ? ` · ${asset.width}×${asset.height}` : ''}
+            </span>
+          ) : null}
+        </div>
+        {isVisual ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={scanning}
+              onClick={() => void scanFrames()}
+              data-nc-thumb-scan
+              className="h-8 w-full rounded-lg border-(--nc-line) text-[11px]"
+            >
+              {scanning ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
+              {scanning ? 'Scanning 7 frames…' : 'Scan for best frames'}
+            </Button>
+            {candidates.length > 0 && (
+              <div className="grid grid-cols-3 gap-1.5" data-nc-thumb-cands>
+                {candidates.map((c) => (
+                  <div key={c.t} className="space-y-1 rounded-lg border border-(--nc-line) bg-(--nc-panel) p-1.5">
+                    {c.preview ? (
+                      <img src={c.preview} alt={`Frame at ${c.t}s`} className="h-12 w-full rounded object-cover" />
+                    ) : null}
+                    <p className="text-center font-mono text-[9px] text-foreground">{c.t}s</p>
+                    <p className="text-center font-mono text-[8.5px] leading-tight text-muted-foreground">
+                      d{c.detail.toFixed(2)} e{c.exposure.toFixed(2)} c{c.contrast.toFixed(2)}
+                    </p>
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={capturingT !== null}
+                        onClick={() => void captureFrame(c.t)}
+                        data-nc-thumb-capture={c.t}
+                        className="nc-gradient h-6 flex-1 rounded-md px-1 text-[9px] font-semibold text-white"
+                      >
+                        {capturingT === c.t ? '…' : 'Capture'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCurrentTime(c.t)}
+                        className="h-6 rounded-md px-1.5 text-[9px]"
+                      >
+                        Go
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[9px] leading-snug text-muted-foreground/60">
+              Scores detail 50% + exposure 30% + contrast 20% — every number stays visible.
+            </p>
+          </>
+        ) : (
+          <NoClipHint>Select a video or image clip to scan its frames.</NoClipHint>
+        )}
+      </div>
+
+      {/* ---------- title card ---------- */}
+      <div className="space-y-1.5 border-t border-(--nc-line) pt-2" data-nc-thumb-card>
+        <FieldLabel>Title card</FieldLabel>
+        <div className="flex gap-1.5">
+          <Input
+            value={cardTitle}
+            onChange={(e) => setCardTitle(e.target.value.slice(0, 80))}
+            placeholder="Thumbnail title…"
+            maxLength={80}
+            data-nc-thumb-title
+            className="h-8 flex-1 border-(--nc-line) bg-(--nc-scrim) text-xs"
+            aria-label="Thumbnail title"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={suggesting}
+            onClick={() => void suggestTitles()}
+            data-nc-thumb-suggest
+            className="h-8 shrink-0 rounded-lg px-2 text-[10px]"
+          >
+            {suggesting ? <Loader2 className="size-3 animate-spin" /> : <Wand2 className="size-3" />}
+            Ideas
+          </Button>
+        </div>
+        {suggestions.length > 0 && (
+          <div className="flex flex-wrap gap-1" data-nc-thumb-suggestions>
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setCardTitle(s.slice(0, 80))}
+                className="rounded-full border border-(--nc-line) bg-(--nc-panel) px-2 py-0.5 text-[9.5px] text-muted-foreground transition hover:border-fuchsia-400/50 hover:text-foreground"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+        <Input
+          value={cardSubtitle}
+          onChange={(e) => setCardSubtitle(e.target.value.slice(0, 60))}
+          placeholder="Subtitle (optional)"
+          maxLength={60}
+          className="h-8 border-(--nc-line) bg-(--nc-scrim) text-xs"
+          aria-label="Thumbnail subtitle"
+        />
+        <div className="grid grid-cols-4 gap-1">
+          {THUMB_STYLES.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              aria-pressed={cardStyleId === s.id}
+              data-nc-thumb-style={s.id}
+              onClick={() => setCardStyleId(s.id)}
+              className={`flex h-9 items-center justify-center rounded-lg border text-[9px] font-semibold transition ${
+                cardStyleId === s.id
+                  ? 'border-fuchsia-400/70 bg-fuchsia-400/10 text-foreground'
+                  : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span
+                className="rounded px-1 py-0.5"
+                style={{
+                  color: s.titleColor,
+                  background: s.accent,
+                  textShadow: `0 1px 1px ${s.titleStroke}`,
+                }}
+              >
+                Aa
+              </span>
+              <span className="ml-1 truncate">{s.label.split(' ')[0]}</span>
+            </button>
+          ))}
+        </div>
+        <label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={usePhoto}
+            onChange={(e) => setUsePhoto(e.target.checked)}
+            data-nc-thumb-photo
+            className="size-3.5 accent-fuchsia-500"
+          />
+          Use the current preview frame as the background
+        </label>
+        <Button
+          type="button"
+          disabled={cardBusy}
+          onClick={() => void generateCard()}
+          data-nc-thumb-generate
+          className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
+        >
+          {cardBusy ? <Loader2 className="size-3.5 animate-spin" /> : <ImageIcon className="size-3.5" />}
+          {cardBusy ? 'Rendering 1280×720…' : 'Generate title card'}
+        </Button>
+        {cardPreview && (
+          <img src={cardPreview} alt="Generated title card preview" className="w-full rounded-lg border border-(--nc-line)" data-nc-thumb-preview />
+        )}
+      </div>
+      <NoteRow icon={ShieldCheck}>Frames and cards render on your device — 1280×720 PNGs, royalty-free.</NoteRow>
     </FeatureCard>
   )
 }
@@ -2249,6 +2587,9 @@ export function AIPanel() {
 
           {/* ---------- 6 · ai bgm director (Day 34) ---------- */}
           <BgmDirectorCard />
+
+          {/* ---------- 7 · ai thumbnails (Day 36) ---------- */}
+          <ThumbnailsCard />
         </>
       )}
     </div>

@@ -1586,3 +1586,20 @@ Stage Summary:
 - Day 35 shipped: one-tap subject-aware reframing to 9:16 / 1:1 / 4:5 — real multi-frame engine sampling, edge-energy saliency with temporal averaging, exact aspect math, one-undo editable crops.
 - Files: reframe.ts (new), PropertiesPanel.tsx, sections/ai.ts.
 - Next: Day 36 — AI thumbnails: title-card generator + best-frame picker.
+---
+Task ID: Day-36
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 36 — AI thumbnails: title-card generator + best-frame picker.
+
+Work Log:
+- NEW thumbnail.ts — best-frame scoring: each engine-sampled frame graded on three measurable axes (detail = Day 35 edge-energy grid ×12 clamped, exposure = distance to the 0.45–0.65 luma sweet spot, contrast = luma std-dev / 0.22 clamped), score = 0.5·detail + 0.3·exposure + 0.2·contrast; rankFrames with earlier-time tie-break; small JPEG contact-sheet previews re-rasterized from the raw samples. Title cards render 1280×720 on a plain canvas: cover-fit photo frame (or gradient) → scrim → accent bar → auto-wrapped ≤3-line stroked title → subtitle, four styles (Punch yellow / Sunset glow / Mint clean / Ink minimal) with live accent swatches; captureCurrentFrame grabs the CURRENT full-resolution preview frame as PNG. Harness: window.__ncThumbHarness {scoreFrame, rankFrames, exposureScore}.
+- AI Thumbnails card (Create tab): best-frame block — "Scan for best frames" samples 7 positions across the selected clip through the real engine, shows the TOP 3 with preview thumbs, per-axis scores (d/e/c) and Capture/Go buttons (Capture = full-res PNG to the media library; Go = seek); title-card block — title input + "Ideas" (assistant API mode 'titles': 8 numbered ≤5-word thumbnail titles, number-prefix stripped, chips fill the input), subtitle, 4 style chips, photo-bg toggle, Generate → PNG 1280×720 into the library + in-card preview.
+- Assistant route: +1 mode 'titles' (thumbnail title strategist prompt, language-following).
+- Catalog: +1 live ai-thumbnails.
+- E2E receipts (desktop 1280×800): scan → 3 ranked candidates with previews (d1.00/e1.00/c1.00 on the bright sunrise asset, 1.3s > 1.67s > 0.93s); Capture → "best-frame-1.3s.png" at 1280px canvas resolution into the library (media 4→5; the media array is not append-ordered — first check misread, corrected). AI ideas → 8 chips ("Sunrise Like Never Before", …); chip fills the title; Sunset style + subtitle + photo frame → "title-card-sunset.png" 1280×720 in the library + in-card preview render.
+- E2E mobile 390×844: Create sheet renders scan block + 4 style chips; screenshots both viewports; zero real errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 36 shipped: thumbnail workflow end to end — deterministic best-frame scanning with transparent per-axis scores and full-res capture, plus a real 1280×720 title-card generator with AI title ideas, four styles and photo backgrounds.
+- Files: thumbnail.ts (new), api/ai/assistant/route.ts, AIPanel.tsx, sections/ai.ts.
+- Next: Day 37 — Script → storyboard: shot list that scaffolds the timeline.

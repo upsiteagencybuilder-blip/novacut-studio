@@ -7,13 +7,14 @@ export const runtime = 'nodejs'
  * Text-in → text-out helper modes used by the AI panel:
  *  - mode "script":    topic → short-form video script / hook ideas / caption ideas
  *  - mode "translate": transcript translation before auto-captions are built
+ *  - mode "titles":    topic → 8 YouTube thumbnail title ideas (Day 36)
  * Returns: { text: string }
  */
 
 const MAX_INPUT = 4000
 
 interface AssistantBody {
-  mode?: 'script' | 'translate'
+  mode?: 'script' | 'translate' | 'titles'
   topic?: string
   kind?: 'script' | 'hooks' | 'captions'
   tone?: string
@@ -36,13 +37,33 @@ function scriptSystem(kind: string, language: string, tone: string, seconds: num
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as AssistantBody | null
-    const mode = body?.mode === 'translate' ? 'translate' : 'script'
+    const mode = body?.mode === 'translate' ? 'translate' : body?.mode === 'titles' ? 'titles' : 'script'
 
     const ZAI = (await import('z-ai-web-dev-sdk')).default
     const zai = await ZAI.create()
 
     let content = ''
-    if (mode === 'translate') {
+    if (mode === 'titles') {
+      const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 200) : ''
+      if (!topic) {
+        return NextResponse.json({ error: 'topic is required' }, { status: 400 })
+      }
+      const language = typeof body?.language === 'string' && body.language.trim() ? body.language.trim().slice(0, 30) : 'English'
+      const completion = await zai.chat.completions.create({
+        messages: [
+          {
+            role: 'assistant',
+            content:
+              `You are a YouTube thumbnail title strategist. Generate exactly 8 thumbnail title ideas for the video topic. ` +
+              `Each is ONE short punchy line (max 5 words, readable at small sizes), numbered 1-8, mixing formulas: a bold claim, a question, a number, a contrast. ` +
+              `Write them in ${language}. Output plain text only — no markdown, no quotes, no headings.`,
+          },
+          { role: 'user', content: topic },
+        ],
+        thinking: { type: 'disabled' },
+      })
+      content = completion.choices[0]?.message?.content ?? ''
+    } else if (mode === 'translate') {
       const text = typeof body?.text === 'string' ? body.text.trim().slice(0, MAX_INPUT) : ''
       const language = typeof body?.language === 'string' && body.language.trim() ? body.language.trim().slice(0, 30) : 'English'
       if (!text) {
