@@ -8,13 +8,14 @@ export const runtime = 'nodejs'
  *  - mode "script":    topic → short-form video script / hook ideas / caption ideas
  *  - mode "translate": transcript translation before auto-captions are built
  *  - mode "titles":    topic → 8 YouTube thumbnail title ideas (Day 36)
+ *  - mode "storyboard": topic → JSON shot list that scaffolds the timeline (Day 37)
  * Returns: { text: string }
  */
 
 const MAX_INPUT = 4000
 
 interface AssistantBody {
-  mode?: 'script' | 'translate' | 'titles'
+  mode?: 'script' | 'translate' | 'titles' | 'storyboard'
   topic?: string
   kind?: 'script' | 'hooks' | 'captions'
   tone?: string
@@ -37,12 +38,68 @@ function scriptSystem(kind: string, language: string, tone: string, seconds: num
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => null)) as AssistantBody | null
-    const mode = body?.mode === 'translate' ? 'translate' : body?.mode === 'titles' ? 'titles' : 'script'
+    const mode =
+      body?.mode === 'translate'
+        ? 'translate'
+        : body?.mode === 'titles'
+          ? 'titles'
+          : body?.mode === 'storyboard'
+            ? 'storyboard'
+            : 'script'
 
     const ZAI = (await import('z-ai-web-dev-sdk')).default
     const zai = await ZAI.create()
 
     let content = ''
+    if (mode === 'storyboard') {
+      const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 300) : ''
+      if (!topic) {
+        return NextResponse.json({ error: 'topic is required' }, { status: 400 })
+      }
+      const seconds = Math.min(90, Math.max(10, Math.round(Number(body?.seconds) || 30)))
+      const language = typeof body?.language === 'string' && body.language.trim() ? body.language.trim().slice(0, 30) : 'English'
+      const completion = await zai.chat.completions.create({
+        messages: [
+          {
+            role: 'assistant',
+            content:
+              `You are a video storyboard director. Turn the topic into a shot list for a ~${seconds}-second short video. ` +
+              `Reply with STRICT JSON only — no markdown fences, no prose outside:\n` +
+              `{"shots":[{"title":"<2-3 words>","description":"<one concrete b-roll/camera line>","seconds":<2..8>}]}\n` +
+              `4-8 shots whose seconds sum to about ${seconds}. Shot 1 is the hook, the last is the payoff/CTA. ` +
+              `Titles and descriptions in ${language}. Titles stay tiny (they render on a slate).`,
+          },
+          { role: 'user', content: topic },
+        ],
+        thinking: { type: 'disabled' },
+      })
+      content = completion.choices[0]?.message?.content ?? ''
+      // storyboard mode returns JSON — pass it through for the client to parse
+      const a = content.indexOf('{')
+      const b = content.lastIndexOf('}')
+      const json = a !== -1 && b > a ? content.slice(a, b + 1) : ''
+      try {
+        const parsed = JSON.parse(json) as { shots?: unknown }
+        if (!Array.isArray(parsed.shots) || !parsed.shots.length) {
+          return NextResponse.json({ error: 'The storyboard came back empty — try again' }, { status: 502 })
+        }
+        const shots = parsed.shots
+          .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object')
+          .map((s) => ({
+            title: typeof s.title === 'string' ? s.title.trim().slice(0, 40) : '',
+            description: typeof s.description === 'string' ? s.description.trim().slice(0, 120) : '',
+            seconds: Math.max(1.5, Math.min(8, Math.round((Number(s.seconds) || 3) * 10) / 10)),
+          }))
+          .filter((s) => s.title)
+          .slice(0, 8)
+        if (!shots.length) {
+          return NextResponse.json({ error: 'The storyboard came back empty — try again' }, { status: 502 })
+        }
+        return NextResponse.json({ shots })
+      } catch {
+        return NextResponse.json({ error: 'The storyboard JSON was malformed — try again' }, { status: 502 })
+      }
+    }
     if (mode === 'titles') {
       const topic = typeof body?.topic === 'string' ? body.topic.trim().slice(0, 200) : ''
       if (!topic) {

@@ -1603,3 +1603,19 @@ Stage Summary:
 - Day 36 shipped: thumbnail workflow end to end — deterministic best-frame scanning with transparent per-axis scores and full-res capture, plus a real 1280×720 title-card generator with AI title ideas, four styles and photo backgrounds.
 - Files: thumbnail.ts (new), api/ai/assistant/route.ts, AIPanel.tsx, sections/ai.ts.
 - Next: Day 37 — Script → storyboard: shot list that scaffolds the timeline.
+---
+Task ID: Day-37
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 37 — Script → storyboard: shot list that scaffolds the timeline.
+
+Work Log:
+- Assistant route: +1 mode 'storyboard' — topic + target seconds → STRICT JSON shot list ({title 2-3 words, description = one concrete b-roll/camera line, seconds 2..8}), 4-8 shots whose durations sum to the target, shot 1 = hook, last = payoff/CTA; server-side hardening (title/description/seconds clamps, empty/malformed JSON → honest 502s).
+- StoryboardCard (Assistant tab, between Copilot and Script Writer): topic textarea + ~15s/~30s/~60s length chips + Generate. The shot list SCAFFOLDS THE TIMELINE: each shot becomes a slate text clip (content "SHOT N · TITLE", dark chip style, name "SN: Title") sequenced back-to-back from 0s via addTextClip → moveClip → updateClip(duration/style), the WHOLE scaffold inside one beginHistoryGroup/endHistoryGroup — one undo clears all slates. Receipt block lists every shot with its time slot + description and the honest "replace the slates with real footage" note.
+- Catalog: +1 live ai-storyboard.
+- E2E receipts (desktop 1280×800): topic "a 30s promo for my handmade coffee brand" @ ~30s → 6 shots (Morning Ritual 0s·5s → Rich Aroma 5s·4s → Artisan Process 9s·6s → Perfect Pour 15s·5s → Coffee Moment 20s·5s → Your Daily Brew 25s·5s) — durations sum exactly 30s, slates at 0/5/9/15/20/25 with the slate style; clips 6→12, pastLen 1; ONE undo removed all 6 slates.
+- E2E mobile 390×844: Assistant sheet renders the card (topic + 3 length chips); screenshots both viewports; zero real errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 37 shipped: topic → directed shot list scaffolded as sequenced timeline slates in one undo — the fastest path from an idea to an editable structure.
+- Files: api/ai/assistant/route.ts, AIPanel.tsx, sections/ai.ts.
+- Next: Day 38 — Silence scan v2 + one-tap jump-cut removal.

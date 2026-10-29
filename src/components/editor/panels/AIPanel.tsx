@@ -990,6 +990,170 @@ function BgmDirectorCard() {
   )
 }
 
+/* ================= script → storyboard (Day 37) ================= */
+
+function StoryboardCard() {
+  const [sbTopic, setSbTopic] = useState('')
+  const [sbSeconds, setSbSeconds] = useState(30)
+  const [sbBusy, setSbBusy] = useState(false)
+  const [sbShots, setSbShots] = useState<{ title: string; description: string; seconds: number; start: number }[] | null>(null)
+  const sbAbortRef = useRef<AbortController | null>(null)
+  const sbElapsed = useAiElapsed(sbBusy)
+
+  const cancelStoryboard = useCallback(() => {
+    sbAbortRef.current?.abort()
+  }, [])
+
+  const handleStoryboard = useCallback(async () => {
+    if (sbBusy) return
+    const topic = sbTopic.trim()
+    if (!topic) {
+      toast.error('Write the video topic first')
+      return
+    }
+    requireOnline()
+    setSbBusy(true)
+    setSbShots(null)
+    const ac = new AbortController()
+    sbAbortRef.current = ac
+    try {
+      const res = await fetch('/api/ai/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'storyboard', topic: topic.slice(0, 300), seconds: sbSeconds }),
+        signal: ac.signal,
+      })
+      const data = (await res.json().catch(() => null)) as
+        | { shots?: { title: string; description: string; seconds: number }[]; error?: string }
+        | null
+      if (!res.ok || !data?.shots?.length) {
+        throw new Error(data?.error ?? `Storyboard failed (${res.status})`)
+      }
+
+      // scaffold the timeline — every slate inside ONE history group
+      const st0 = useEditor.getState()
+      const before = st0.beginHistoryGroup()
+      const placed: { title: string; description: string; seconds: number; start: number }[] = []
+      let cursor = 0
+      for (let i = 0; i < data.shots.length; i++) {
+        const shot = data.shots[i]
+        const beforeIds = new Set(useEditor.getState().project.clips.map((c) => c.id))
+        useEditor.getState().addTextClip()
+        const st1 = useEditor.getState()
+        const clip = st1.project.clips.find((c) => !beforeIds.has(c.id))
+        if (!clip) continue
+        // move to the sequenced slot and stage the slate look
+        st1.moveClip(clip.id, round2(cursor), null, false)
+        const st2 = useEditor.getState()
+        st2.updateClip(
+          clip.id,
+          {
+            duration: round2(Math.max(1.5, shot.seconds)),
+            name: `S${i + 1}: ${shot.title.slice(0, 24)}`,
+            textStyle: {
+              ...(clip.textStyle ?? {}),
+              content: `SHOT ${i + 1} · ${shot.title.toUpperCase()}`,
+              fontSize: 54,
+              bold: true,
+              color: '#fafafa',
+              background: 'rgba(10,10,18,0.85)',
+              backgroundPadding: 22,
+              animation: 'fadeIn' as const,
+            },
+          },
+          false
+        )
+        placed.push({ ...shot, start: round2(cursor) })
+        cursor += Math.max(1.5, shot.seconds)
+      }
+      useEditor.getState().endHistoryGroup(before)
+      setSbShots(placed)
+      if (placed.length) {
+        toast.success(`${placed.length} storyboard slates placed — one undo clears all`)
+      } else {
+        toast.error('The shot list could not be placed on the timeline')
+      }
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') toast('Storyboard cancelled')
+      else toast.error(e instanceof Error ? e.message : 'Storyboard failed')
+    } finally {
+      sbAbortRef.current = null
+      setSbBusy(false)
+    }
+  }, [sbBusy, sbTopic, sbSeconds])
+
+  return (
+    <FeatureCard icon={Clapperboard} title="Script → Storyboard" subtitle="A shot list that scaffolds the timeline">
+      <div className="space-y-1.5">
+        <FieldLabel>Video topic</FieldLabel>
+        <Textarea
+          value={sbTopic}
+          onChange={(e) => setSbTopic(e.target.value.slice(0, 300))}
+          placeholder="e.g. a 30s promo for my handmade coffee brand…"
+          rows={2}
+          maxLength={300}
+          data-nc-sb-topic
+          className="resize-none border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+          aria-label="Storyboard topic"
+        />
+      </div>
+      <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Target length">
+        {[15, 30, 60].map((s) => (
+          <button
+            key={s}
+            type="button"
+            role="radio"
+            aria-checked={sbSeconds === s}
+            data-nc-sb-len={s}
+            onClick={() => setSbSeconds(s)}
+            className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+              sbSeconds === s
+                ? 'border-fuchsia-400/70 bg-fuchsia-400/15 text-fuchsia-200'
+                : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            ~{s}s
+          </button>
+        ))}
+      </div>
+      <Button
+        type="button"
+        disabled={sbBusy}
+        onClick={() => void handleStoryboard()}
+        data-nc-sb-generate
+        className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
+      >
+        {sbBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Clapperboard className="size-3.5" />}
+        {sbBusy ? 'Directing shots…' : 'Generate storyboard'}
+      </Button>
+      {sbBusy && (
+        <AiBusyBar
+          phase="Directing shots…"
+          elapsedMs={sbElapsed}
+          hint="Topic → shot list → slate clips on the timeline"
+          onCancel={cancelStoryboard}
+        />
+      )}
+      {sbShots && sbShots.length > 0 && (
+        <div className="space-y-1 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2" data-nc-sb-receipt>
+          {sbShots.map((s, i) => (
+            <div key={i} className="flex items-baseline gap-1.5 text-[10px] leading-snug">
+              <span className="rounded bg-(--nc-panel-strong) px-1 font-mono text-[9px] text-fuchsia-300">
+                {s.start}s · {s.seconds}s
+              </span>
+              <span className="font-semibold text-foreground">{s.title}</span>
+              <span className="truncate text-muted-foreground">{s.description}</span>
+            </div>
+          ))}
+          <p className="pt-0.5 text-[9px] text-muted-foreground/60">
+            Slates are placeholder text clips — replace each with your real footage, one undo clears all.
+          </p>
+        </div>
+      )}
+    </FeatureCard>
+  )
+}
+
 /* ================= AI thumbnails (Day 36) ================= */
 
 const THUMB_STYLES = TITLE_CARD_STYLES
@@ -2091,6 +2255,7 @@ export function AIPanel() {
       {tab === 'assistant' && (
         <>
           <CopilotCard />
+          <StoryboardCard />
           <ScriptWriterCard />
         </>
       )}
