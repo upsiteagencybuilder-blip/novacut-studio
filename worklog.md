@@ -1638,3 +1638,20 @@ Stage Summary:
 - Day 38 shipped: silence scan v2 — presets, true keep-padding semantics (a real measured DSP-behavior fix), one-tap jump-cut with a persistent receipt and one-undo multi-cut passes.
 - Files: ai.ts, AIPanel.tsx, sections/ai.ts.
 - Next: Day 39 — AI asset search (stickers/bg) with drag-to-timeline.
+---
+Task ID: Day-39
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 39 — AI asset search (stickers/bg) with drag-to-timeline.
+
+Work Log:
+- NEW asset-registry.ts — 12 procedural gradient background presets (sunset/ocean/forest/neon/gold/cotton/ink/paper/aurora/rose/arctic/ember) with tag vocabularies + renderBackgroundPreset (on-device canvas render: parsed linear-gradient at any angle, cover-fill, soft radial vignette) → full-resolution PNG blob. Sticker shapes come from the existing ALL_STICKER_DEFS registry.
+- NEW /api/ai/assets — the LLM matches a natural-language query against the REAL registry (both catalogs ride the prompt); every returned id is validated SERVER-side against ALL_STICKER_DEFS + BACKGROUND_PRESETS (hallucinated assets can never reach the client); 3–9 results, best first, kinds mixed, short reasons, language-following note.
+- AI Asset Search card (Assistant tab): query input + 4 idea chips + AI search; results render as 3-col cards (gradient swatches for backgrounds, glyph tiles for stickers) with reasons and "+ Sticker / + Background" actions. Placement: stickers add at the playhead via addStickerClip; backgrounds render to PNG → media library → addClipFromMediaId at the playhead (CapCut-style drop) — drag-to-reposition happens on the timeline as with any clip (honest note under the grid).
+- Catalog: +1 live ai-asset-search.
+- E2E receipts (desktop 1280×800): "cozy coffee vlog" → 5 registry-validated mixed results (sticker:heart, background:bg-paper, sticker:circle, background:bg-cotton, sticker:star4) + note; placing bg-paper → bg-bg-paper.png rendered 1280×720 into the library and placed as an image clip at the playhead 0.8 (media +1, clips +1); placing sticker:heart → heart sticker clip at the playhead 0.8.
+- E2E mobile 390×844: Assistant sheet renders the card (input + 4 chips); screenshots both viewports; zero real errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 39 shipped: natural-language asset search across stickers and procedural backgrounds with server-validated results and one-tap playhead placement.
+- Files: asset-registry.ts (new), api/ai/assets/route.ts (new), AIPanel.tsx, sections/ai.ts.
+- Next: Day 40 — AI ops dashboard (latency/cost visible) + Category D audit.

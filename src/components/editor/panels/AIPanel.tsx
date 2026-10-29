@@ -24,6 +24,7 @@ import {
   Paintbrush,
   RotateCcw,
   Scissors,
+  Search,
   Send,
   ShieldCheck,
   Sparkles,
@@ -39,6 +40,7 @@ import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 import { analyzeClipSilence, base64ToBlob, exportAudioSegmentWav, fileToBase64, imageBase64ToFile, requireOnline, sniffImageMime } from '@/lib/editor/ai'
 import type { SilenceAnalysis } from '@/lib/editor/ai'
+import { BACKGROUND_PRESETS, renderBackgroundPreset } from '@/lib/editor/asset-registry'
 import { renderEffectToWav } from '@/lib/effects/audio-render'
 import { MUSIC_EFFECTS } from '@/lib/effects/music'
 import { applyCopilotActions, buildCopilotContext } from '@/lib/editor/copilot'
@@ -986,6 +988,193 @@ function BgmDirectorCard() {
         </div>
       )}
       <NoteRow icon={AudioLines}>Arrangements come from the 64 procedural loops — rendered on your device, royalty-free.</NoteRow>
+    </FeatureCard>
+  )
+}
+
+/* ================= AI asset search (Day 39) ================= */
+
+const ASSET_IDEAS = ['cozy coffee vlog', 'gaming intro fire', 'travel ocean vibes', 'beauty pastel soft']
+
+interface AssetResult {
+  kind: 'sticker' | 'background'
+  id: string
+  name: string
+  reason: string
+}
+
+function AssetSearchCard() {
+  const [assetQuery, setAssetQuery] = useState('')
+  const [assetBusy, setAssetBusy] = useState(false)
+  const [assetResults, setAssetResults] = useState<AssetResult[]>([])
+  const [assetNote, setAssetNote] = useState('')
+  const [addingId, setAddingId] = useState<string | null>(null)
+  const assetAbortRef = useRef<AbortController | null>(null)
+  const assetElapsed = useAiElapsed(assetBusy)
+  const addMediaAsset = useEditor((s) => s.addMediaAsset)
+  const project = useEditor((s) => s.project)
+
+  const cancelAssetSearch = useCallback(() => {
+    assetAbortRef.current?.abort()
+  }, [])
+
+  const handleAssetSearch = useCallback(async () => {
+    if (assetBusy) return
+    const q = assetQuery.trim()
+    if (!q) {
+      toast.error('Describe what you are looking for')
+      return
+    }
+    requireOnline()
+    setAssetBusy(true)
+    setAssetResults([])
+    setAssetNote('')
+    const ac = new AbortController()
+    assetAbortRef.current = ac
+    try {
+      const res = await fetch('/api/ai/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q.slice(0, 200) }),
+        signal: ac.signal,
+      })
+      const data = (await res.json().catch(() => null)) as
+        | { results?: AssetResult[]; note?: string; error?: string }
+        | null
+      if (!res.ok) throw new Error(data?.error ?? `Asset search failed (${res.status})`)
+      setAssetResults(Array.isArray(data?.results) ? data!.results! : [])
+      setAssetNote((data?.note ?? '').trim())
+      if (!data?.results?.length) toast('No matching assets — try different words')
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') toast('Asset search cancelled')
+      else toast.error(e instanceof Error ? e.message : 'Asset search failed')
+    } finally {
+      assetAbortRef.current = null
+      setAssetBusy(false)
+    }
+  }, [assetBusy, assetQuery])
+
+  /** place an asset on the timeline at the playhead (CapCut-style drop) */
+  const placeAsset = useCallback(
+    async (r: AssetResult) => {
+      const key = `${r.kind}:${r.id}`
+      if (addingId) return
+      setAddingId(key)
+      try {
+        if (r.kind === 'sticker') {
+          const st = useEditor.getState()
+          st.addStickerClip({ family: 'shape', shape: r.id })
+          toast.success(`${r.name} added at the playhead`)
+        } else {
+          const preset = BACKGROUND_PRESETS.find((b) => b.id === r.id)
+          if (!preset) return
+          const blob = await renderBackgroundPreset(preset, project.canvasWidth, project.canvasHeight)
+          const file = new File([blob], `bg-${preset.id}.png`, { type: 'image/png' })
+          const assets = await importFiles([file])
+          if (!assets.length) {
+            toast.error('Background render import failed')
+            return
+          }
+          const st = useEditor.getState()
+          assets.forEach(st.addMediaAsset)
+          st.addClipFromMediaId(assets[0]!.id, round2(st.currentTime))
+          toast.success(`${preset.name} background placed at the playhead`)
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Asset placement failed')
+      } finally {
+        setAddingId(null)
+      }
+    },
+    [addingId, project.canvasWidth, project.canvasHeight, addMediaAsset],
+  )
+
+  return (
+    <FeatureCard icon={Search} title="AI Asset Search" subtitle="Describe it — stickers & backgrounds, placed in one tap">
+      <div className="flex gap-1.5">
+        <Input
+          value={assetQuery}
+          onChange={(e) => setAssetQuery(e.target.value.slice(0, 200))}
+          placeholder="e.g. cozy coffee vlog vibes…"
+          maxLength={200}
+          disabled={assetBusy}
+          data-nc-asset-input
+          className="h-9 flex-1 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+          aria-label="Describe the asset you want"
+        />
+        <Button
+          type="button"
+          size="icon"
+          disabled={assetBusy || !assetQuery.trim()}
+          onClick={() => void handleAssetSearch()}
+          data-nc-asset-search
+          aria-label="Search assets with AI"
+          className="nc-gradient nc-glow-hover size-9 shrink-0 rounded-lg text-white"
+        >
+          {assetBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {ASSET_IDEAS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            disabled={assetBusy}
+            data-nc-asset-chip={c.slice(0, 14)}
+            onClick={() => setAssetQuery(c)}
+            className="rounded-full border border-(--nc-line) bg-(--nc-panel) px-2 py-0.5 text-[9.5px] text-muted-foreground transition hover:border-fuchsia-400/50 hover:text-foreground disabled:opacity-50"
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+      {assetBusy && (
+        <AiBusyBar
+          phase="Searching the registry…"
+          elapsedMs={assetElapsed}
+          hint="AI matches your words against stickers + backgrounds"
+          onCancel={cancelAssetSearch}
+        />
+      )}
+      {assetResults.length > 0 && (
+        <div className="space-y-1.5" data-nc-asset-results>
+          {assetNote && <p className="text-[10px] leading-relaxed text-foreground/80">{assetNote}</p>}
+          <div className="grid grid-cols-3 gap-1.5">
+            {assetResults.map((r) => {
+              const key = `${r.kind}:${r.id}`
+              const bg = r.kind === 'background' ? (BACKGROUND_PRESETS.find((b) => b.id === r.id)?.css ?? '#333') : undefined
+              const emoji = r.kind === 'sticker' ? '✦' : undefined
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={addingId !== null}
+                  data-nc-asset-place={key}
+                  onClick={() => void placeAsset(r)}
+                  className="group space-y-1 rounded-lg border border-(--nc-line) bg-(--nc-panel) p-1.5 text-center transition hover:border-fuchsia-400/50 disabled:opacity-50"
+                >
+                  <span
+                    className="flex h-12 w-full items-center justify-center rounded text-xl"
+                    style={bg ? { background: bg } : { background: 'rgba(255,255,255,0.06)' }}
+                    aria-hidden
+                  >
+                    {emoji}
+                  </span>
+                  <span className="block truncate text-[9px] font-semibold text-foreground">{r.name}</span>
+                  <span className="block truncate text-[8.5px] text-muted-foreground">{r.reason}</span>
+                  <span className="block text-[8.5px] font-medium text-fuchsia-300">
+                    {addingId === key ? 'Placing…' : r.kind === 'sticker' ? '+ Sticker' : '+ Background'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-[9px] text-muted-foreground/60">
+            One tap lands the asset at the playhead — drag it on the timeline to reposition.
+          </p>
+        </div>
+      )}
+      <NoteRow icon={ShieldCheck}>Registry-validated search — stickers and gradients only, no invented assets.</NoteRow>
     </FeatureCard>
   )
 }
@@ -2326,6 +2515,7 @@ export function AIPanel() {
       {tab === 'assistant' && (
         <>
           <CopilotCard />
+          <AssetSearchCard />
           <StoryboardCard />
           <ScriptWriterCard />
         </>
