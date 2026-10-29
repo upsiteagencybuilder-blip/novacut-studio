@@ -15,7 +15,7 @@ export const AI_TOOLS: ProTool[] = [
   { id: 'ai-smart-cutout', name: 'AI Smart Cutout', section: 'ai', group: 'AI editing', status: 'planned', desc: 'Lift subjects from footage with AI segmentation' },
   { id: 'ai-motion-tracking', name: 'AI Motion Tracking', section: 'ai', group: 'AI editing', status: 'planned', desc: 'Track subjects automatically to pin elements on them' },
   { id: 'ai-portrait', name: 'AI Portrait', section: 'ai', group: 'AI editing', status: 'planned', desc: 'Skin-aware portrait retouching and relighting' },
-  { id: 'ai-auto-reframe', name: 'AI Auto Reframe', section: 'ai', group: 'AI editing', status: 'planned', desc: 'Re-crop widescreen footage for vertical using subject tracking' },
+  { id: 'ai-auto-reframe', name: 'AI Auto Reframe', section: 'ai', group: 'AI editing', status: 'live', desc: 'Samples 5 frames across the clip and centers a 9:16 / 1:1 / 4:5 crop on the edge-energy subject — on-device saliency, fully editable afterwards', action: 'open-properties-media' },
 
   // -------- AI cleanup --------
   { id: 'ai-bg-removal-auto', name: 'One-Tap Background Removal', section: 'ai', group: 'AI cleanup', status: 'live', desc: 'Auto-detects the dominant border color of the frame and applies a tuned chroma key (tolerance from backdrop spread, spill cleanup) in one tap — honest chroma-based detection, all controls stay editable', action: 'open-properties-chroma' },

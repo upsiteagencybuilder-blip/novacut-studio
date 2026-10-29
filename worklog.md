@@ -1570,3 +1570,19 @@ Stage Summary:
 - Day 34 shipped: mood → scored multi-section BGM from the 64-loop library with server-validated ids, in-project start clamping, per-section staging (fades/levels/ducking) and whole-arrangement one-undo placement.
 - Files: api/ai/bgm/route.ts (new), AIPanel.tsx, sections/ai.ts.
 - Next: Day 35 — Auto-reframe: subject-aware aspect-ratio crop.
+---
+Task ID: Day-35
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 35 — Auto-reframe: subject-aware aspect-ratio crop.
+
+Work Log:
+- NEW reframe.ts — honest on-device saliency: luma-gradient ENERGY GRID (24×16 cells, per-cell mean gradient magnitude) with an energy^1.5-weighted centroid; averageCentroids gives temporal stability (frames under 2% energy are dropped from the average, flat frames fall back to center); subjectCropRect positions the LARGEST window of the target aspect around the centroid, clamped inside the frame (same window-size math as the centered ratio presets). Labeled truthfully everywhere: edge-energy detection, NOT neural segmentation. QA harness on window.__ncReframeHarness exposing the real detector functions.
+- PropertiesPanel Crop section gains AutoReframeBlock: three one-tap chips (Subject → 9:16 / 1:1 / 4:5). Each run samples 5 frames spread across the clip body through the REAL preview engine (seekTo + 140ms settle + sampleFrame(96) — async video seeks settle honestly), averages the centroids, restores the playhead and applies the crop in ONE undoable updateClip. Receipt line reports the centroid %, contrast % and the aspect.
+- Catalog: ai-auto-reframe planned → live with honest desc (open-properties-media deep link).
+- E2E harness receipts: synthetic frame with a bright subject block on the right-bottom → centroid (0.702, 0.740) lands INSIDE the subject bounds (0.625–0.79 × 0.625–0.875); subjectCropRect for 16:9→9:16 gives width 0.316 = theory-exact (9/16)/(16/9) = 81/256, window clamped x 0.543; averageCentroids 3-frame mix → exact mean.
+- E2E UI receipts (desktop 1280×800): sunrise.jpg + Subject → 9:16 → crop {x 0.332, y 0, width 0.321, height 1} (0.321 = (9/16)/1.75 for the real asset ratio — exact), receipt "subject energy centered at 49%·58% (52% contrast)", pastLen 1, playhead restored; ONE undo removes the crop. Mobile 390×844: Edit sheet renders the block; Subject → 1:1 → crop width 0.571 = 1/1.75 exact, same deterministic centroid; screenshots both viewports; zero real errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 35 shipped: one-tap subject-aware reframing to 9:16 / 1:1 / 4:5 — real multi-frame engine sampling, edge-energy saliency with temporal averaging, exact aspect math, one-undo editable crops.
+- Files: reframe.ts (new), PropertiesPanel.tsx, sections/ai.ts.
+- Next: Day 36 — AI thumbnails: title-card generator + best-frame picker.

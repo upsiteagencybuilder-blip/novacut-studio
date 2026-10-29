@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import { averageCentroids, gridEnergyCentroid, subjectCropRect } from '@/lib/editor/reframe'
 import {
   Activity,
   AlignCenter,
@@ -36,6 +37,7 @@ import {
   RotateCcw,
   RotateCw,
   Settings2,
+  ScanFace,
   SlidersHorizontal,
   Snowflake,
   Sparkles,
@@ -3168,7 +3170,115 @@ function CropSection({ clip }: { clip: Clip }) {
           16:9
         </Button>
       </div>
+      <AutoReframeBlock clip={clip} srcRatio={(asset?.width || project.canvasWidth) / (asset?.height || project.canvasHeight)} />
     </Section>
+  )
+}
+
+/**
+ * Day 35 — Auto Reframe: subject-aware crop. Samples 5 frames across the clip
+ * through the REAL preview engine (seek + sampleFrame), finds the edge-energy
+ * centroid per frame, averages them for temporal stability and positions the
+ * largest window of the target aspect around it — one undoable updateClip.
+ */
+function AutoReframeBlock({ clip, srcRatio }: { clip: Clip; srcRatio: number }) {
+  const updateClip = useEditor((s) => s.updateClip)
+  const [reframing, setReframing] = useState(false)
+  const [receipt, setReceipt] = useState<string | null>(null)
+
+  const runReframe = useCallback(
+    async (aspect: number, label: string) => {
+      if (reframing) return
+      const engine = (
+        window as unknown as { __ncEngineInstance?: { seekTo: (t: number) => void; sampleFrame: (n: number) => Uint8ClampedArray | null } }
+      ).__ncEngineInstance
+      if (!engine) {
+        setReceipt('Preview engine not ready — try again in a moment')
+        return
+      }
+      setReframing(true)
+      setReceipt(null)
+      try {
+        const st = useEditor.getState()
+        const savedTime = st.currentTime
+        // sample 5 frames spread across the clip body (temporal stability)
+        const samples: ReturnType<typeof gridEnergyCentroid>[] = []
+        for (let i = 0; i < 5; i++) {
+          const t = round2(clip.start + (clip.duration * (i + 0.5)) / 5)
+          engine.seekTo(Math.min(t, clip.start + clip.duration - 0.05))
+          await new Promise((r) => setTimeout(r, 140)) // settle async video seeks
+          const px = engine.sampleFrame(96)
+          if (px && px.length >= 64) {
+            const side = Math.round(Math.sqrt(px.length / 4))
+            samples.push(gridEnergyCentroid(px, side, side))
+          }
+        }
+        engine.seekTo(savedTime)
+        if (samples.length < 2) {
+          setReceipt('Could not read frames — select a video or image clip')
+          return
+        }
+        const centroid = averageCentroids(samples)
+        const crop = subjectCropRect(centroid, srcRatio, aspect)
+        updateClip(clip.id, { crop }, true)
+        setReceipt(
+          `${label} reframe — subject energy centered at ${(centroid.cx * 100).toFixed(0)}%·${(centroid.cy * 100).toFixed(0)}% (edge-energy detection, ${(centroid.energy * 100).toFixed(0)}% contrast)`
+        )
+      } finally {
+        setReframing(false)
+      }
+    },
+    [reframing, clip.id, clip.start, clip.duration, srcRatio, updateClip]
+  )
+
+  return (
+    <div className="space-y-1.5 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2" data-nc-reframe>
+      <div className="flex items-center gap-1.5">
+        <ScanFace className="size-3 text-fuchsia-300" aria-hidden />
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Auto Reframe</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={reframing}
+          data-nc-reframe-go="9:16"
+          onClick={() => void runReframe(9 / 16, '9:16')}
+          className="h-6 px-2 text-[10px]"
+        >
+          {reframing ? 'Sampling…' : 'Subject → 9:16'}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={reframing}
+          data-nc-reframe-go="1:1"
+          onClick={() => void runReframe(1, '1:1')}
+          className="h-6 px-2 text-[10px]"
+        >
+          Subject → 1:1
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={reframing}
+          data-nc-reframe-go="4:5"
+          onClick={() => void runReframe(4 / 5, '4:5')}
+          className="h-6 px-2 text-[10px]"
+        >
+          Subject → 4:5
+        </Button>
+      </div>
+      {receipt && (
+        <p className="text-[9.5px] leading-snug text-muted-foreground" data-nc-reframe-receipt>
+          {receipt}
+        </p>
+      )}
+      <p className="text-[9.5px] leading-snug text-muted-foreground/60">
+        Samples 5 frames across the clip and centers the crop on the edge-energy subject — fully editable sliders
+        above.
+      </p>
+    </div>
   )
 }
 
