@@ -97,6 +97,24 @@ model CloudVersion {
 }
 
 // ---------------------------------------------------------------------------
+// Device linking (Day 48) — optional sign-in links a deviceId to an account
+// so a future iteration can scope cloud rows across devices. Nothing else
+// changes: every cloud route keeps working with deviceId alone.
+// ---------------------------------------------------------------------------
+
+model DeviceLink {
+  id          String   @id @default(cuid())
+  /// NextAuth subject (account id)
+  userId      String
+  deviceId    String   @unique
+  deviceName  String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
 // Share links — read-only project snapshots reachable by token
 // ---------------------------------------------------------------------------
 

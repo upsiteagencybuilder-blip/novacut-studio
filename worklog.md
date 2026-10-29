@@ -1825,3 +1825,23 @@ Stage Summary:
 - Day 47 shipped: the survey-era Feedback model finally has a producer — one header click away, rate-limited and receipt-backed.
 - Files: api/feedback/route.ts (new), FeedbackDialog.tsx (new), types.ts, EditorShell.tsx, TopBar.tsx, sections/panels.ts.
 - Next: Day 48 — auth scaffolding (NextAuth optional sign-in, device linking).
+
+---
+Task ID: Day-48
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 48 — Auth scaffolding (NextAuth): optional sign-in, device linking.
+
+Work Log:
+- NEW lib/server/auth.ts — NextAuth options (JWT strategy, no DB adapter): CredentialsProvider "Display name (scaffolding)" → deterministic sub `local-<b64(name)>`; GitHub/Google providers activate automatically ONLY when their env keys exist (production flips them on without code changes). Honest scaffold framing everywhere in the UI.
+- NEW /api/auth/[...nextauth] route (v4 App-Router handler export); .env gains NEXTAUTH_SECRET + NEXTAUTH_URL (local values).
+- Prisma: NEW DeviceLink model (userId + deviceId @unique + deviceName) — pushed; server restarted for the fresh client (the documented globalThis-anchored cost).
+- NEW /api/cloud/link: POST upserts THIS device to the signed-in account (deviceId via x-novacut-device header, deviceName heuristic "This browser"/"This phone"), GET lists the account's devices, DELETE unlinks. Strictly session-gated — 401 signed out (curl-proven).
+- NEW AccountDialog + header "Account (optional sign-in)" button; SessionProvider wraps the editor shell (everything else untouched — signed-out is the default experience). Dialog: signed-out → display-name form + scaffold note; signed-in → identity card (name, id, sign out) + Linked devices list (this-device emerald dot, unlink buttons).
+- Catalog: no separate entry — the account dialog is reached from the header; scoped as panel scaffolding in the Day 50 audit.
+- API receipts: /api/auth/providers → {"credentials": {"name": "Display name (scaffolding)"}} only (no GitHub/Google keys locally); GET /api/cloud/link signed out → 401.
+- E2E receipts (desktop 1280×800): sign in "Nova Tester" → redirect + session; reopen dialog → "Nova Tester · id: local-Tm92YSBUZXN0ZXI"; "Link this device" → list shows "This browser (this device)" + "dev-1c87… · linked less than a minute ago"; sqlite cross-check: DeviceLink row (dev-1c87…, This browser, local-Tm92YSBUZXN0ZXI); Unlink → "Device unlinked", list empty, DB count 0; re-link works; Sign out → display-name form returns. Mobile 390×844 renders the dialog; screenshots both viewports; console + dev.log clean; eslint + tsc clean (2 stale eslint-disable directives removed en route).
+
+Stage Summary:
+- Day 48 shipped: optional NextAuth scaffolding — sign in only enables device linking; local-first and deviceId-scoped cloud behavior unchanged when signed out.
+- Files: lib/server/auth.ts (new), api/auth/[...nextauth]/route.ts (new), api/cloud/link/route.ts (new), prisma/schema.prisma (+DeviceLink), AccountDialog.tsx (new), EditorShell.tsx, TopBar.tsx, types.ts, .env.
+- Next: Day 49 — cloud project manager (rename / duplicate / folder chips).

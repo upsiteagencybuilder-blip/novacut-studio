@@ -14,6 +14,7 @@ import {
   Redo2,
   SlidersVertical,
   Undo2,
+  UserRound,
 } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
 import { Badge } from '@/components/ui/badge'
@@ -188,6 +189,16 @@ export function TopBar() {
           onClick={() => openDialog('feedback')}
         >
           <MessageSquareHeart className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          title="Account (optional sign-in)"
+          aria-label="Account (optional sign-in)"
+          onClick={() => openDialog('account')}
+        >
+          <UserRound className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"

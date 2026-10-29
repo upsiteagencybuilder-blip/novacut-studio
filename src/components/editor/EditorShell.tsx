@@ -26,8 +26,10 @@ import { PropertiesPanel } from '@/components/editor/preview/PropertiesPanel'
 import { Timeline } from '@/components/editor/timeline/Timeline'
 import { ExportDialog } from '@/components/editor/dialogs/ExportDialog'
 import { ProjectsDialog } from '@/components/editor/dialogs/ProjectsDialog'
+import { SessionProvider } from 'next-auth/react'
 import { ShortcutsDialog } from '@/components/editor/dialogs/ShortcutsDialog'
 import { FeedbackDialog } from '@/components/editor/dialogs/FeedbackDialog'
+import { AccountDialog } from '@/components/editor/dialogs/AccountDialog'
 import { MixerDialog } from '@/components/editor/dialogs/MixerDialog'
 import { VersionsDialog } from '@/components/editor/dialogs/VersionsDialog'
 import { ThemeStudioDialog } from '@/components/editor/dialogs/ThemeStudioDialog'
@@ -542,13 +544,14 @@ export function EditorShell() {
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-background text-foreground">
-      {/* animated backdrop */}
-      <div className="nc-aurora" aria-hidden />
+    <SessionProvider>
+      <div className="relative flex h-screen flex-col overflow-hidden bg-background text-foreground">
+        {/* animated backdrop */}
+        <div className="nc-aurora" aria-hidden />
 
-      <ThemeProvider />
+        <ThemeProvider />
 
-      <TopBar />
+        <TopBar />
 
       {isDesktop ? (
         <>
@@ -619,11 +622,13 @@ export function EditorShell() {
       <ProjectsDialog />
       <ShortcutsDialog />
       <FeedbackDialog />
+      <AccountDialog />
       <MixerDialog />
       <VersionsDialog />
       <ThemeStudioDialog />
       <OnboardingOverlay />
-    </div>
+      </div>
+    </SessionProvider>
   )
 }
 
