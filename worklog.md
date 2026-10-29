@@ -1619,3 +1619,22 @@ Stage Summary:
 - Day 37 shipped: topic → directed shot list scaffolded as sequenced timeline slates in one undo — the fastest path from an idea to an editable structure.
 - Files: api/ai/assistant/route.ts, AIPanel.tsx, sections/ai.ts.
 - Next: Day 38 — Silence scan v2 + one-tap jump-cut removal.
+---
+Task ID: Day-38
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 38 — Silence scan v2 + one-tap jump-cut removal.
+
+Work Log:
+- Silence Cut v2 card: three sensitivity presets (Gentle 0.09/0.9s, Standard 0.06/0.6s, Aggressive 0.04/0.35s — threshold + min-silence pairs), a "Keep padding" slider (0–300 ms per side) and a ONE-TAP jump-cut button (analyze → cut in one flow with a persistent receipt). The manual Analyze→Remove flow stays and shares the SAME removal engine.
+- Shared removal engine refactor: removeSilenceRanges(ranges, clipId) — both flows run the identical split+ripple path, now wrapped in beginHistoryGroup/endHistoryGroup so a WHOLE multi-cut pass is ONE undo.
+- REAL BUG measured and fixed (analyzeClipSilence padding semantics): the log trace showed jump-cut ranges EXPANDED by 2×padding (e.g. gap [3.08,3.92] → cut [2.92,4.08]) — paddingSec was EXPANDING the silence ranges, shaving 80 ms off every word edge (the code comment claimed the opposite). Fixed to SHRINK silences (start+padding, end−padding, re-filtered ≥0.16s) so cuts keep their padding AROUND words; the "Keep padding" label is now literally true.
+- Receipt hardening: the jump-cut receipt (cuts, seconds removed, before→after total across ALL surviving fragments of the media, padding) now renders OUTSIDE the clip-conditional — it previously vanished because rippleDelete clears the selection; the after-total now sums fragments instead of reading the first one.
+- Catalog: ai-silence-detection → "AI Silence Detection v2" with the honest fix note.
+- E2E receipts (desktop 1280×800, synthetic 6 s clip: 440 Hz bursts 0–1/2–3/4–5 s, true-zero gaps, injected through the real store): analysis "3s · 3 gaps"; fixed one-tap jump-cut → 3 cuts removed 2.6s, surviving fragments [0,1.08]+[1.08,2.24]+[2.24,3.4] = 3.4s — theory-exact (0.84+0.84+0.92 removed, 80 ms pads kept); receipt "Jump-cut: 3 cuts removed 2.6s (6s → 3.4s) — padding 80ms"; ONE undo restored the single 6 s clip (fragments 3→1, total 3.4→6.0).
+- Mobile 390×844: the sheet renders NoClipHint after the undo cleared the selection (correct gating; the card is the same component verified on desktop); screenshots both viewports; zero real errors; eslint + tsc clean.
+- Tooling note disclosed: a terminal-display artifact swallowed "[m" sequences in rg/sed output this session (ai.ts line 251 displayed as "mergederged" — hex-dump verified the committed source is the correct merged[merged.length - 1]; no corruption existed).
+
+Stage Summary:
+- Day 38 shipped: silence scan v2 — presets, true keep-padding semantics (a real measured DSP-behavior fix), one-tap jump-cut with a persistent receipt and one-undo multi-cut passes.
+- Files: ai.ts, AIPanel.tsx, sections/ai.ts.
+- Next: Day 39 — AI asset search (stickers/bg) with drag-to-timeline.

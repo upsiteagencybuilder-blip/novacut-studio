@@ -239,12 +239,17 @@ export async function analyzeClipSilence(
 
   const rawSilences = detectSilences(peaks, opts.threshold, opts.minSilenceSec)
 
-  // pad + merge so cuts never clip the very start/end of words
+  // Day 38 fix — the padding SHRINKS each silence range so cuts keep
+  // `paddingSec` of natural room around the words (the previous expanding
+  // semantics shaved `paddingSec` off every word edge — measured ±80 ms of
+  // clipped speech in the E2E trace). Re-filter: a shrunk gap may drop below
+  // the useful minimum.
   const padded: SilenceRange[] = rawSilences
     .map((s) => ({
-      start: Math.max(0, s.start - opts.paddingSec),
-      end: Math.min(durationSec, s.end + opts.paddingSec),
+      start: Math.min(s.start + opts.paddingSec, s.end),
+      end: Math.max(s.end - opts.paddingSec, s.start),
     }))
+    .filter((s) => s.end - s.start >= 0.16)
     .sort((a, b) => a.start - b.start)
   const merged: SilenceRange[] = []
   for (const s of padded) {

@@ -1923,16 +1923,35 @@ export function AIPanel() {
     }
   }, [retransLang])
 
-  /* ---------- silence cut ---------- */
+  /* ---------- silence cut (v2, Day 38) ---------- */
   const [threshold, setThreshold] = useState(0.06)
   const [minSilence, setMinSilence] = useState(0.6)
+  const [jumpPadding, setJumpPadding] = useState(0.08)
+  const [silencePreset, setSilencePreset] = useState<'gentle' | 'standard' | 'aggressive'>('standard')
   const [analyzing, setAnalyzing] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [analysis, setAnalysis] = useState<SilenceAnalysis | null>(null)
+  const [silenceReceipt, setSilenceReceipt] = useState<string | null>(null)
+
+  /** Day 38 — sensitivity presets: threshold + min-silence pairs for one-tap cuts */
+  const applySilencePreset = useCallback((p: 'gentle' | 'standard' | 'aggressive') => {
+    setSilencePreset(p)
+    if (p === 'gentle') {
+      setThreshold(0.09)
+      setMinSilence(0.9)
+    } else if (p === 'aggressive') {
+      setThreshold(0.04)
+      setMinSilence(0.35)
+    } else {
+      setThreshold(0.06)
+      setMinSilence(0.6)
+    }
+  }, [])
 
   // drop stale results when the selection changes
   useEffect(() => {
     setAnalysis(null)
+    setSilenceReceipt(null)
   }, [selectedClip?.id])
 
   const runAnalysis = useCallback(
@@ -1940,10 +1959,10 @@ export function AIPanel() {
       return analyzeClipSilence(asset, clip.trimStart, clip.trimStart, clip.speed, clip.duration, {
         threshold,
         minSilenceSec: minSilence,
-        paddingSec: 0.08,
+        paddingSec: jumpPadding,
       })
     },
-    [threshold, minSilence]
+    [threshold, minSilence, jumpPadding]
   )
 
   const handleAnalyze = useCallback(async () => {
@@ -1965,16 +1984,20 @@ export function AIPanel() {
     return deriveSilences(analysis.segments, selectedClip.duration)
   }, [analysis, selectedClip])
 
-  const handleRemoveSilences = useCallback(async () => {
-    if (!selectedClip || silenceRanges.length === 0 || removing) return
-    setRemoving(true)
-    try {
-      const clipId = selectedClip.id
+  /**
+   * Day 38 — shared removal engine: takes explicit ranges so both the manual
+   * two-step flow and the ONE-TAP jump-cut run the exact same split+ripple path.
+   * The WHOLE pass is one history group — a single undo restores every cut.
+   */
+  const removeSilenceRanges = useCallback(
+    async (rangesIn: { start: number; end: number }[], clipId: string): Promise<{ removed: number; cuts: number }> => {
       let removedTotal = 0
       let cuts = 0
-
+      const st0 = useEditor.getState()
+      const groupBefore = st0.beginHistoryGroup()
+      try {
       // descending: cutting later silences first keeps earlier positions valid
-      const ranges = [...silenceRanges].sort((a, b) => b.start - a.start)
+      const ranges = [...rangesIn].sort((a, b) => b.start - a.start)
       for (const range of ranges) {
         const st = useEditor.getState()
         const clip = st.project.clips.find((c) => c.id === clipId)
@@ -2027,12 +2050,24 @@ export function AIPanel() {
         st3.selectClip(middleId)
         st3.rippleDeleteSelected()
       }
+      } finally {
+        useEditor.getState().endHistoryGroup(groupBefore)
+      }
+      return { removed: round2(removedTotal), cuts }
+    },
+    [],
+  )
 
+  const handleRemoveSilences = useCallback(async () => {
+    if (!selectedClip || silenceRanges.length === 0 || removing) return
+    setRemoving(true)
+    try {
+      const { removed, cuts } = await removeSilenceRanges(silenceRanges, selectedClip.id)
       if (cuts > 0) {
-        toast.success(`Removed ${round2(removedTotal)}s of silence (${cuts} cut${cuts === 1 ? '' : 's'})`)
+        toast.success(`Removed ${removed}s of silence (${cuts} cut${cuts === 1 ? '' : 's'})`)
         // refresh analysis against the shortened clip
         const st = useEditor.getState()
-        const fresh = st.project.clips.find((c) => c.id === clipId)
+        const fresh = st.project.clips.find((c) => c.id === selectedClip.id)
         const freshMedia = fresh?.mediaId ? (st.media.find((m) => m.id === fresh.mediaId) ?? null) : null
         if (fresh && freshMedia) {
           setAnalysis(await runAnalysis(fresh, freshMedia))
@@ -2047,7 +2082,43 @@ export function AIPanel() {
     } finally {
       setRemoving(false)
     }
-  }, [selectedClip, silenceRanges, removing, runAnalysis])
+  }, [selectedClip, silenceRanges, removing, runAnalysis, removeSilenceRanges])
+
+  /** Day 38 — ONE-TAP jump-cut: analyze with the current preset, then cut immediately */
+  const handleOneTapJumpCut = useCallback(async () => {
+    if (!selectedClip || !clipMedia || removing || analyzing) return
+    setRemoving(true)
+    setSilenceReceipt(null)
+    try {
+      const durBefore = selectedClip.duration
+      const result = await runAnalysis(selectedClip, clipMedia)
+      const ranges = deriveSilences(result.segments, durBefore)
+      if (!ranges.length) {
+        setSilenceReceipt(`No usable silence found (threshold ${threshold.toFixed(2)}, min ${minSilence.toFixed(1)}s) — nothing to cut`)
+        toast('No silence found — try the Aggressive preset')
+        return
+      }
+      const { removed, cuts } = await removeSilenceRanges(ranges, selectedClip.id)
+      if (cuts > 0) {
+        const st = useEditor.getState()
+        // total remaining length across every surviving fragment of this media
+        const remaining = st.project.clips
+          .filter((c) => c.mediaId === selectedClip.mediaId)
+          .reduce((acc, c) => acc + c.duration, 0)
+        setSilenceReceipt(
+          `Jump-cut: ${cuts} cut${cuts === 1 ? '' : 's'} removed ${removed}s (${round2(durBefore)}s → ${round2(remaining)}s) — padding ${Math.round(jumpPadding * 1000)}ms`
+        )
+        toast.success(`Jump-cut done — ${cuts} cut${cuts === 1 ? '' : 's'}, ${removed}s removed`)
+      } else {
+        setSilenceReceipt('Gaps were too short to cut safely — try the Aggressive preset or lower padding')
+        toast('Nothing was removed — try a different preset')
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Jump-cut failed')
+    } finally {
+      setRemoving(false)
+    }
+  }, [selectedClip, clipMedia, removing, analyzing, runAnalysis, removeSilenceRanges, threshold, minSilence, jumpPadding])
 
   /* ---------- ai image ---------- */
   const [imagePrompt, setImagePrompt] = useState('')
@@ -2421,11 +2492,37 @@ export function AIPanel() {
             )}
           </FeatureCard>
 
-          {/* ---------- 2 · silence cut ---------- */}
-          <FeatureCard icon={Scissors} title="Silence Cut" subtitle="Rough cut — remove silent gaps in one pass">
+          {/* ---------- 2 · silence cut v2 ---------- */}
+          <FeatureCard icon={Scissors} title="Silence Cut v2" subtitle="Presets, padding and a one-tap jump-cut">
             {hasAudioSource && selectedClip ? (
               <>
                 <ClipChip clip={selectedClip} />
+                {/* Day 38 — sensitivity presets */}
+                <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Silence sensitivity">
+                  {(
+                    [
+                      { id: 'gentle', label: 'Gentle' },
+                      { id: 'standard', label: 'Standard' },
+                      { id: 'aggressive', label: 'Aggressive' },
+                    ] as const
+                  ).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={silencePreset === p.id}
+                      data-nc-silence-preset={p.id}
+                      onClick={() => applySilencePreset(p.id)}
+                      className={`flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-semibold transition ${
+                        silencePreset === p.id
+                          ? 'border-fuchsia-400/70 bg-fuchsia-400/15 text-fuchsia-200'
+                          : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
                 <div className="space-y-2.5">
                   <div>
                     <div className="flex items-center justify-between">
@@ -2455,7 +2552,37 @@ export function AIPanel() {
                       className="mt-1.5"
                     />
                   </div>
+                  {/* Day 38 — padding control */}
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <FieldLabel>Keep padding</FieldLabel>
+                      <span className="text-[10px] tabular-nums text-muted-foreground">{Math.round(jumpPadding * 1000)} ms</span>
+                    </div>
+                    <Slider
+                      min={0}
+                      max={0.3}
+                      step={0.01}
+                      value={[jumpPadding]}
+                      onValueChange={(v) => setJumpPadding(v[0] ?? 0.08)}
+                      data-nc-silence-padding
+                      className="mt-1.5"
+                    />
+                    <p className="mt-1 text-[9px] text-muted-foreground/60">
+                      Silence kept on each side of a cut — higher = more natural rhythm, lower = tighter jump cuts.
+                    </p>
+                  </div>
                 </div>
+                {/* Day 38 — one-tap jump-cut */}
+                <Button
+                  type="button"
+                  disabled={analyzing || removing}
+                  onClick={() => void handleOneTapJumpCut()}
+                  data-nc-silence-jumpcut
+                  className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
+                >
+                  {removing ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
+                  {removing ? 'Jump-cutting…' : 'One-tap jump-cut'}
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -2464,7 +2591,7 @@ export function AIPanel() {
                   className="h-9 w-full rounded-lg border-(--nc-line-strong) bg-(--nc-panel) text-xs font-semibold hover:bg-(--nc-panel-strong) hover:text-foreground"
                 >
                   {analyzing ? <Loader2 className="size-3.5 animate-spin" /> : <AudioLines className="size-3.5" />}
-                  {analyzing ? 'Analyzing audio…' : 'Analyze'}
+                  {analyzing ? 'Analyzing audio…' : 'Analyze first (preview mode)'}
                 </Button>
                 {analysis && (
                   <div className="space-y-2.5 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-3">
@@ -2494,6 +2621,15 @@ export function AIPanel() {
                   ? 'The selected clip has no readable audio track — pick a video or audio clip.'
                   : 'Select a video or audio clip on the timeline to scan it for silence.'}
               </NoClipHint>
+            )}
+            {/* Day 38 — receipt lives OUTSIDE the clip conditional so it survives the selection clearing after cuts */}
+            {silenceReceipt && (
+              <p
+                className="rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2 text-[10px] leading-snug text-foreground/85"
+                data-nc-silence-receipt
+              >
+                {silenceReceipt}
+              </p>
             )}
           </FeatureCard>
 
