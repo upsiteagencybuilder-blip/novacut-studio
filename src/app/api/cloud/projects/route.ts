@@ -12,7 +12,98 @@ const upsertSchema = z.object({
   clipCount: z.number().int().min(0).max(2000),
   thumbnail: z.string().max(200_000).optional(),
   data: z.string().max(20_000_000),
+  folder: z.string().max(60).optional(),
 })
+
+const patchSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  folder: z.string().max(60).optional(),
+})
+
+/** POST /api/cloud/projects?action=duplicate — server-side copy with a rewritten payload id. */
+async function duplicateProject(request: NextRequest) {
+  const { prisma } = cloudDb
+  const deviceId = request.nextUrl.searchParams.get('deviceId')
+  const localId = request.nextUrl.searchParams.get('localId')
+  if (!deviceId || !localId) {
+    return NextResponse.json({ error: 'deviceId and localId are required' }, { status: 400 })
+  }
+
+  try {
+    const source = await prisma.cloudProject.findUnique({
+      where: { deviceId_localId: { deviceId, localId } },
+    })
+    if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+    // the copy gets its OWN project id so a restore never collides with the original
+    const newLocalId = `${localId}-c${crypto.randomUUID().replace(/-/g, '').slice(0, 6)}`
+    let payload: Record<string, unknown> = {}
+    try {
+      payload = JSON.parse(source.data) as Record<string, unknown>
+    } catch {
+      return NextResponse.json({ error: 'source payload is not valid JSON' }, { status: 500 })
+    }
+    payload.id = newLocalId
+    payload.name = `${source.name} copy`
+    if (typeof payload.createdAt === 'number') payload.createdAt = Date.now()
+    if (typeof payload.updatedAt === 'number') payload.updatedAt = Date.now()
+
+    const copy = await prisma.$transaction(async (tx) => {
+      const row = await tx.cloudProject.create({
+        data: {
+          deviceId,
+          localId: newLocalId,
+          name: `${source.name} copy`,
+          duration: source.duration,
+          clipCount: source.clipCount,
+          thumbnail: source.thumbnail,
+          data: JSON.stringify(payload),
+          folder: source.folder,
+        },
+      })
+      // manifest rows carry over (asset ids are shared) — binaries do not;
+      // "Upload media" fills them for the copy on demand
+      const manifest = await tx.cloudAsset.findMany({
+        where: { deviceId, projectId: localId },
+      })
+      if (manifest.length > 0) {
+        await tx.cloudAsset.createMany({
+          data: manifest.map((m) => ({
+            deviceId,
+            projectId: newLocalId,
+            assetId: m.assetId,
+            name: m.name,
+            kind: m.kind,
+            mimeType: m.mimeType,
+            size: m.size,
+            duration: m.duration,
+            width: m.width,
+            height: m.height,
+            hash: m.hash,
+            data: null,
+            uploadedAt: null,
+          })),
+        })
+      }
+      return row
+    })
+
+    return NextResponse.json({
+      ok: true,
+      duplicate: {
+        localId: copy.localId,
+        name: copy.name,
+        folder: copy.folder,
+        clipCount: copy.clipCount,
+      },
+    })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'duplicate failed' },
+      { status: 503 },
+    )
+  }
+}
 
 /**
  * GET /api/cloud/projects?deviceId=…            → project metadata list
@@ -45,6 +136,7 @@ export async function GET(request: NextRequest) {
         duration: true,
         clipCount: true,
         thumbnail: true,
+        folder: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -60,6 +152,9 @@ export async function GET(request: NextRequest) {
 
 /** POST /api/cloud/projects — upsert a project snapshot (full sync). */
 export async function POST(request: NextRequest) {
+  if (request.nextUrl.searchParams.get('action') === 'duplicate') {
+    return duplicateProject(request)
+  }
   const { prisma } = cloudDb
   let body: unknown
   try {
@@ -92,6 +187,57 @@ export async function POST(request: NextRequest) {
       { error: error instanceof Error ? error.message : 'sync failed' },
       { status: 503 },
     )
+  }
+}
+
+/** PATCH /api/cloud/projects?deviceId=…&localId=… — rename / move to folder (Day 49). */
+export async function PATCH(request: NextRequest) {
+  const { prisma } = cloudDb
+  const deviceId = request.nextUrl.searchParams.get('deviceId')
+  const localId = request.nextUrl.searchParams.get('localId')
+  if (!deviceId || !localId) {
+    return NextResponse.json({ error: 'deviceId and localId are required' }, { status: 400 })
+  }
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
+  }
+  const parsed = patchSchema.safeParse(body)
+  if (!parsed.success || (parsed.data.name === undefined && parsed.data.folder === undefined)) {
+    return NextResponse.json({ error: 'nothing to update (name / folder expected)' }, { status: 400 })
+  }
+
+  try {
+    const updated = await prisma.cloudProject.update({
+      where: { deviceId_localId: { deviceId, localId } },
+      data: parsed.data,
+      select: { localId: true, name: true, folder: true, updatedAt: true },
+    })
+    // keep the payload's project name in sync with the cloud row
+    if (parsed.data.name !== undefined) {
+      const row = await prisma.cloudProject.findUnique({
+        where: { deviceId_localId: { deviceId, localId } },
+        select: { data: true },
+      })
+      if (row) {
+        try {
+          const payload = JSON.parse(row.data) as Record<string, unknown>
+          payload.name = parsed.data.name
+          await prisma.cloudProject.update({
+            where: { deviceId_localId: { deviceId, localId } },
+            data: { data: JSON.stringify(payload) },
+          })
+        } catch {
+          /* payload rewrite is best-effort — the row name is already updated */
+        }
+      }
+    }
+    return NextResponse.json({ ok: true, project: updated })
+  } catch {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 }
 

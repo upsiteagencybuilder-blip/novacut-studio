@@ -23,9 +23,12 @@ import {
   FilePlus2,
   Film,
   FolderOpen,
+  FolderInput,
   History,
   Link2,
   Loader2,
+  MoreVertical,
+  Pencil,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -37,11 +40,14 @@ import { useEditor } from '@/lib/editor/store'
 import * as db from '@/lib/editor/db'
 import {
   cloudDeleteProject,
+  cloudDuplicateProject,
   cloudGetAssetStatus,
   cloudGetManifest,
   cloudHealth,
   cloudListProjects,
   cloudLoadProject,
+  cloudMoveProject,
+  cloudRenameProject,
   cloudShare,
   cloudSyncManifest,
   cloudSyncProject,
@@ -82,6 +88,17 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import type { Project } from '@/lib/editor/types'
 
@@ -361,6 +378,10 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
   const [relink, setRelink] = useState<{ parsed: Project & { name: string; id: string }; plan: RelinkPlan } | null>(null)
   const [relinkBusy, setRelinkBusy] = useState(false)
   const [relinkNote, setRelinkNote] = useState<string | null>(null)
+  // Day 49 — cloud project manager
+  const [folderFilter, setFolderFilter] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<{ localId: string; name: string } | null>(null)
+  const [busyRow, setBusyRow] = useState<string | null>(null)
 
   const currentProject = useEditor((s) => s.project)
 
@@ -547,6 +568,66 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
     }
   }
 
+  /* ---------- Day 49 — cloud project manager ---------- */
+
+  const handleRenameSave = async () => {
+    if (!renaming || busyRow) return
+    const name = renaming.name.trim()
+    if (name.length === 0) {
+      setRenaming(null)
+      return
+    }
+    setBusyRow(renaming.localId)
+    try {
+      await cloudRenameProject(renaming.localId, name)
+      toast.success(`Renamed to "${name}"`)
+      setRenaming(null)
+      await refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Rename failed')
+    } finally {
+      setBusyRow(null)
+    }
+  }
+
+  const handleDuplicate = async (m: CloudProjectMeta) => {
+    if (busyRow) return
+    setBusyRow(m.localId)
+    try {
+      const dup = await cloudDuplicateProject(m.localId)
+      toast.success(`Duplicated as "${dup.name}" — restores as a separate project`)
+      await refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Duplicate failed')
+    } finally {
+      setBusyRow(null)
+    }
+  }
+
+  const handleMove = async (m: CloudProjectMeta, folder: string) => {
+    if (busyRow) return
+    setBusyRow(m.localId)
+    try {
+      await cloudMoveProject(m.localId, folder)
+      toast.success(folder ? `Moved to "${folder}"` : 'Removed from folders')
+      await refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Move failed')
+    } finally {
+      setBusyRow(null)
+    }
+  }
+
+  const handleNewFolder = async (m: CloudProjectMeta) => {
+    const folder = window.prompt('New folder name (1–40 chars)')?.trim() ?? ''
+    if (!folder) return
+    if (folder.length > 40) {
+      toast.error('Folder name too long (max 40)')
+      return
+    }
+    await handleMove(m, folder)
+  }
+
   const handleDelete = async (localId: string) => {
     if (deletingId) return
     setDeletingId(localId)
@@ -716,9 +797,53 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
           No cloud backups yet — back up the current project to create one.
         </p>
       ) : (
-        <div className="max-h-72 space-y-2 overflow-y-auto pr-0.5">
-          {list.map((m) => {
+        <div className="space-y-2">
+          {/* Day 49 — folder chips */}
+          {(() => {
+            const folders = Array.from(new Set(list.map((m) => m.folder).filter((f) => f.length > 0)))
+            if (folders.length === 0) return null
+            return (
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Folder filter">
+                <button
+                  type="button"
+                  aria-pressed={folderFilter === null}
+                  onClick={() => setFolderFilter(null)}
+                  className={cn(
+                    'h-6 rounded-full border px-2.5 text-[10px] font-medium transition',
+                    folderFilter === null
+                      ? 'border-fuchsia-400/60 bg-fuchsia-500/10 text-fuchsia-200'
+                      : 'border-(--nc-line-strong) text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  All · {list.length}
+                </button>
+                {folders.map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    aria-pressed={folderFilter === f}
+                    onClick={() => setFolderFilter(folderFilter === f ? null : f)}
+                    className={cn(
+                      'h-6 rounded-full border px-2.5 text-[10px] font-medium transition',
+                      folderFilter === f
+                        ? 'border-fuchsia-400/60 bg-fuchsia-500/10 text-fuchsia-200'
+                        : 'border-(--nc-line-strong) text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {f} · {list.filter((m) => m.folder === f).length}
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
+
+          <div className="max-h-72 space-y-2 overflow-y-auto pr-0.5">
+          {list
+            .filter((m) => folderFilter === null || m.folder === folderFilter)
+            .map((m) => {
             const isCurrent = m.localId === currentProject.id
+            const isRenaming = renaming?.localId === m.localId
+            const folders = Array.from(new Set(list.map((x) => x.folder).filter((f) => f.length > 0)))
             return (
               <div
                 key={m.localId}
@@ -729,10 +854,46 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
               >
                 <Film className={cn('size-4 shrink-0', isCurrent ? 'text-fuchsia-300' : 'text-muted-foreground')} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{m.name}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {m.clipCount} clips · synced {formatDistanceToNow(new Date(m.updatedAt), { addSuffix: true })}
-                  </p>
+                  {isRenaming ? (
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        autoFocus
+                        value={renaming.name}
+                        onChange={(e) => setRenaming({ localId: m.localId, name: e.target.value.slice(0, 200) })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void handleRenameSave()
+                          if (e.key === 'Escape') setRenaming(null)
+                        }}
+                        aria-label="New project name"
+                        className="h-7 border-(--nc-line-strong) bg-(--nc-panel) text-xs"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 border border-(--nc-line-strong) px-2 text-[10px]"
+                        disabled={busyRow === m.localId}
+                        onClick={() => void handleRenameSave()}
+                      >
+                        {busyRow === m.localId ? <Loader2 className="size-3 animate-spin" /> : 'Save'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 shrink-0 px-2 text-[10px] text-muted-foreground"
+                        onClick={() => setRenaming(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="truncate text-sm font-medium">{m.name}</p>
+                      <p className="truncate text-[10px] text-muted-foreground">
+                        {m.folder && <span className="text-fuchsia-300/90">{m.folder} · </span>}
+                        {m.clipCount} clips · synced {formatDistanceToNow(new Date(m.updatedAt), { addSuffix: true })}
+                      </p>
+                    </>
+                  )}
                 </div>
                 {isCurrent && (
                   <Badge variant="outline" className="shrink-0 border-emerald-400/40 text-[9px] text-emerald-300">
@@ -753,6 +914,50 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
                   )}
                   Restore
                 </Button>
+                {/* Day 49 — manage menu */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 shrink-0 text-muted-foreground hover:text-foreground"
+                      aria-label={`Manage ${m.name}`}
+                      disabled={cloudUnavailable}
+                    >
+                      <MoreVertical className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="border-(--nc-line-strong) bg-(--nc-panel) text-xs">
+                    <DropdownMenuItem onClick={() => setRenaming({ localId: m.localId, name: m.name })}>
+                      <Pencil className="size-3.5" /> Rename…
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={busyRow === m.localId} onClick={() => void handleDuplicate(m)}>
+                      {busyRow === m.localId ? <Loader2 className="size-3.5 animate-spin" /> : <Copy className="size-3.5" />}
+                      Duplicate
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <FolderInput className="size-3.5" /> Move to folder
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="border-(--nc-line-strong) bg-(--nc-panel) text-xs">
+                        {folders.map((f) => (
+                          <DropdownMenuItem
+                            key={f}
+                            disabled={m.folder === f}
+                            onClick={() => void handleMove(m, f)}
+                          >
+                            {f}
+                            {m.folder === f && <span className="ml-auto text-[9px] text-muted-foreground">current</span>}
+                          </DropdownMenuItem>
+                        ))}
+                        {m.folder && <DropdownMenuItem onClick={() => void handleMove(m, '')}>No folder</DropdownMenuItem>}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => void handleNewFolder(m)}>New folder…</DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
@@ -786,6 +991,7 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
               </div>
             )
           })}
+          </div>
         </div>
       )}
 

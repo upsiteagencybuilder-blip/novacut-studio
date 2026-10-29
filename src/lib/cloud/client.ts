@@ -19,6 +19,7 @@ export interface CloudProjectMeta {
   duration: number
   clipCount: number
   thumbnail: string | null
+  folder: string
   createdAt: string
   updatedAt: string
 }
@@ -85,6 +86,30 @@ export async function cloudDeleteProject(localId: string): Promise<void> {
     `/api/cloud/projects?deviceId=${encodeURIComponent(getDeviceId())}&localId=${encodeURIComponent(localId)}`,
     { method: 'DELETE' },
   )
+}
+
+/* ---------- Day 49 — cloud project manager ---------- */
+
+export async function cloudRenameProject(localId: string, name: string): Promise<void> {
+  await jsonFetch(
+    `/api/cloud/projects?deviceId=${encodeURIComponent(getDeviceId())}&localId=${encodeURIComponent(localId)}`,
+    { method: 'PATCH', body: JSON.stringify({ name }) },
+  )
+}
+
+export async function cloudMoveProject(localId: string, folder: string): Promise<void> {
+  await jsonFetch(
+    `/api/cloud/projects?deviceId=${encodeURIComponent(getDeviceId())}&localId=${encodeURIComponent(localId)}`,
+    { method: 'PATCH', body: JSON.stringify({ folder }) },
+  )
+}
+
+export async function cloudDuplicateProject(localId: string): Promise<{ localId: string; name: string }> {
+  const data = await jsonFetch<{ duplicate: { localId: string; name: string } }>(
+    `/api/cloud/projects?action=duplicate&deviceId=${encodeURIComponent(getDeviceId())}&localId=${encodeURIComponent(localId)}`,
+    { method: 'POST' },
+  )
+  return data.duplicate
 }
 
 export async function cloudShare(input: {

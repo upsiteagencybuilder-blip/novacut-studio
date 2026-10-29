@@ -1845,3 +1845,25 @@ Stage Summary:
 - Day 48 shipped: optional NextAuth scaffolding — sign in only enables device linking; local-first and deviceId-scoped cloud behavior unchanged when signed out.
 - Files: lib/server/auth.ts (new), api/auth/[...nextauth]/route.ts (new), api/cloud/link/route.ts (new), prisma/schema.prisma (+DeviceLink), AccountDialog.tsx (new), EditorShell.tsx, TopBar.tsx, types.ts, .env.
 - Next: Day 49 — cloud project manager (rename / duplicate / folder chips).
+
+---
+Task ID: Day-49
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 49 — Cloud project manager (rename / duplicate / folder chips).
+
+Work Log:
+- Prisma: CloudProject + `folder` column (default "") — pushed; server restarted for the fresh client (documented cost).
+- /api/cloud/projects extended:
+  • PATCH ?deviceId&localId { name? / folder? } — zod-validated partial update; empty body → 400 "nothing to update". Rename ALSO rewrites the payload's project.name so a restore shows the new name (row and payload never disagree).
+  • POST ?action=duplicate — server-side copy inside $transaction: new localId `…-c<6>`, payload JSON rewritten (id = new localId, name +" copy", fresh timestamps) so a restore never collides with the original; thumbnail/duration/clipCount/folder copied; CloudAsset manifest rows copied with data=null + uploadedAt=null (binaries NOT duplicated — asset ids are shared, "Upload media" fills the copy on demand; documented in code).
+- client.ts: cloudRenameProject / cloudMoveProject / cloudDuplicateProject; CloudProjectMeta + folder.
+- CloudTab UI: per-row kebab menu (Rename… inline input with Enter/Esc, Duplicate, Move to folder ▸ existing folders + No folder + New folder… via prompt) + folder chip row (All · N + per-folder chips with counts, aria-pressed) filtering the list; folder shown inside each row's meta line.
+- API receipts (python): rename → row+payload synced (payload name check true); folder → "Client work"; duplicate → new localId, "… copy", folder inherited, payload id == new localId; list shows folders; empty PATCH → 400.
+- E2E receipts (desktop 1280×800): kebab → Rename… → inline input → Save → toast "Renamed to "My First Edit ✨ (managed)""; Duplicate → toast "Duplicated as …copy — restores as a separate project" + new row; Move to folder → New folder… → prompt answered "Client work" → toast "Moved to" + chip "Client work · 1" appears; chip filters the list (1 row with the copy; All → the full 13-row accumulated history of this test device — real data, not a bug); screenshots both viewports (mobile renders all 13 rows + manage menus); console + dev.log clean; eslint + tsc clean.
+- Catalog: panel-cloud-backup desc extended (rename/duplicate/folder chips) — no new entry needed; the manager lives inside the existing tool.
+- Cleanup: dev-smoke49 curl rows deleted.
+
+Stage Summary:
+- Day 49 shipped: the cloud backup list became a real manager — rename with payload sync, true duplicates that restore as separate projects, and folder chips.
+- Files: api/cloud/projects/route.ts (PATCH + duplicate), prisma/schema.prisma (+folder), lib/cloud/client.ts, ProjectsDialog.tsx, sections/panels.ts.
+- Next: Day 50 — cloud E2E suite (multi-tab, quota, conflict) + Category E audit.

@@ -33,6 +33,8 @@ model CloudProject {
   thumbnail String?
   /// full project JSON payload
   data      String
+  /// Day 49 — folder chip for the cloud project manager ("" = no folder)
+  folder    String   @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
