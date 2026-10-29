@@ -41,6 +41,36 @@ model CloudProject {
 }
 
 // ---------------------------------------------------------------------------
+// Media manifest — sha-256 hash map of the media files a backup references.
+// Day 41: the manifest travels WITH the project payload so any device can
+// tell exactly which binaries a restore needs (binaries sync lands Day 42).
+// ---------------------------------------------------------------------------
+
+model CloudAsset {
+  id        String   @id @default(cuid())
+  deviceId  String
+  /// CloudProject.localId this manifest belongs to
+  projectId String
+  /// media asset id inside the browser's IndexedDB
+  assetId   String
+  name      String
+  kind      String
+  mimeType  String
+  size      Int      @default(0)
+  duration  Float    @default(0)
+  width     Int      @default(0)
+  height    Int      @default(0)
+  /// sha-256 hex of the blob — content identity for re-link + dedupe
+  hash      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([deviceId, projectId, assetId])
+  @@index([deviceId, projectId])
+  @@index([hash])
+}
+
+// ---------------------------------------------------------------------------
 // Share links — read-only project snapshots reachable by token
 // ---------------------------------------------------------------------------
 

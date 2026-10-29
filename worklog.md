@@ -1674,3 +1674,25 @@ Stage Summary:
 - Day 40 shipped: every AI route is instrumented with a visible ops dashboard (calls, latency, error badges, directional token/cost estimates) — and the full Category D audit passed with all receipts reproducing.
 - Files: lib/server/ai-ops.ts (new), api/ai/ops/route.ts (new), 7 instrumented routes, AIPanel.tsx, sections/ai.ts.
 - CATEGORY D (AI Studio) COMPLETE: Days 31–40 all live with receipts. Next: Category E — Cloud, Sync & Collaboration (Days 41–50).
+
+---
+Task ID: Day-41
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 41 — Media manifest sync (project payload + asset hash map).
+
+Work Log:
+- NEW lib/cloud/manifest.ts — on-device manifest builder: every clip.mediaId resolved against IndexedDB, blobs hashed with WebCrypto sha-256 (hex), deduped by asset id; missing assets reported honestly (never dropped silently); checkManifestAgainstLocal re-hashes local blobs and returns match/mismatch/missing per entry.
+- Prisma: NEW CloudAsset model (deviceId + projectId + assetId unique, sha-256 hash indexed) — pushed to the DB.
+- NEW /api/cloud/manifest route: POST = transactional replace-set (deleteMany + createMany inside $transaction — the manifest always matches the payload it describes), GET = entries + count + totalBytes + syncedAt, DELETE = clear. Zod validates kind enum + 64-hex sha-256.
+- cloudSyncProject flow upgraded: BOTH backup entry points (cloud tab "Back up current project" + device tab per-project cloud icon) now run backupWithManifest() — structure payload first, then the hash map; receipt toast "structure + media manifest (N files · X MB)"; missing assets surface a warning toast.
+- Cloud tab: NEW "Media manifest" strip for the CURRENT project (count · total bytes · sha-256 · synced-at) + "Verify hashes" one-tap — re-hashes every local blob against the loaded manifest, shows "N/N match · X changed · Y missing" inline + toast when clean.
+- Honesty test executed: tampered mountains.jpg hash server-side via curl → re-open dialog (fresh GET) → Verify → "3/4 match · 1 changed" — mismatch detection proven through the real UI; re-backup restored the true hash (39321d968acc…).
+- projects DELETE route now also clears the CloudAsset rows (curl-proven: manifest count 0 after project delete).
+- Catalog: +1 live panel-media-manifest (deep link open-projects); footer note updated truthfully (binaries still local — other devices can see exactly which files they miss; upload pipeline is Day 42).
+- API smoke receipts: POST {"count":1,"totalBytes":1048576} → GET echoes entry + hash → DELETE ok. UI receipts (desktop 1280×800): backup toast "4 files · 1.1 MB", strip "4 files · 1.1 MB · sha-256 · synced…", Verify "All 4 media hashes verified" + "4/4 match"; curl cross-check listed mountains.jpg/neon-city.jpg/novacut-vibe.wav/sunrise.jpg with 12-char hash prefixes, total 1,159,823 B.
+- E2E mobile 390×844: cloud tab renders the strip + Verify → "All 4 media hashes verified" · "4/4 match"; screenshots both viewports; zero console/page errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 41 shipped: cloud backups now carry a sha-256 manifest of every referenced media file — content identity the re-link/dedupe days (42/46) build on; verification is one tap.
+- Files: lib/cloud/manifest.ts (new), api/cloud/manifest/route.ts (new), prisma/schema.prisma (+CloudAsset), lib/cloud/client.ts, api/cloud/projects/route.ts, ProjectsDialog.tsx, sections/panels.ts.
+- Next: Day 42 — asset upload pipeline (media binaries travel with the backup).

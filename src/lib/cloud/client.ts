@@ -106,3 +106,48 @@ export async function cloudGetShare(token: string): Promise<{
 }> {
   return jsonFetch(`/api/cloud/share?token=${encodeURIComponent(token)}`)
 }
+
+/* ---------- Day 41 — media manifest sync ---------- */
+
+export interface ManifestEntry {
+  assetId: string
+  name: string
+  kind: 'video' | 'image' | 'audio' | 'lut'
+  mimeType: string
+  size: number
+  duration: number
+  width: number
+  height: number
+  /** sha-256 hex of the blob */
+  hash: string
+}
+
+export interface ManifestSummary {
+  assets: ManifestEntry[]
+  count: number
+  totalBytes: number
+  syncedAt: string | null
+}
+
+/** Replace-set the manifest for a cloud backup (transactional on the server). */
+export async function cloudSyncManifest(
+  deviceId: string,
+  localId: string,
+  assets: ManifestEntry[],
+): Promise<{ count: number; totalBytes: number }> {
+  return jsonFetch('/api/cloud/manifest', {
+    method: 'POST',
+    body: JSON.stringify({ deviceId, localId, assets }),
+  })
+}
+
+export async function cloudGetManifest(deviceId: string, localId: string): Promise<ManifestSummary> {
+  return jsonFetch(`/api/cloud/manifest?deviceId=${encodeURIComponent(deviceId)}&localId=${encodeURIComponent(localId)}`)
+}
+
+export async function cloudDeleteManifest(deviceId: string, localId: string): Promise<void> {
+  await jsonFetch(
+    `/api/cloud/manifest?deviceId=${encodeURIComponent(deviceId)}&localId=${encodeURIComponent(localId)}`,
+    { method: 'DELETE' },
+  )
+}

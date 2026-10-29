@@ -106,6 +106,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    await prisma.cloudAsset.deleteMany({ where: { deviceId, projectId: localId } })
     await prisma.cloudProject.delete({
       where: { deviceId_localId: { deviceId, localId } },
     })
