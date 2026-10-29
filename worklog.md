@@ -1737,3 +1737,31 @@ Stage Summary:
 - Day 43 shipped: cloud snapshot history with ordinals and a hard newest-20 cap — save, restore-any-version, delete, all through the existing versions dialog.
 - Files: api/cloud/versions/route.ts (new), prisma/schema.prisma (+CloudVersion), lib/cloud/client.ts, VersionsDialog.tsx, sections/panels.ts.
 - Next: Day 44 — debounced auto-save to cloud + offline queue with retry.
+
+---
+Task ID: Day-44
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 44 — Debounced auto-save to cloud + offline queue with retry.
+
+Work Log:
+- NEW lib/cloud/autosave.ts — a globalThis-anchored engine wired once from EditorShell:
+  • dirty signal = store subscribe on project.id/updatedAt changes → 8 s debounce
+  • syncs the project STRUCTURE only (no thumbnails, no manifest, no binaries — hashing blobs per keystroke would burn battery; documented in the card text)
+  • failure → envelope queued in localStorage (`novacut.cloudQueue`, per-project newest-wins, cap 10) with attempts counter
+  • retry paths: 45 s interval tick + `online` event + visibilitychange + after ANY successful manual backup (notifyManualSyncSuccess); backoff 15/30/60/120 s; dropped after 6 attempts (droppedTotal surfaced honestly)
+  • opt-in Switch (persisted `novacut.autosave.enabled`, default OFF — cloud uploads never start without consent), subscribeAutosave() status channel
+- CloudTab: NEW "Cloud auto-save" card — Switch + live status line (syncing… / synced Xs ago / N queued (amber) / retry in ~Ns / N dropped / last error (rose)) + "Sync now" button → toast "Synced — queue 0".
+- Both manual backup handlers now call notifyManualSyncSuccess() so a backup instantly drains any queued entries.
+- E2E receipts (desktop 1280×800):
+  1. Toggle ON → toast → status "synced less than a minute ago" (immediate 1 s first sync).
+  2. offline + clip rename X → 10 s → status "1 queued · retry in ~15s · Failed to fetch" (honest error + countdown).
+  3. reload (?action=demo) → localStorage still "1 queued; enabled=1"; after online the fresh demo state legitimately overwrote the queued envelope (newest-wins — by design, receipt explained).
+  4. CLEAN LOOP RE-RUN without demo: offline + rename Y → "1 queued" → reload "/" (no demo) → queue survives → offline off → automatic flush on the online event → "0 queued" → curl proves the server payload now contains "sunrise.jpg Y" — the offline edit reached the cloud through queue + retry, byte-level name check.
+  5. "Sync now" → "Synced — queue 0".
+- E2E mobile 390×844: card renders with the persisted checked=true switch; screenshots both viewports; console + dev.log clean; eslint + tsc clean.
+- Catalog: +1 live panel-cloud-autosave (open-projects deep link).
+
+Stage Summary:
+- Day 44 shipped: opt-in debounced cloud auto-save whose offline queue survives reloads and drains automatically — local-first untouched, cloud is a progressive layer.
+- Files: lib/cloud/autosave.ts (new), EditorShell.tsx (engine mount), ProjectsDialog.tsx (AutoSaveCard + manual-sync hooks), sections/panels.ts.
+- Next: Day 45 — share links: read-only viewer page (/s/[id]).

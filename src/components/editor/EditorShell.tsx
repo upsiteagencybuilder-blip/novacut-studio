@@ -32,6 +32,7 @@ import { VersionsDialog } from '@/components/editor/dialogs/VersionsDialog'
 import { ThemeStudioDialog } from '@/components/editor/dialogs/ThemeStudioDialog'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
+import { startCloudAutosave } from '@/lib/cloud/autosave'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 function useDesktop(): boolean {
@@ -494,6 +495,12 @@ export function EditorShell() {
   useEffect(() => {
     void init()
   }, [init])
+
+  // Day 44 — cloud auto-save engine (self-gating: only fires when the user
+  // enabled it; the editor stays local-first regardless)
+  useEffect(() => {
+    startCloudAutosave()
+  }, [])
 
   // manifest app-shortcut: /?action=export opens the export dialog once ready
   useEffect(() => {

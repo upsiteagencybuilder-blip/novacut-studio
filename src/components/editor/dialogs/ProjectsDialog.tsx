@@ -46,7 +46,20 @@ import {
   type ManifestSummary,
 } from '@/lib/cloud/client'
 import { captureThumbnail, isCloudProjectPayload } from '@/lib/cloud/backup'
-import { buildProjectManifest, checkManifestAgainstLocal, uploadProjectMedia } from '@/lib/cloud/manifest'
+import {
+  buildProjectManifest,
+  checkManifestAgainstLocal,
+  uploadProjectMedia,
+} from '@/lib/cloud/manifest'
+import {
+  getAutosaveStatus,
+  isAutosaveEnabled,
+  notifyManualSyncSuccess,
+  setAutosaveEnabled,
+  subscribeAutosave,
+  syncNow,
+  type AutosaveStatus,
+} from '@/lib/cloud/autosave'
 import { formatBytes } from '@/lib/editor/utils'
 import { cn } from '@/lib/utils'
 import {
@@ -63,6 +76,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Switch } from '@/components/ui/switch'
 import type { Project } from '@/lib/editor/types'
 
 type Tab = 'device' | 'cloud'
@@ -122,6 +136,94 @@ async function backupWithManifest(
 }
 
 /* ================= cloud tab ================= */
+
+/** Day 44 — debounced cloud auto-save + offline queue status card. */
+function AutoSaveCard({ cloudUnavailable }: { cloudUnavailable: boolean }) {
+  const [status, setStatus] = useState<AutosaveStatus>(() => ({
+    enabled: false,
+    syncing: false,
+    lastSyncAt: null,
+    queued: 0,
+    nextRetryInMs: null,
+    lastError: null,
+    droppedTotal: 0,
+  }))
+  const [syncingNow, setSyncingNow] = useState(false)
+
+  useEffect(() => subscribeAutosave(setStatus), [])
+
+  const handleToggle = (on: boolean) => {
+    setAutosaveEnabled(on)
+    if (on) toast.success('Cloud auto-save on — project structure syncs ~8 s after edits')
+    else toast.info('Cloud auto-save off')
+  }
+
+  const handleSyncNow = async () => {
+    if (syncingNow) return
+    setSyncingNow(true)
+    try {
+      await syncNow()
+      const s = getAutosaveStatus()
+      if (s.lastError) toast.error(`Auto-sync failed: ${s.lastError}`)
+      else toast.success(`Synced — queue ${s.queued}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Sync failed')
+    } finally {
+      setSyncingNow(false)
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold">
+            <RefreshCw className="size-3.5 shrink-0 text-emerald-300" />
+            Cloud auto-save
+          </p>
+          <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+            Structure syncs ~8 s after edits; offline changes retry (45 s) and survive reloads.
+          </p>
+        </div>
+        <Switch
+          checked={status.enabled}
+          onCheckedChange={handleToggle}
+          disabled={cloudUnavailable}
+          aria-label="Toggle cloud auto-save"
+        />
+      </div>
+      {status.enabled && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="min-w-0 text-[10px] leading-relaxed text-muted-foreground">
+            {status.syncing ? (
+              <span className="text-sky-300">syncing…</span>
+            ) : status.lastSyncAt ? (
+              <>synced {formatDistanceToNow(new Date(status.lastSyncAt), { addSuffix: true })}</>
+            ) : (
+              'not synced yet'
+            )}
+            {status.queued > 0 && <span className="text-amber-300"> · {status.queued} queued</span>}
+            {status.nextRetryInMs !== null && status.queued > 0 && (
+              <span> · retry in ~{Math.ceil(status.nextRetryInMs / 1000)}s</span>
+            )}
+            {status.droppedTotal > 0 && <span> · {status.droppedTotal} dropped</span>}
+            {status.lastError && <span className="text-rose-300"> · {status.lastError}</span>}
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 shrink-0 border border-(--nc-line-strong) px-2 text-[10px] hover:border-fuchsia-400/50 hover:text-foreground"
+            disabled={syncingNow || cloudUnavailable}
+            onClick={() => void handleSyncNow()}
+          >
+            {syncingNow ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+            Sync now
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function HealthPill({ health }: { health: CloudHealth | null }) {
   if (!health) {
@@ -235,6 +337,7 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
         toast.warning(`${receipt.failed} upload(s) failed — use "Upload media" to retry`)
       }
       setUploadNote(null)
+      notifyManualSyncSuccess()
       await Promise.all([refresh(), refreshManifest()])
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Cloud backup failed')
@@ -336,6 +439,9 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
           TURSO_DATABASE_URL and TURSO_AUTH_TOKEN configured.
         </p>
       )}
+
+      {/* Day 44 — debounced cloud auto-save + offline queue */}
+      <AutoSaveCard cloudUnavailable={cloudUnavailable} />
 
       {/* Day 41+42 — media manifest + binary upload strip for the CURRENT project */}
       <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
@@ -520,6 +626,7 @@ function DeviceTab() {
     setBackingUpId(project.id)
     try {
       const receipt = await backupWithManifest(project)
+      notifyManualSyncSuccess()
       toast.success(
         `"${project.name}" backed up — structure + media manifest (${receipt.manifestCount} files · ${formatBytes(receipt.totalBytes)})`,
       )
