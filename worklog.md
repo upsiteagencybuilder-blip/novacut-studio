@@ -1867,3 +1867,31 @@ Stage Summary:
 - Day 49 shipped: the cloud backup list became a real manager — rename with payload sync, true duplicates that restore as separate projects, and folder chips.
 - Files: api/cloud/projects/route.ts (PATCH + duplicate), prisma/schema.prisma (+folder), lib/cloud/client.ts, ProjectsDialog.tsx, sections/panels.ts.
 - Next: Day 50 — cloud E2E suite (multi-tab, quota, conflict) + Category E audit.
+
+---
+Task ID: Day-50
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 50 — Cloud E2E suite (multi-tab, quota, conflict) + Category E audit.
+
+Work Log:
+- CLOUD E2E SUITE (three named scenarios):
+  • MULTI-TAB (real UI, same browser profile): tab1 renamed a clip to "multitab-edit" → AutoSave card "Sync now" → "Synced — queue 0"; tab2 (fresh tab) → Projects → Cloud → Restore the same project → "Restored "My First Edit ✨" from the cloud" → clip name "multitab-edit" present. Cloud round-trip between two tabs proven through the real UI.
+  • QUOTA (python urllib): accumulating manifest (10 × 7 MB declared) + sequential uploads → 413 at big8: "device storage quota exceeded (64 MB of stored media)" — the estimate-based quota enforces honestly; per-asset 12 MB cap rides the same zod. Test-design lesson recorded: a manifest replace-set deletes prior rows, so the accumulation must be built once (first run was a tester bug, not a product bug).
+  • CONFLICT: two threads racing writes to the same (deviceId, localId) → both 200, final row is ONE clean write (name ∈ {conflict-A, conflict-B}, payload JSON intact, clips array coherent) — last-write-wins with no corruption; manifest replace-set conflict → exactly the new set (count 1, new assetId). LWW is the server model; Day-43 versions are the history layer.
+- CATEGORY E AUDIT (Days 41–49 receipts re-run in one sweep):
+  • D41 manifest: 4 files · 1,159,823 B · all sha-256 64-hex ✓ (after a fresh full backup of the current project — structure-only syncs don't touch the manifest, by design)
+  • D42 binaries: 4/4 uploaded · 4/4 hash matches vs manifest ✓
+  • D43 versions: 19 kept (cap 20, oldest v3 — Day-43 delete included) ✓
+  • D45 share viewer: HTTP 200, Timeline overview rendered, views counter live ✓
+  • D47 feedback: total 1, last rating 4 from this device ✓
+  • D48 DeviceLink: ('dev-1c87…', 'This browser') row present ✓
+  • D49 manager: 13 cloud rows, folder chip state ("Client work") persisted ✓
+  • D50 suite receipts above ✓
+  • Test-device noise disclosed: dev-e2e50/dev-e2e50b + dev-smoke4x rows remain in the dev SQLite (harmless, cleaned where practical).
+- CATALOG AUDIT: live 272 / planned 295 (was 216/310 at Day 0). Category E added +6 live tools (panel-media-manifest, panel-asset-upload, panel-cloud-versioning, panel-cloud-autosave, panel-share-links, panel-feedback-widget) and extended panel-cloud-backup's description. No flips without receipts — every new entry deep-links or names its surface.
+- Zero-error bar: console cleared + fresh reload → "editor ready, zero errors", 6 clips loaded; dev.log clean (two stale browser-console entries traced to pre-fix editing history — absent from dev.log); screenshots mobile; eslint + tsc clean.
+
+Stage Summary:
+- Day 50 shipped: the named cloud failure modes are now E2E-proven (multi-tab propagation, quota 413, LWW conflict) and the full Category E audit passed with every receipt reproducing.
+- Files: no product code — pure verification day (python suites + agent-browser UI runs); audit recorded here.
+- CATEGORY E (Cloud, Sync & Collaboration) COMPLETE: Days 41–50 all live. Media manifest → binary pipeline → versioning → auto-save/offline queue → share links → cross-device re-link → feedback → auth scaffolding → project manager → E2E suite + audit. Next: Category F — Export & Delivery (Days 51–58).
