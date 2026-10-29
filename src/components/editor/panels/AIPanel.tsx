@@ -425,16 +425,18 @@ interface CopilotMsg {
   text: string
   applied?: string[]
   skipped?: string[]
+  /** v2 — how many plan steps the server proposed for this instruction */
+  steps?: number
 }
 
 const COPILOT_WELCOME =
-  'Hi! I can edit the timeline for you — try “add a bold title NovaCut at the start” or “put the Cyberpunk look on all clips”. Bangla চলে!'
+  'Hi! I run MULTI-STEP edit sequences from one instruction — try “trailer intro: bold title NovaCut, ken burns on all clips, crossfade and fade out at the end” or follow up with “now make it red”. Bangla চলে!'
 
 const COPILOT_QUICK_PROMPTS = [
-  'Add a bold title "NovaCut" at the start',
-  'Put the Cyberpunk look on all clips',
-  'Add kenBurns motion to the selected clip and a crossfade',
+  'Trailer intro: bold title "NovaCut" at the start, kenBurns motion on all clips, crossfade between clips',
+  'Vlog polish: warm look on all clips, fade in on the first clip and fade out 1.5s on the last clip',
   'Add a 💥 sticker and set speed 1.5 on the selected clip',
+  'Make the last clip a PiP in the bottom right corner and add a marker at the playhead',
 ]
 
 function CopilotCard() {
@@ -444,6 +446,11 @@ function CopilotCard() {
   const abortRef = useRef<AbortController | null>(null)
   const elapsed = useAiElapsed(busy)
   const chatRef = useRef<HTMLDivElement | null>(null)
+  /** v2 — ref-mirrored transcript (Day 07 lesson: no side effects inside setState updaters) */
+  const msgsRef = useRef<CopilotMsg[]>(msgs)
+  useEffect(() => {
+    msgsRef.current = msgs
+  }, [msgs])
 
   useEffect(() => {
     const el = chatRef.current
@@ -460,10 +467,19 @@ function CopilotCard() {
       abortRef.current = ac
       setMsgs((m) => [...m, { role: 'user', text: command }])
       try {
+        // v2 — recent turns ride along so follow-ups ("now make it red") resolve
+        const history = msgsRef.current
+          .filter((x) => x.text && x.text !== COPILOT_WELCOME)
+          .slice(-8)
+          .map((x) => ({ role: x.role, text: x.text.slice(0, 240) }))
         const res = await fetch('/api/ai/copilot', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command, context: buildCopilotContext(useEditor.getState()) }),
+          body: JSON.stringify({
+            command,
+            context: buildCopilotContext(useEditor.getState()),
+            history,
+          }),
           signal: ac.signal,
         })
         const data = (await res.json().catch(() => null)) as
@@ -486,9 +502,10 @@ function CopilotCard() {
             text: note || (actions.length ? 'Done!' : 'I could not map that to an edit — try rephrasing.'),
             applied: applied.length ? applied : undefined,
             skipped: skipped.length ? skipped : undefined,
+            steps: actions.length || undefined,
           },
         ])
-        if (applied.length > 0) toast.success(`${applied.length} edit${applied.length === 1 ? '' : 's'} applied`)
+        if (applied.length > 0) toast.success(`${applied.length} edit${applied.length === 1 ? '' : 's'} applied — one undo reverts all`)
         else if (skipped.length > 0) toast(`Nothing applied — ${skipped.length} step${skipped.length === 1 ? '' : 's'} skipped`)
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') {
@@ -509,7 +526,7 @@ function CopilotCard() {
   }, [])
 
   return (
-    <FeatureCard icon={Bot} title="AI Copilot" subtitle="Type an edit — the copilot does it">
+    <FeatureCard icon={Bot} title="AI Copilot v2" subtitle="One instruction — a full multi-step edit sequence">
       <div
         ref={chatRef}
         className="max-h-72 space-y-2.5 overflow-y-auto rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2.5"
@@ -524,6 +541,14 @@ function CopilotCard() {
                   : 'border border-(--nc-line) bg-(--nc-panel) text-foreground'
               }`}
             >
+              {m.role === 'ai' && m.steps ? (
+                <p
+                  data-nc-copilot-plan
+                  className="mb-1 inline-block rounded-full border border-fuchsia-400/30 bg-fuchsia-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-fuchsia-300"
+                >
+                  Plan · {m.steps} step{m.steps === 1 ? '' : 's'} · one undo
+                </p>
+              ) : null}
               <p className="whitespace-pre-wrap text-[11px] leading-relaxed">{m.text}</p>
               {m.applied && m.applied.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1">
@@ -573,6 +598,7 @@ function CopilotCard() {
             key={p}
             type="button"
             disabled={busy}
+            data-nc-copilot-chip={p.slice(0, 18)}
             onClick={() => void send(p)}
             className="rounded-lg border border-(--nc-line) bg-(--nc-panel) px-2 py-1.5 text-left text-[10px] leading-snug text-muted-foreground transition hover:border-fuchsia-400/50 hover:text-foreground disabled:opacity-50"
           >

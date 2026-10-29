@@ -10,7 +10,7 @@ import type { ProTool } from '../types'
 
 export const AI_TOOLS: ProTool[] = [
   // -------- AI editing --------
-  { id: 'ai-copilot-editing', name: 'AI Copilot Editing', section: 'ai', group: 'AI editing', status: 'live', desc: 'Chat copilot turns prompts into real edits — titles, stickers, looks, motion, crossfades', action: 'open-ai' },
+  { id: 'ai-copilot-editing', name: 'AI Copilot v2', section: 'ai', group: 'AI editing', status: 'live', desc: 'One chat instruction runs a full multi-step edit sequence — titles, stickers, looks, motion, crossfades, fades, PiP transforms, adjustment layers, trim/duplicate — applied as ONE undoable step with follow-up conversation memory', action: 'open-ai' },
   { id: 'ai-text-to-video', name: 'AI Text-to-Video', section: 'ai', group: 'AI editing', status: 'live', desc: 'AI image B-roll from prompts, generated straight into the media library', action: 'open-ai' },
   { id: 'ai-smart-cutout', name: 'AI Smart Cutout', section: 'ai', group: 'AI editing', status: 'planned', desc: 'Lift subjects from footage with AI segmentation' },
   { id: 'ai-motion-tracking', name: 'AI Motion Tracking', section: 'ai', group: 'AI editing', status: 'planned', desc: 'Track subjects automatically to pin elements on them' },

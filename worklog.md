@@ -1495,3 +1495,24 @@ Stage Summary:
 - Day 30 shipped: ITU-accurate BS.1770-4 loudness measurement with EBU 3341-verified calibration, two-pass loudness normalize in the audio export (−14/−16/−23 targets) with a measured-LUFS toast, live momentary LUFS in the mixer master section, honest catalog updates — and the full Category C regression audit passed with every DSP receipt reproducing.
 - Files: audio-mix.ts, exporter.ts, ExportDialog.tsx, engine.ts, MixerDialog.tsx, sections/sound.ts.
 - Category C (Audio Suite) COMPLETE: Days 21–30 all live with receipts. Next: Category D — AI (Days 31–40).
+---
+Task ID: Day-31
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 31 — Copilot v2: multi-step edit sequences from one chat instruction.
+
+Work Log:
+- Copilot v2 vocabulary: +6 actions (addAdjustmentLayer with optional look baked in, setTransform over the 8 built-in presets, fadeIn/fadeOut with per-clip 80%-duration clamps, duplicateSelected, trimSelected for video/audio/image, styleTitle with content-substring match for restyle follow-ups) + target 'first'/'last' (last = the clip that ENDS latest, for end-of-video fades). MAX plan 12→16 actions.
+- One-undo guarantee (new store API beginHistoryGroup/endHistoryGroup): the executor pushes ONE unconditional pre-plan snapshot (key-less — the 900ms merge can never drop it), runs the plan (creations push entries that fold in), then collapses the group so a whole 16-step sequence reverts with a single undo. Fixes a real v1 flaw: patch-only plans (volume/speed) left NO history entry at all.
+- Multi-turn memory: the client rides the last 8 transcript turns (ref-mirrored, Day 07 lesson — no side effects inside setState updaters) to /api/ai/copilot; the API weaves them into the prompt ("make it red" now resolves) and the catalog documents styleTitle as the restyle path (NEVER add a new title for follow-ups).
+- UI: plan badge "Plan · N steps · one undo" on AI replies, 4 recipe quick-prompts (Trailer intro / Vlog polish / sticker+speed / PiP+marker), toast "one undo reverts all", copilot harness window.__ncCopilotHarness exposing the REAL production executor for receipts.
+- Catalog: ai-copilot-editing re-described honestly (multi-step sequences, one undoable step, memory).
+- REAL BUGS caught by the harness and fixed before shipping: (1) setTransform compared full ids only ('xf-pip-br') while the catalog documents stripped ids ('pip-br'); (2) resolveTargets('last') sorted ascending and took [0] — it targeted the EARLIEST-ending clip (a text clip got the PiP); now sorts and takes the last element; (3) FX carriers were plan targets — adjustment layers excluded from resolveTargets (PiP on an adjustment is meaningless); (4) trimSelected rejected image clips (images are timed, sourceDuration 3600 — now trimmable).
+- E2E receipts (desktop 1280×800, fresh demo): chip "Trailer intro" → Plan · 3 steps · one undo → title created + kenBurns on all 6 visual clips + crossfade, pastLen 0→1; ONE undo reverted everything (clips 7→6, motions restored, title gone); follow-up "now make the NovaCut title red" → styleTitle color #ff0000 (match 'NovaCut' hits all 3 demo titles honestly — substring semantics); follow-up "size 90" → restyle, no new clip.
+- Harness receipts (deterministic): setTransform pip-br target last → the clip ending latest (7.8s image) gets {x .55, y .5, scale .45}; fadeIn 0.5 first / fadeOut 1 last; duplicateSelected 6→7 at start 2.6; trimSelected image 2.6→1.2s; addAdjustmentLayer + Warm look (temperature 0.315); skipped receipts honest (volume on image-only selection). Cross-plan group chain: 3 plans → 3 undos → pristine demo state (6 clips, no PiP, no adjustment, original durations).
+- E2E mobile 390×844: AI sheet renders the card + 4 chips; "Vlog polish" → Plan · 3 steps (Warm Sunset · Soft on 6 clips, fade-in 0.5 on the 0s clip, fade-out 1.5 on the 7.8s clip — 'last' verified by end-time not array order); one undo restores demo-native saturation/fades exactly (futureLen 1 redo ready).
+- Zero real errors, eslint + tsc clean.
+
+Stage Summary:
+- Day 31 shipped: Copilot v2 — one chat instruction runs a validated multi-step sequence (up to 16 actions), applied as ONE undoable step, with follow-up conversation memory and 6 new action types; 4 real bugs caught and fixed by the E2E harness.
+- Files: store.ts, copilot.ts, api/ai/copilot/route.ts, AIPanel.tsx, sections/ai.ts.
+- Next: Day 32 — AI subtitles: translation (multi-language) + styled caption presets.

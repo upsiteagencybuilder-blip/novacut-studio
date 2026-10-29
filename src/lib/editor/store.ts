@@ -271,6 +271,15 @@ interface EditorStore {
 
   /* ---------- history ---------- */
   pushHistory: (key?: string) => void
+  /** Day 31 — returns the current past-stack length; call BEFORE a multi-step group */
+  beginHistoryGroup: () => number
+  /**
+   * Day 31 — collapse every history entry pushed since beginHistoryGroup into
+   * ONE undo step (the earliest in-group snapshot = the pre-group state), so a
+   * whole multi-action plan reverts with a single undo. No-op when nothing
+   * was pushed during the group (or when the group pushed nothing new).
+   */
+  endHistoryGroup: (before: number) => void
   undo: () => void
   redo: () => void
 }
@@ -1905,6 +1914,20 @@ export const useEditor = create<EditorStore>((set, get) => ({
   resetExport: () => set({ exportState: { phase: 'idle', progress: 0 } }),
 
   /* ================= history ================= */
+
+  beginHistoryGroup: () => get().past.length,
+
+  endHistoryGroup: (before) => {
+    const base = Math.max(0, Math.floor(before))
+    set((st) => {
+      // nothing pushed inside the group → nothing to collapse
+      if (st.past.length <= base) return {}
+      // keep pre-group entries + the FIRST in-group snapshot (pre-group state)
+      return { past: st.past.slice(0, base + 1), future: [] }
+    })
+    lastHistoryKey = null
+    lastHistoryTime = 0
+  },
 
   pushHistory: (key) => {
     const s = get()
