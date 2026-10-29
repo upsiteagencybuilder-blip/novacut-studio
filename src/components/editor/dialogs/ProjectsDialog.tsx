@@ -16,11 +16,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
   CloudUpload,
+  Copy,
+  ExternalLink,
   FileCheck2,
   FilePlus2,
   Film,
   FolderOpen,
   History,
+  Link2,
   Loader2,
   RefreshCw,
   ShieldCheck,
@@ -38,6 +41,7 @@ import {
   cloudHealth,
   cloudListProjects,
   cloudLoadProject,
+  cloudShare,
   cloudSyncManifest,
   cloudSyncProject,
   getDeviceId,
@@ -219,6 +223,95 @@ function AutoSaveCard({ cloudUnavailable }: { cloudUnavailable: boolean }) {
             {syncingNow ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
             Sync now
           </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Day 45 — read-only share link card. */
+function ShareCard({ cloudUnavailable }: { cloudUnavailable: boolean }) {
+  const [creating, setCreating] = useState(false)
+  const [link, setLink] = useState<{ url: string; createdAt: string } | null>(null)
+
+  const handleCreate = async () => {
+    if (creating) return
+    setCreating(true)
+    try {
+      const project = useEditor.getState().project
+      const res = await cloudShare({
+        projectId: project.id,
+        title: project.name,
+        payload: JSON.stringify(project),
+      })
+      setLink({ url: `${window.location.origin}/s/${res.token}`, createdAt: new Date().toISOString() })
+      toast.success('Share link created — read-only snapshot published')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not create the share link')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleCopy = async () => {
+    if (!link) return
+    try {
+      await navigator.clipboard.writeText(link.url)
+      toast.success('Share link copied')
+    } catch {
+      toast.error('Clipboard unavailable — select the URL manually')
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold">
+            <Link2 className="size-3.5 shrink-0 text-violet-300" />
+            Share link
+          </p>
+          <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+            Publishes a read-only snapshot anyone can open — no account needed.
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 shrink-0 border border-(--nc-line-strong) px-2 text-[10px] hover:border-fuchsia-400/50 hover:text-foreground"
+          disabled={creating || cloudUnavailable}
+          onClick={() => void handleCreate()}
+        >
+          {creating ? <Loader2 className="size-3 animate-spin" /> : <Link2 className="size-3" />}
+          Create
+        </Button>
+      </div>
+      {link && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <input
+            readOnly
+            value={link.url}
+            aria-label="Share link URL"
+            className="h-7 min-w-0 flex-1 rounded-lg border border-(--nc-line-strong) bg-(--nc-panel) px-2 text-[10px] text-sky-300"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label="Copy share link"
+            onClick={() => void handleCopy()}
+          >
+            <Copy className="size-3.5" />
+          </Button>
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+            aria-label="Open share link in a new tab"
+          >
+            <ExternalLink className="size-3.5" />
+          </a>
         </div>
       )}
     </div>
@@ -442,6 +535,9 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
 
       {/* Day 44 — debounced cloud auto-save + offline queue */}
       <AutoSaveCard cloudUnavailable={cloudUnavailable} />
+
+      {/* Day 45 — read-only share link */}
+      <ShareCard cloudUnavailable={cloudUnavailable} />
 
       {/* Day 41+42 — media manifest + binary upload strip for the CURRENT project */}
       <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">

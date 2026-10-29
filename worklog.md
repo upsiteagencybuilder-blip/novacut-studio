@@ -1765,3 +1765,19 @@ Stage Summary:
 - Day 44 shipped: opt-in debounced cloud auto-save whose offline queue survives reloads and drains automatically — local-first untouched, cloud is a progressive layer.
 - Files: lib/cloud/autosave.ts (new), EditorShell.tsx (engine mount), ProjectsDialog.tsx (AutoSaveCard + manual-sync hooks), sections/panels.ts.
 - Next: Day 45 — share links: read-only viewer page (/s/[id]).
+
+---
+Task ID: Day-45
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 45 — Share links: read-only viewer page (/s/[id]).
+
+Work Log:
+- NEW /s/[token] server-rendered viewer page (force-dynamic): fetches the ShareLink row directly server-side, increments views, renders — title, stats row (clips/tracks/duration/canvas), a per-track TIMELINE OVERVIEW (clip blocks positioned by start/total with kind colors: video fuchsia · image violet · audio emerald · text amber · sticker sky · adjustment rose), kind summary line, view counter, honest "media files are not part of a share link" note, "Open NovaCut Studio" CTA; invalid token → honest "doesn't exist" page. generateMetadata titles the tab from the share.
+- ShareCard in the projects dialog cloud tab: "Create" → cloudShare (existing route, now finally wired to UI) → shows the full /s/<token> URL in a readonly field + Copy (clipboard API with honest fallback toast) + open-in-new-tab.
+- Catalog: +1 live panel-share-links (the roadmap's "share viewer page" backlog item — now real).
+- E2E receipts: Create → toast "Share link created" + URL http://localhost:3000/s/6t062r1g2v295g0s714s4r1a; viewer tab renders "6 clips · 0:08 · shared 10/29/2026 · 1 views" + Timeline overview with sunrise.jpg / neon-city.jpg / "Your text here" / novacut-vibe.wav blocks + "3 image · 2 text · 1 audio" summary; views increment 1→2→3 across reloads; /s/bogus-token-123 → "This share link doesn't exist" page; Copy → "Share link copied" toast (clipboard read-back blocked only by automation permissions); mobile 390×844 viewer renders the same overview; screenshots desktop+mobile+404; console + dev.log clean; eslint + tsc clean.
+
+Stage Summary:
+- Day 45 shipped: one click publishes a read-only /s/<token> snapshot — the share-link API from the survey finally has a producer AND a consumer.
+- Files: app/s/[token]/page.tsx (new), ProjectsDialog.tsx (ShareCard), sections/panels.ts.
+- Next: Day 46 — cross-device restore polish (media re-link flow).
