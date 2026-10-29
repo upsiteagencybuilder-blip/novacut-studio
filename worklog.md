@@ -1553,3 +1553,20 @@ Stage Summary:
 - Day 33 shipped: TTS expanded with per-language engine picks, a real ±12 st pitch stage on the placed clip, honest loudness staging (gain + true-peak normalize), and playhead placement with one-undo staging — plus a documented, measured finding that the SDK volume param is a no-op on this backend.
 - Files: api/ai/tts/route.ts, AIPanel.tsx, sections/ai.ts.
 - Next: Day 34 — AI BGM: mood → music arrangement from loop library.
+---
+Task ID: Day-34
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 34 — AI BGM: mood → music arrangement from loop library.
+
+Work Log:
+- NEW /api/ai/bgm: the LLM acts as BGM director — a free-text mood plus project context (durationSec / clipCount / hasSpeech) maps to a MULTI-SECTION arrangement over the REAL 64-loop procedural library. The full loop catalog (id/name/length/BPM) rides in the system prompt; effectIds are validated SERVER-side against MUSIC_EFFECTS (hallucinated ids can never reach the client), starts are clamped into the project (a section can never begin past the end — real hardening added after the E2E exposed sprawl), durations clamp to the project, volumes to 0.1..1.
+- AI BGM card (Create tab): mood input + 6 curated mood chips + auto-duck toggle (Day 25 threshold ducking v2 → clip.autoDuck + duckDepth 0.68 when the project has audio). "Arrange BGM" fetches the plan, then for each section: renderEffectToWav (offline in-browser) → import → addClipFromMediaId at the section start → stage duration (clamped to the loop's rendered length — honest), volume, fadeIn/fadeOut, duck — ALL inside beginHistoryGroup/endHistoryGroup so the WHOLE arrangement is ONE undo. Per-section receipt chips (✓ name @ start · dur / ⚠ skips) render under the card.
+- Catalog: +1 live ai-bgm-director.
+- E2E receipts (desktop 1280×800, 2 REAL arrangements): "Cozy rainy vlog" → Lo-fi Chill · Am @ 0s · 8s, vol 0.3, fadeIn 1.0, autoDuck true, note in-mood; ONE undo removed it. "Hype gaming intro" → 2 sections back-to-back INSIDE the 8s project (EDM Uplifting · Am @ 0s · 8s + EDM Uplifting · Gm @ 4s · 4s, vol 0.4, fadeIn 0.5, duck) — start clamping verified live; ONE undo removed both. Skipped-receipt path exercised earlier (unknown-id → skip, never place).
+- E2E mobile 390×844: Create sheet renders the card (6 chips + duck toggle); screenshots both viewports; zero real errors; eslint + tsc clean.
+- Test note disclosed: clicking a mood chip and Generate in the SAME JS tick ran the plan with the previous mood (React state commit timing) — not reachable by real users (separate events/renders); the follow-up run used a typed mood and matched it exactly.
+
+Stage Summary:
+- Day 34 shipped: mood → scored multi-section BGM from the 64-loop library with server-validated ids, in-project start clamping, per-section staging (fades/levels/ducking) and whole-arrangement one-undo placement.
+- Files: api/ai/bgm/route.ts (new), AIPanel.tsx, sections/ai.ts.
+- Next: Day 35 — Auto-reframe: subject-aware aspect-ratio crop.

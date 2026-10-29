@@ -27,6 +27,7 @@ export const AI_TOOLS: ProTool[] = [
   { id: 'ai-vocal-remover', name: 'AI Vocal Remover', section: 'ai', group: 'AI audio', status: 'planned', desc: 'Split songs into instrumental and vocal stems' },
   { id: 'ai-audio-stretch', name: 'AI Audio Stretch', section: 'ai', group: 'AI audio', status: 'planned', desc: 'Change narration length without pitch artifacts' },
   { id: 'ai-music-generator', name: 'AI Music Generator', section: 'ai', group: 'AI audio', status: 'beta', desc: 'Sixty four procedural music tracks render straight into the library' },
+  { id: 'ai-bgm-director', name: 'AI BGM Director', section: 'ai', group: 'AI audio', status: 'live', desc: 'Describe a mood — the director scores a multi-section arrangement from the 64-loop library with fades, levels and auto-ducking, placed in one undoable step', action: 'open-ai' },
 
   // -------- AI captions & voice --------
   { id: 'ai-speech-to-text', name: 'AI Speech-to-Text (Auto Caption)', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Auto captions transcribe the selected clip into styled caption clips — nine preset looks (chips, karaoke, neon, meme, news bar) with live swatches', action: 'open-ai' },

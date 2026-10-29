@@ -39,6 +39,8 @@ import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 import { analyzeClipSilence, base64ToBlob, exportAudioSegmentWav, fileToBase64, imageBase64ToFile, requireOnline, sniffImageMime } from '@/lib/editor/ai'
 import type { SilenceAnalysis } from '@/lib/editor/ai'
+import { renderEffectToWav } from '@/lib/effects/audio-render'
+import { MUSIC_EFFECTS } from '@/lib/effects/music'
 import { applyCopilotActions, buildCopilotContext } from '@/lib/editor/copilot'
 import { importFiles } from '@/lib/editor/importer'
 import { useEditor } from '@/lib/editor/store'
@@ -764,6 +766,225 @@ function CopilotCard() {
         </Button>
       </form>
       <NoteRow icon={ShieldCheck}>Plans are validated against your project — unknown edits are skipped, never guessed.</NoteRow>
+    </FeatureCard>
+  )
+}
+
+/* ================= AI BGM director (Day 34) ================= */
+
+const BGM_MOOD_CHIPS = [
+  'Cozy rainy vlog',
+  'Hype gaming intro',
+  'Cinematic epic trailer',
+  'Sad piano story',
+  'Happy travel montage',
+  'Dark tension build-up',
+]
+
+interface BgmSectionReceipt {
+  name: string
+  start: number
+  duration: number
+}
+
+function BgmDirectorCard() {
+  const [mood, setMood] = useState('')
+  const [bgmDuck, setBgmDuck] = useState(true)
+  const [bgmBusy, setBgmBusy] = useState(false)
+  const [bgmPhase, setBgmPhase] = useState('')
+  const [bgmPlan, setBgmPlan] = useState<{ note: string; applied: BgmSectionReceipt[]; skipped: string[] } | null>(null)
+  const bgmAbortRef = useRef<AbortController | null>(null)
+  const bgmElapsed = useAiElapsed(bgmBusy)
+
+  const cancelBgm = useCallback(() => {
+    bgmAbortRef.current?.abort()
+  }, [])
+
+  const handleGenerateBgm = useCallback(async () => {
+    if (bgmBusy) return
+    const text = mood.trim()
+    if (!text) {
+      toast.error('Describe the mood first')
+      return
+    }
+    requireOnline()
+    setBgmBusy(true)
+    setBgmPlan(null)
+    const ac = new AbortController()
+    bgmAbortRef.current = ac
+    try {
+      const st0 = useEditor.getState()
+      const projectEnd = st0.project.clips.reduce((m, c) => Math.max(m, c.start + c.duration), 0)
+      const hasSpeech = st0.project.clips.some((c) => c.kind === 'video' || c.kind === 'audio')
+      setBgmPhase('Directing the arrangement…')
+      const res = await fetch('/api/ai/bgm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mood: text,
+          context: { durationSec: round2(projectEnd) || 30, clipCount: st0.project.clips.length, hasSpeech },
+        }),
+        signal: ac.signal,
+      })
+      const data = (await res.json().catch(() => null)) as
+        | { sections?: { effectId: string; start: number; duration: number; fadeIn: number; fadeOut: number; volume: number }[]; note?: string; error?: string }
+        | null
+      if (!res.ok) throw new Error(data?.error ?? `BGM planning failed (${res.status})`)
+      const sections = Array.isArray(data?.sections) ? data!.sections! : []
+      if (!sections.length) {
+        setBgmPlan({ note: (data?.note ?? '').trim() || 'No arrangement came back — try a different mood.', applied: [], skipped: [] })
+        return
+      }
+
+      setBgmPhase(`Rendering ${sections.length} section${sections.length === 1 ? '' : 's'}…`)
+      // the WHOLE arrangement is one history group — one undo removes every section
+      const before = st0.beginHistoryGroup()
+      const applied: BgmSectionReceipt[] = []
+      const skipped: string[] = []
+      for (let i = 0; i < sections.length; i++) {
+        const sec = sections[i]
+        const effect = MUSIC_EFFECTS.find((e) => e.id === sec.effectId)
+        if (!effect) {
+          skipped.push(`Section ${i + 1}: unknown loop "${String(sec.effectId).slice(0, 30)}"`)
+          continue
+        }
+        setBgmPhase(`Rendering section ${i + 1}: ${effect.name}`)
+        const rendered = await renderEffectToWav(effect)
+        const file = new File([rendered.blob], `${rendered.name}.wav`, { type: 'audio/wav' })
+        const assets = await importFiles([file])
+        if (!assets.length) {
+          skipped.push(`Section ${i + 1}: render import failed`)
+          continue
+        }
+        const st = useEditor.getState()
+        assets.forEach(st.addMediaAsset)
+        const beforeIds = new Set(useEditor.getState().project.clips.map((c) => c.id))
+        useEditor.getState().addClipFromMediaId(assets[0]!.id, round2(sec.start))
+        const st2 = useEditor.getState()
+        const clip = st2.project.clips.find((c) => !beforeIds.has(c.id))
+        if (!clip) {
+          skipped.push(`Section ${i + 1}: placement failed`)
+          continue
+        }
+        // stage the section — duration clamps to the loop's rendered length (honest)
+        const dur = round2(Math.min(sec.duration, clip.sourceDuration || sec.duration))
+        st2.updateClip(
+          clip.id,
+          {
+            duration: dur,
+            volume: clamp(sec.volume, 0.1, 1),
+            fadeIn: round2(clamp(sec.fadeIn, 0, Math.max(0.05, dur * 0.6))),
+            fadeOut: round2(clamp(sec.fadeOut, 0, Math.max(0.05, dur * 0.6))),
+            ...(bgmDuck && hasSpeech ? { autoDuck: true, duckDepth: 0.68 } : {}),
+          },
+          false
+        )
+        applied.push({ name: effect.name, start: sec.start, duration: dur })
+      }
+      useEditor.getState().endHistoryGroup(before)
+      setBgmPlan({ note: (data?.note ?? '').trim(), applied, skipped })
+      if (applied.length > 0) {
+        toast.success(`${applied.length} BGM section${applied.length === 1 ? '' : 's'} placed — one undo removes all`)
+      } else {
+        toast(`No sections applied — ${skipped.length} skipped`)
+      }
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') toast('BGM cancelled')
+      else toast.error(e instanceof Error ? e.message : 'BGM generation failed')
+    } finally {
+      bgmAbortRef.current = null
+      setBgmPhase('')
+      setBgmBusy(false)
+    }
+  }, [bgmBusy, mood, bgmDuck])
+
+  return (
+    <FeatureCard icon={AudioLines} title="AI BGM" subtitle="Describe a mood — get a scored arrangement">
+      <div className="space-y-1.5">
+        <FieldLabel>Mood</FieldLabel>
+        <Input
+          value={mood}
+          onChange={(e) => setMood(e.target.value.slice(0, 300))}
+          placeholder="e.g. cozy rainy vlog, hype gaming…"
+          maxLength={300}
+          disabled={bgmBusy}
+          data-nc-bgm-input
+          className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+          aria-label="Describe the background music mood"
+        />
+        <div className="flex flex-wrap gap-1">
+          {BGM_MOOD_CHIPS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              disabled={bgmBusy}
+              data-nc-bgm-chip={c.slice(0, 14)}
+              onClick={() => setMood(c)}
+              className="rounded-full border border-(--nc-line) bg-(--nc-panel) px-2 py-0.5 text-[9.5px] text-muted-foreground transition hover:border-fuchsia-400/50 hover:text-foreground disabled:opacity-50"
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+      <label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={bgmDuck}
+          onChange={(e) => setBgmDuck(e.target.checked)}
+          data-nc-bgm-duck
+          className="size-3.5 accent-fuchsia-500"
+        />
+        Auto-duck under speech (threshold ducking v2)
+      </label>
+      <Button
+        type="button"
+        disabled={bgmBusy}
+        onClick={() => void handleGenerateBgm()}
+        data-nc-bgm-generate
+        className="nc-gradient nc-glow-hover h-9 w-full rounded-lg text-xs font-semibold text-white"
+      >
+        {bgmBusy ? <Loader2 className="size-3.5 animate-spin" /> : <AudioLines className="size-3.5" />}
+        {bgmBusy ? bgmPhase : 'Arrange BGM'}
+      </Button>
+      {bgmBusy && (
+        <AiBusyBar
+          phase={bgmPhase || 'Working…'}
+          elapsedMs={bgmElapsed}
+          hint="Mood → arrangement from the 64-loop library, rendered offline"
+          onCancel={cancelBgm}
+        />
+      )}
+      {bgmPlan && (
+        <div className="space-y-1.5 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2" data-nc-bgm-receipt>
+          {bgmPlan.note && <p className="text-[10px] leading-relaxed text-foreground/80">{bgmPlan.note}</p>}
+          {bgmPlan.applied.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {bgmPlan.applied.map((s, i) => (
+                <span
+                  key={i}
+                  className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-medium text-emerald-300"
+                >
+                  ✓ {s.name} @ {s.start}s · {s.duration}s
+                </span>
+              ))}
+            </div>
+          )}
+          {bgmPlan.skipped.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {bgmPlan.skipped.map((s, i) => (
+                <span
+                  key={i}
+                  className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[9px] font-medium text-amber-300"
+                >
+                  ⚠ {s}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <NoteRow icon={AudioLines}>Arrangements come from the 64 procedural loops — rendered on your device, royalty-free.</NoteRow>
     </FeatureCard>
   )
 }
@@ -2025,6 +2246,9 @@ export function AIPanel() {
             )}
             <NoteRow icon={Mic}>Scripts over 900 characters are synthesized in sequential parts.</NoteRow>
           </FeatureCard>
+
+          {/* ---------- 6 · ai bgm director (Day 34) ---------- */}
+          <BgmDirectorCard />
         </>
       )}
     </div>
