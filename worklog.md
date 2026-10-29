@@ -1516,3 +1516,21 @@ Stage Summary:
 - Day 31 shipped: Copilot v2 — one chat instruction runs a validated multi-step sequence (up to 16 actions), applied as ONE undoable step, with follow-up conversation memory and 6 new action types; 4 real bugs caught and fixed by the E2E harness.
 - Files: store.ts, copilot.ts, api/ai/copilot/route.ts, AIPanel.tsx, sections/ai.ts.
 - Next: Day 32 — AI subtitles: translation (multi-language) + styled caption presets.
+---
+Task ID: Day-32
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 32 — AI subtitles: translation (multi-language) + styled caption presets.
+
+Work Log:
+- Styled caption presets 3 → 9: Classic chip, Bold gradient, Bangla + six new looks (Karaoke yellow Anton w/ 7px stroke, Neon glow fuchsia, Minimal clean, Social pop bounceIn, Impact meme uppercase 10px stroke, News bar slideUp). The Select dropdown became a 3-col preset gallery with LIVE mini-swatch previews (each card renders "Aa" with the preset's real font/color/background/stroke/shadow/textTransform) + active ring + data-nc-cap-style hooks.
+- Restyle existing captions: "Apply style to N captions" merges the picked preset into every isCaption clip's textStyle under ONE history key ('caption-style') — the whole restyle is a single undo. Button shows the live caption count (zustand selector) and disables at 0.
+- Re-translate captions IN PLACE: new "Translate existing captions" block — 10 target languages (Bangla/English/Hindi/Urdu/Spanish/Arabic + French/German/Portuguese/Japanese), one batched assistant call (texts joined with a @@NC@@ delimiter), 1:1 rewrite when the split-back count matches (each caption keeps its window) and a proportional fallback over the SAME time grid when the count drifts; content + CC: name rewritten under one 'caption-translate' history key. Honest behavior receipt: English→English default returns identical text (verified with a fetch probe) — the pipeline is faithful, not fake-translating.
+- E2E receipts (desktop 1280×800): seeded 3 REAL caption clips via the production store action addCaptionClips; gallery renders 9 swatches (classic active); karaoke apply → all 3 captions #facc15/Anton/stroke 7/pop, pastLen +1, ONE undo restores #ffffff/Montserrat; Spanish via the real Select → "NovaCut hace que la edición de video sea sencilla / Todo funciona en tu dispositivo / Prueba la demo y crea algo hoy", one undo back to English, same time grid [0.2,1.7,3.2]; Bangla → "নোভাকাট ভিডিও এডিটিংকে সহজ করে দেয় / সবকিছু আপনার ডিভাইসে চলে / ডেমো চেষ্টা করুন এবং আজই কিছু তৈরি করুন".
+- E2E mobile 390×844: AI sheet → Video tab → 9 presets + "3 on timeline" counter; Minimal restyle → white/no-bold/no-bg on all captions; screenshots both viewports; zero real errors.
+- Catalog: ai-speech-to-text desc extended (nine preset looks with live swatches); ai-caption-translate desc extended (10 languages + in-place re-translate with one undo); +1 live ai-caption-style-presets.
+- eslint + tsc clean.
+
+Stage Summary:
+- Day 32 shipped: the caption pipeline now covers the full subtitle workflow — nine styled looks with live swatches applied at generation OR restyled over existing captions in one undo, and multi-language translation both before captioning and in-place re-translation on the same time grid.
+- Files: AIPanel.tsx, sections/ai.ts.
+- Next: Day 33 — TTS expansion: more voices, speed/pitch controls, per-language picks.

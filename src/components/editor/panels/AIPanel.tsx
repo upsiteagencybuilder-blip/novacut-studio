@@ -21,6 +21,7 @@ import {
   Languages,
   Loader2,
   Mic,
+  Paintbrush,
   RotateCcw,
   Scissors,
   Send,
@@ -218,7 +219,7 @@ interface CaptionStylePreset {
 const CAPTION_STYLE_PRESETS: CaptionStylePreset[] = [
   {
     id: 'classic',
-    label: 'Classic dark chip',
+    label: 'Classic chip',
     patch: {
       fontFamily: 'Montserrat',
       fontSize: 40,
@@ -266,6 +267,116 @@ const CAPTION_STYLE_PRESETS: CaptionStylePreset[] = [
       animation: 'fadeIn',
     },
   },
+  /* --- Day 32: six more styled caption looks --- */
+  {
+    id: 'karaoke',
+    label: 'Karaoke yellow',
+    patch: {
+      fontFamily: 'Anton',
+      fontSize: 58,
+      bold: false,
+      italic: false,
+      color: '#facc15',
+      background: null,
+      backgroundPadding: 0,
+      shadow: true,
+      shadowColor: 'rgba(0,0,0,0.6)',
+      shadowBlur: 8,
+      strokeWidth: 7,
+      strokeColor: '#0a0a12',
+      animation: 'pop',
+    },
+  },
+  {
+    id: 'neon',
+    label: 'Neon glow',
+    patch: {
+      fontFamily: 'Montserrat',
+      fontSize: 46,
+      bold: true,
+      italic: false,
+      color: '#fdf4ff',
+      background: null,
+      backgroundPadding: 0,
+      shadow: true,
+      shadowColor: 'rgba(232,121,249,0.95)',
+      shadowBlur: 26,
+      strokeWidth: 3,
+      strokeColor: '#a21caf',
+      animation: 'fadeIn',
+    },
+  },
+  {
+    id: 'minimal',
+    label: 'Minimal clean',
+    patch: {
+      fontFamily: 'Montserrat',
+      fontSize: 38,
+      bold: false,
+      italic: false,
+      color: '#ffffff',
+      background: null,
+      backgroundPadding: 0,
+      shadow: true,
+      shadowColor: 'rgba(0,0,0,0.55)',
+      shadowBlur: 10,
+      strokeWidth: 0,
+      animation: 'fadeIn',
+    },
+  },
+  {
+    id: 'pop',
+    label: 'Social pop',
+    patch: {
+      fontFamily: 'Montserrat',
+      fontSize: 52,
+      bold: true,
+      italic: false,
+      color: '#ffffff',
+      background: null,
+      backgroundPadding: 0,
+      shadow: true,
+      shadowColor: 'rgba(0,0,0,0.5)',
+      shadowBlur: 6,
+      strokeWidth: 8,
+      strokeColor: '#0a0a12',
+      animation: 'bounceIn',
+    },
+  },
+  {
+    id: 'impact',
+    label: 'Impact meme',
+    patch: {
+      fontFamily: 'Anton',
+      fontSize: 68,
+      bold: false,
+      italic: false,
+      color: '#ffffff',
+      background: null,
+      backgroundPadding: 0,
+      shadow: false,
+      strokeWidth: 10,
+      strokeColor: '#000000',
+      textTransform: 'uppercase',
+      animation: 'pop',
+    },
+  },
+  {
+    id: 'lowerthird',
+    label: 'News bar',
+    patch: {
+      fontFamily: 'Montserrat',
+      fontSize: 36,
+      bold: true,
+      italic: false,
+      color: '#fafafa',
+      background: 'rgba(20,20,26,0.82)',
+      backgroundPadding: 18,
+      shadow: false,
+      strokeWidth: 0,
+      animation: 'slideUp',
+    },
+  },
 ]
 
 const CAPTION_LANGS = [
@@ -276,7 +387,15 @@ const CAPTION_LANGS = [
   { id: 'Urdu', label: 'Translate → Urdu' },
   { id: 'Spanish', label: 'Translate → Spanish' },
   { id: 'Arabic', label: 'Translate → Arabic' },
+  // Day 32 — wider multi-language set
+  { id: 'French', label: 'Translate → French' },
+  { id: 'German', label: 'Translate → German' },
+  { id: 'Portuguese', label: 'Translate → Portuguese' },
+  { id: 'Japanese', label: 'Translate → Japanese' },
 ]
+
+/** Day 32 — languages offered for re-translating EXISTING caption clips in place */
+const CAPTION_RETRANSLATE_LANGS = CAPTION_LANGS.filter((l) => l.id !== 'off')
 
 const SCRIPT_LANGS = ['Bangla', 'English', 'Hindi', 'Urdu', 'Spanish', 'Arabic']
 
@@ -963,6 +1082,113 @@ export function AIPanel() {
     }
   }, [selectedClip, clipMedia, captionBusy, captionStyleId, captionLang, addCaptionClips, updateClip])
 
+  /* ---------- Day 32 — restyle + re-translate EXISTING caption clips ---------- */
+  const captionCount = useEditor((s) => s.project.clips.reduce((n, c) => (c.isCaption ? n + 1 : n), 0))
+  const [restyleBusy, setRestyleBusy] = useState(false)
+  const [retransLang, setRetransLang] = useState('English')
+  const [retransBusy, setRetransBusy] = useState(false)
+  const [retransPhase, setRetransPhase] = useState('')
+
+  /** apply the picked preset to every caption clip on the timeline — one undo */
+  const handleApplyCaptionStyle = useCallback(() => {
+    const st = useEditor.getState()
+    const caps = st.project.clips.filter((c) => c.isCaption)
+    if (!caps.length) {
+      toast('No caption clips on the timeline — generate captions first')
+      return
+    }
+    setRestyleBusy(true)
+    try {
+      const preset = CAPTION_STYLE_PRESETS.find((p) => p.id === captionStyleId) ?? CAPTION_STYLE_PRESETS[0]
+      for (const c of caps) {
+        // same merge key for every clip → the whole restyle is ONE history step
+        st.updateClip(c.id, { textStyle: { ...(c.textStyle ?? {}), ...preset.patch } }, 'caption-style')
+      }
+      toast.success(`${preset.label} applied to ${caps.length} caption clip${caps.length === 1 ? '' : 's'} — one undo`)
+    } finally {
+      setRestyleBusy(false)
+    }
+  }, [captionStyleId])
+
+  /** re-translate every caption clip's content in place (same time grid, one undo) */
+  const handleRetranslateCaptions = useCallback(async () => {
+    const st = useEditor.getState()
+    const caps = st.project.clips.filter((c) => c.isCaption).sort((a, b) => a.start - b.start)
+    if (!caps.length) {
+      toast('No caption clips on the timeline — generate captions first')
+      return
+    }
+    requireOnline()
+    setRetransBusy(true)
+    setRetransPhase(`Translating ${caps.length} captions → ${retransLang}…`)
+    try {
+      const DELIM = '\n@@NC@@\n'
+      const joined = caps.map((c) => c.textStyle?.content ?? '').join(DELIM)
+      const res = await fetch('/api/ai/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'translate',
+          text: joined.slice(0, 6000),
+          language: retransLang,
+        }),
+      })
+      const data = (await res.json().catch(() => null)) as { text?: string; error?: string } | null
+      if (!res.ok || !data?.text) throw new Error(data?.error ?? `Translation failed (${res.status})`)
+
+      const st2 = useEditor.getState()
+      const live = st2.project.clips
+        .filter((c) => c.isCaption)
+        .sort((a, b) => a.start - b.start)
+      const parts = data.text.split(/@@NC@@/)
+      let done = 0
+      if (parts.length === live.length) {
+        // clean 1:1 rewrite — each caption keeps its window, gets new text
+        for (let i = 0; i < live.length; i++) {
+          const text = parts[i].trim()
+          if (!text) continue
+          st2.updateClip(
+            live[i].id,
+            { textStyle: { ...(live[i].textStyle ?? {}), content: text }, name: `CC: ${text.slice(0, 20)}` },
+            'caption-translate'
+          )
+          done++
+        }
+      } else {
+        // count drifted — redistribute the translated text over the SAME windows
+        const chunks = splitTranscriptChunks(data.text)
+        const totalChars = chunks.reduce((acc, c) => acc + c.length, 0) || 1
+        let acc = 0
+        for (const c of live) {
+          const windowChars = (c.duration / live.reduce((s, x) => s + x.duration, 0)) * totalChars
+          let text = ''
+          while (acc < chunks.length && text.length < windowChars) {
+            text += (text ? ' ' : '') + chunks[acc]
+            acc++
+          }
+          if (!text && acc < chunks.length) {
+            text = chunks[acc]
+            acc++
+          }
+          if (!text) break
+          st2.updateClip(
+            c.id,
+            { textStyle: { ...(c.textStyle ?? {}), content: text }, name: `CC: ${text.slice(0, 20)}` },
+            'caption-translate'
+          )
+          done++
+        }
+      }
+      if (!done) throw new Error('Translation came back empty — try again')
+      toast.success(`${done} caption${done === 1 ? '' : 's'} translated to ${retransLang} — one undo`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Caption translation failed')
+    } finally {
+      setRetransBusy(false)
+      setRetransPhase('')
+    }
+  }, [retransLang])
+
   /* ---------- silence cut ---------- */
   const [threshold, setThreshold] = useState(0.06)
   const [minSilence, setMinSilence] = useState(0.6)
@@ -1264,18 +1490,56 @@ export function AIPanel() {
                 <ClipChip clip={selectedClip} />
                 <div className="space-y-1.5">
                   <FieldLabel>Caption style</FieldLabel>
-                  <Select value={captionStyleId} onValueChange={setCaptionStyleId}>
-                    <SelectTrigger className="h-9 w-full text-xs">
-                      <SelectValue placeholder="Pick a style" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CAPTION_STYLE_PRESETS.map((p) => (
-                        <SelectItem key={p.id} value={p.id} className="text-xs">
-                          {p.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* Day 32 — styled preset gallery with live swatches */}
+                  <div className="grid grid-cols-3 gap-1.5" role="listbox" aria-label="Caption style presets">
+                    {CAPTION_STYLE_PRESETS.map((p) => {
+                      const active = captionStyleId === p.id
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          role="option"
+                          aria-selected={active}
+                          data-nc-cap-style={p.id}
+                          onClick={() => setCaptionStyleId(p.id)}
+                          className={`rounded-lg border px-1.5 py-2 text-center transition ${
+                            active
+                              ? 'border-fuchsia-400/70 bg-fuchsia-400/10'
+                              : 'border-(--nc-line) bg-(--nc-panel) hover:border-(--nc-line-strong)'
+                          }`}
+                        >
+                          <span
+                            className="block truncate text-[11px] leading-tight"
+                            style={{
+                              fontFamily: p.patch.fontFamily,
+                              color: p.patch.color ?? '#fff',
+                              fontWeight: p.patch.bold ? 800 : 500,
+                              background: p.patch.background ?? 'transparent',
+                              padding: p.patch.background ? '1px 4px' : 0,
+                              borderRadius: 4,
+                              WebkitTextStroke: p.patch.strokeWidth ? '0.6px ' + (p.patch.strokeColor ?? '#000') : undefined,
+                              textShadow: p.patch.shadow ? `0 1px 3px ${p.patch.shadowColor ?? 'rgba(0,0,0,.6)'}` : undefined,
+                              textTransform: p.patch.textTransform === 'uppercase' ? 'uppercase' : undefined,
+                            }}
+                          >
+                            Aa
+                          </span>
+                          <span className="mt-1 block truncate text-[8.5px] text-muted-foreground">{p.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={restyleBusy || captionCount === 0}
+                    onClick={handleApplyCaptionStyle}
+                    data-nc-cap-apply
+                    className="h-8 w-full rounded-lg border-(--nc-line) text-[11px]"
+                  >
+                    <Paintbrush className="size-3" />
+                    Apply style to {captionCount} caption{captionCount === 1 ? '' : 's'}
+                  </Button>
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5">
@@ -1312,6 +1576,45 @@ export function AIPanel() {
                     onCancel={cancelCaptions}
                   />
                 )}
+                {/* Day 32 — re-translate EXISTING caption clips in place */}
+                <div className="space-y-1.5 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2" data-nc-cap-retrans>
+                  <div className="flex items-center gap-1.5">
+                    <Languages className="size-3 text-fuchsia-300" aria-hidden />
+                    <FieldLabel>Translate existing captions</FieldLabel>
+                    <span className="ml-auto rounded-full border border-(--nc-line) px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                      {captionCount} on timeline
+                    </span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Select value={retransLang} onValueChange={setRetransLang}>
+                      <SelectTrigger className="h-8 flex-1 text-[11px]" data-nc-cap-lang>
+                        <SelectValue placeholder="Target language" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CAPTION_RETRANSLATE_LANGS.map((l) => (
+                          <SelectItem key={l.id} value={l.id} className="text-xs">
+                            {l.label.replace('Translate → ', '')}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={retransBusy || captionCount === 0}
+                      onClick={() => void handleRetranslateCaptions()}
+                      data-nc-cap-translate
+                      className="nc-gradient h-8 shrink-0 rounded-lg px-2.5 text-[11px] font-semibold text-white"
+                    >
+                      {retransBusy ? <Loader2 className="size-3 animate-spin" /> : <Languages className="size-3" />}
+                      {retransBusy ? 'Translating…' : 'Translate'}
+                    </Button>
+                  </div>
+                  {retransBusy && <p className="text-[9.5px] text-muted-foreground">{retransPhase}</p>}
+                  <p className="text-[9.5px] text-muted-foreground">
+                    Rewrites every caption clip in place — the same time grid, one undo.
+                  </p>
+                </div>
                 {translatedTranscript && (
                   <div className="space-y-1">
                     <FieldLabel>Translated ({captionLang})</FieldLabel>

@@ -29,9 +29,10 @@ export const AI_TOOLS: ProTool[] = [
   { id: 'ai-music-generator', name: 'AI Music Generator', section: 'ai', group: 'AI audio', status: 'beta', desc: 'Sixty four procedural music tracks render straight into the library' },
 
   // -------- AI captions & voice --------
-  { id: 'ai-speech-to-text', name: 'AI Speech-to-Text (Auto Caption)', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Auto captions transcribe the selected clip into styled caption clips', action: 'open-ai' },
+  { id: 'ai-speech-to-text', name: 'AI Speech-to-Text (Auto Caption)', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Auto captions transcribe the selected clip into styled caption clips — nine preset looks (chips, karaoke, neon, meme, news bar) with live swatches', action: 'open-ai' },
   { id: 'ai-text-to-speech', name: 'AI Text-to-Speech (TTS)', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'AI voiceover turns scripts into narrated audio, chunked automatically', action: 'open-ai' },
-  { id: 'ai-caption-translate', name: 'AI Caption Translate', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Translate transcripts to Bangla, English, Hindi and more before captioning', action: 'open-ai' },
+  { id: 'ai-caption-translate', name: 'AI Caption Translate', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Translate transcripts to 10 languages before captioning — or re-translate existing caption clips in place on the same time grid with one undo', action: 'open-ai' },
+  { id: 'ai-caption-style-presets', name: 'Styled Caption Presets', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Nine styled caption looks with live swatches — apply at generation or restyle every caption on the timeline in one undoable step', action: 'open-ai' },
 
   // -------- Utility AI --------
   { id: 'ai-chroma-key', name: 'Chroma Key (Green Screen)', section: 'ai', group: 'Utility AI', status: 'live', desc: 'Chroma section in clip properties keys green, blue or custom colors with spill suppression and edge shaping' },
