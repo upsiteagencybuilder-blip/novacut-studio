@@ -1655,3 +1655,22 @@ Stage Summary:
 - Day 39 shipped: natural-language asset search across stickers and procedural backgrounds with server-validated results and one-tap playhead placement.
 - Files: asset-registry.ts (new), api/ai/assets/route.ts (new), AIPanel.tsx, sections/ai.ts.
 - Next: Day 40 — AI ops dashboard (latency/cost visible) + Category D audit.
+---
+Task ID: Day-40
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 40 — AI ops dashboard (latency/cost visible) + Category D audit.
+
+Work Log:
+- NEW lib/server/ai-ops.ts — an in-memory AI ops ledger (ring buffer 400 ops): route, latency, outcome, in/out chars, payload bytes. Anchored on globalThis (Next dev compiles per-route module graphs — a plain module array forked per route, first fix). Aggregates: calls, errors, avg/p95 latency, est tokens (chars/4) and a DIRECTIONAL cost estimate for LLM routes ($0.6/M in · $2.2/M out — documented as estimates, not a bill); TTS/image/transcribe track latency + payload size with cost "—".
+- All 7 AI routes instrumented (copilot, assistant, bgm, assets, tts, image, transcribe) — success AND error paths record.
+- GET /api/ai/ops (force-dynamic — the first empty GET was otherwise cached forever, second fix) serves the snapshot + the price-model disclosure.
+- AI Ops card (Assistant tab): live per-route table (route, calls, error badges, avg/p95, ~tokens, ~cost) + session total + refresh + the honest scope note.
+- Catalog: +1 live ai-ops-dashboard. AI catalog now 21 live / 8 planned.
+- E2E receipts (desktop 1280×800): live ops table reproduced — "3 calls this session": assets 2 calls · avg 1.0s · p95 1.1s · 0.1k tokens · $0.0002; tts 1 call · 1.5s · — (payload-only); bgm 1 call · 0.9s · $0.00008 (curl cross-check matches the in-page table).
+- CATEGORY D AUDIT (Days 31–40) — receipts re-run in one sweep, all reproduce: D31 copilot harness plan pastLen 0→1 with single-undo revert; D32 caption restyle (2 captions → karaoke #facc15/Anton/stroke 7, one undo restores, pastDelta 0 duplicates avoided by the merge key); D33 TTS route 200 with 248 KB audio; D34 BGM "Hype gaming intro" → EDM Uplifting · Am @ 0s · 8s (vol 0.6, mood-matched note); D35 reframe harness — synthetic subject centroid (0.702, 0.740) inside the subject bounds, 9:16 window width 0.316 theory-exact; D36 thumbnail scorer — bright frame exposure 0.62 vs dark 0.00, rankFrames best-first; D38 one-tap jump-cut through the REAL UI → "3 cuts removed 2.6s (6s → 3.4s) — padding 80ms", kept 3.4s theory-exact; D39 asset search 2 queries → 5 registry-validated mixed-kind results; D40 ops dashboard live. (D37 storyboard receipts: assistant route 200s in the server log, per-day E2E stands.)
+- Audit process notes disclosed: one inline replica during the audit used stale pre-fix ranges (kept 2.6s) — discarded; the REAL UI flow re-run reproduced 3.4s exactly. A BGM same-tick chip+generate click read a stale empty mood (documented Day 34 test-note) — re-run with separate ticks matched the mood exactly. Mobile 390×844: Assistant sheet renders the ops table (3 rows); screenshots both viewports; zero real errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 40 shipped: every AI route is instrumented with a visible ops dashboard (calls, latency, error badges, directional token/cost estimates) — and the full Category D audit passed with all receipts reproducing.
+- Files: lib/server/ai-ops.ts (new), api/ai/ops/route.ts (new), 7 instrumented routes, AIPanel.tsx, sections/ai.ts.
+- CATEGORY D (AI Studio) COMPLETE: Days 31–40 all live with receipts. Next: Category E — Cloud, Sync & Collaboration (Days 41–50).

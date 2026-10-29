@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+import { recordOp } from '@/lib/server/ai-ops'
+
 export const runtime = 'nodejs'
 
 /**
@@ -23,9 +25,12 @@ interface TtsBody {
 }
 
 export async function POST(req: Request) {
+  const __t0 = Date.now()
+  let __in = 0
   try {
     const body = (await req.json().catch(() => null)) as TtsBody | null
     const text = typeof body?.text === 'string' ? body.text : ''
+    __in = text.length
     if (!text.trim()) {
       return NextResponse.json({ error: 'text is required' }, { status: 400 })
     }
@@ -49,11 +54,13 @@ export async function POST(req: Request) {
     })) as { arrayBuffer: () => Promise<ArrayBuffer> }
     const arrayBuffer = await response.arrayBuffer()
     const base64 = Buffer.from(new Uint8Array(arrayBuffer)).toString('base64')
+    recordOp({ route: '/api/ai/tts', ms: Date.now() - __t0, ok: true, inChars: __in, outChars: 0, bytes: arrayBuffer.byteLength, ts: Date.now() })
 
     return NextResponse.json({ audioBase64: base64, mimeType: 'audio/wav' })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Speech synthesis failed'
     console.error('[api/ai/tts]', e)
+    recordOp({ route: '/api/ai/tts', ms: Date.now() - __t0, ok: false, inChars: __in, outChars: 0, ts: Date.now() })
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

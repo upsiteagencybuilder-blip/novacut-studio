@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+import { recordOp } from '@/lib/server/ai-ops'
+
 import { COLOR_EFFECTS } from '@/lib/effects/color'
 import { MOTION_EFFECTS } from '@/lib/effects/motion'
 import { ALL_STICKER_DEFS } from '@/lib/editor/sticker-render'
@@ -104,9 +106,13 @@ function sanitizeHistory(raw: unknown): string {
 }
 
 export async function POST(req: Request) {
+  const __t0 = Date.now()
+  let __in = 0
+  let __out = 0
   try {
     const body = (await req.json().catch(() => null)) as CopilotBody | null
     const command = typeof body?.command === 'string' ? body.command.trim().slice(0, MAX_COMMAND) : ''
+    __in = command.length
     if (!command) {
       return NextResponse.json({ error: 'command is required' }, { status: 400 })
     }
@@ -154,11 +160,14 @@ Project: ${JSON.stringify(context).slice(0, 2500)}`,
           .slice(0, MAX_ACTIONS)
       : []
     const note = typeof parsed.note === 'string' ? parsed.note.slice(0, 400) : ''
+    __out = note.length + actions.length * 60
+    recordOp({ route: '/api/ai/copilot', ms: Date.now() - __t0, ok: true, inChars: __in, outChars: __out, ts: Date.now() })
 
     return NextResponse.json({ actions, note })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Copilot planning failed'
     console.error('[api/ai/copilot]', e)
+    recordOp({ route: '/api/ai/copilot', ms: Date.now() - __t0, ok: false, inChars: __in, outChars: __out, ts: Date.now() })
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+import { recordOp } from '@/lib/server/ai-ops'
+
 export const runtime = 'nodejs'
 
 /**
@@ -36,6 +38,9 @@ function scriptSystem(kind: string, language: string, tone: string, seconds: num
 }
 
 export async function POST(req: Request) {
+  const __t0 = Date.now()
+  let __in = 0
+  let __out = 0
   try {
     const body = (await req.json().catch(() => null)) as AssistantBody | null
     const mode =
@@ -161,10 +166,14 @@ export async function POST(req: Request) {
 
     const text = content.trim()
     if (!text) {
+      recordOp({ route: '/api/ai/assistant', ms: Date.now() - __t0, ok: false, inChars: __in, outChars: 0, ts: Date.now() })
       return NextResponse.json({ error: 'The assistant returned an empty response' }, { status: 502 })
     }
+    __out = text.length
+    recordOp({ route: '/api/ai/assistant', ms: Date.now() - __t0, ok: true, inChars: __in, outChars: __out, ts: Date.now() })
     return NextResponse.json({ text: text.slice(0, MAX_INPUT) })
   } catch (e) {
+    recordOp({ route: '/api/ai/assistant', ms: Date.now() - __t0, ok: false, inChars: __in, outChars: __out, ts: Date.now() })
     const message = e instanceof Error ? e.message : 'Assistant request failed'
     console.error('[api/ai/assistant]', e)
     return NextResponse.json({ error: message }, { status: 500 })

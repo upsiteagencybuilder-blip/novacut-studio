@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+import { recordOp } from '@/lib/server/ai-ops'
+
 export const runtime = 'nodejs'
 
 /**
@@ -13,6 +15,8 @@ interface TranscribeBody {
 }
 
 export async function POST(req: Request) {
+  const __t0 = Date.now()
+  let __in = 0
   try {
     const body = (await req.json().catch(() => null)) as TranscribeBody | null
     const audioBase64 = body?.audioBase64
@@ -28,8 +32,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No speech detected in the selected audio' }, { status: 422 })
     }
 
+    recordOp({ route: '/api/ai/transcribe', ms: Date.now() - __t0, ok: true, inChars: __in, outChars: text.length, ts: Date.now() })
     return NextResponse.json({ text })
   } catch (e) {
+    recordOp({ route: '/api/ai/transcribe', ms: Date.now() - __t0, ok: false, inChars: __in, outChars: 0, ts: Date.now() })
     const message = e instanceof Error ? e.message : 'Transcription failed'
     console.error('[api/ai/transcribe]', e)
     return NextResponse.json({ error: message }, { status: 500 })

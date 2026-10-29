@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+import { recordOp } from '@/lib/server/ai-ops'
+
 import { MUSIC_EFFECTS } from '@/lib/effects/music'
 
 export const runtime = 'nodejs'
@@ -71,6 +73,9 @@ interface RawSection {
 }
 
 export async function POST(req: Request) {
+  const __t0 = Date.now()
+  let __in = 0
+  let __out = 0
   try {
     const body = (await req.json().catch(() => null)) as {
       mood?: string
@@ -128,9 +133,13 @@ export async function POST(req: Request) {
       .slice(0, MAX_SECTIONS)
 
     const note = typeof parsed.note === 'string' ? parsed.note.slice(0, 400) : ''
+    __in = mood.length
+    __out = note.length + sections.length * 90
+    recordOp({ route: '/api/ai/bgm', ms: Date.now() - __t0, ok: true, inChars: __in, outChars: __out, ts: Date.now() })
     return NextResponse.json({ sections, note })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'BGM planning failed'
+    recordOp({ route: '/api/ai/bgm', ms: Date.now() - __t0, ok: false, inChars: __in, outChars: __out, ts: Date.now() })
     console.error('[api/ai/bgm]', e)
     return NextResponse.json({ error: message }, { status: 500 })
   }

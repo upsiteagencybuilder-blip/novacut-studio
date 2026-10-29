@@ -992,6 +992,103 @@ function BgmDirectorCard() {
   )
 }
 
+/* ================= AI ops dashboard (Day 40) ================= */
+
+interface OpsRouteStats {
+  route: string
+  calls: number
+  errors: number
+  avgMs: number
+  p95Ms: number
+  estTokensIn: number
+  estTokensOut: number
+  estCostUsd: number
+}
+
+function OpsCard() {
+  const [ops, setOps] = useState<{ routes: OpsRouteStats[]; totalCalls: number } | null>(null)
+  const [opsBusy, setOpsBusy] = useState(false)
+
+  const refreshOps = useCallback(async () => {
+    setOpsBusy(true)
+    try {
+      const res = await fetch('/api/ai/ops')
+      const data = (await res.json().catch(() => null)) as { routes?: OpsRouteStats[]; totalCalls?: number } | null
+      if (res.ok && data) setOps({ routes: data.routes ?? [], totalCalls: data.totalCalls ?? 0 })
+    } catch {
+      toast.error('Ops snapshot failed')
+    } finally {
+      setOpsBusy(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshOps()
+  }, [refreshOps])
+
+  return (
+    <FeatureCard icon={Zap} title="AI Ops" subtitle="Latency, calls and estimated cost — visible">
+      {ops && ops.routes.length > 0 ? (
+        <div className="space-y-1.5" data-nc-ops>
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+            <span>
+              {ops.totalCalls} call{ops.totalCalls === 1 ? '' : 's'} this session
+            </span>
+            <button
+              type="button"
+              onClick={() => void refreshOps()}
+              disabled={opsBusy}
+              data-nc-ops-refresh
+              className="rounded border border-(--nc-line) px-1.5 py-0.5 text-[9px] transition hover:text-foreground disabled:opacity-50"
+            >
+              {opsBusy ? '…' : 'Refresh'}
+            </button>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-(--nc-line)">
+            <table className="w-full text-[9.5px]" aria-label="AI operations per route">
+              <thead>
+                <tr className="bg-(--nc-panel) text-left text-muted-foreground">
+                  <th className="px-2 py-1 font-medium">Route</th>
+                  <th className="px-1.5 py-1 font-medium">Calls</th>
+                  <th className="px-1.5 py-1 font-medium">Avg</th>
+                  <th className="px-1.5 py-1 font-medium">p95</th>
+                  <th className="px-1.5 py-1 font-medium">~Tokens</th>
+                  <th className="px-2 py-1 text-right font-medium">~Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ops.routes.map((r) => (
+                  <tr key={r.route} className="border-t border-(--nc-line) tabular-nums">
+                    <td className="px-2 py-1 font-mono text-[8.5px] text-foreground" title={r.route}>
+                      {r.route.replace('/api/ai/', '')}
+                      {r.errors > 0 ? <span className="ml-1 text-amber-400">⚠{r.errors}</span> : null}
+                    </td>
+                    <td className="px-1.5 py-1">{r.calls}</td>
+                    <td className="px-1.5 py-1">{(r.avgMs / 1000).toFixed(1)}s</td>
+                    <td className="px-1.5 py-1">{(r.p95Ms / 1000).toFixed(1)}s</td>
+                    <td className="px-1.5 py-1">
+                      {r.estTokensIn + r.estTokensOut > 0 ? `${((r.estTokensIn + r.estTokensOut) / 1000).toFixed(1)}k` : '—'}
+                    </td>
+                    <td className="px-2 py-1 text-right">{r.estCostUsd > 0 ? `$${r.estCostUsd.toFixed(4)}` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[9px] leading-snug text-muted-foreground/60">
+            Session-scoped (since server start). Tokens ≈ chars/4; cost is a directional estimate ($0.6/M in · $2.2/M
+            out) — not a bill. TTS/image/transcribe track latency and payload size only.
+          </p>
+        </div>
+      ) : (
+        <p className="text-[10px] text-muted-foreground">
+          No AI calls recorded yet this session — use any AI tool and refresh.
+        </p>
+      )}
+    </FeatureCard>
+  )
+}
+
 /* ================= AI asset search (Day 39) ================= */
 
 const ASSET_IDEAS = ['cozy coffee vlog', 'gaming intro fire', 'travel ocean vibes', 'beauty pastel soft']
@@ -2518,6 +2615,7 @@ export function AIPanel() {
           <AssetSearchCard />
           <StoryboardCard />
           <ScriptWriterCard />
+          <OpsCard />
         </>
       )}
 

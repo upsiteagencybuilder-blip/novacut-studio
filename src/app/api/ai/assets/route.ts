@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+import { recordOp } from '@/lib/server/ai-ops'
+
 import { BACKGROUND_PRESETS } from '@/lib/editor/asset-registry'
 import { ALL_STICKER_DEFS } from '@/lib/editor/sticker-render'
 
@@ -57,6 +59,9 @@ function extractJson(raw: string): { results?: unknown; note?: unknown } | null 
 }
 
 export async function POST(req: Request) {
+  const __t0 = Date.now()
+  let __in = 0
+  let __out = 0
   try {
     const body = (await req.json().catch(() => null)) as { query?: string } | null
     const query = typeof body?.query === 'string' ? body.query.trim().slice(0, MAX_QUERY) : ''
@@ -106,9 +111,13 @@ export async function POST(req: Request) {
       .slice(0, MAX_RESULTS)
 
     const note = typeof parsed.note === 'string' ? parsed.note.slice(0, 300) : ''
+    __in = query.length
+    __out = note.length + results.length * 70
+    recordOp({ route: '/api/ai/assets', ms: Date.now() - __t0, ok: true, inChars: __in, outChars: __out, ts: Date.now() })
     return NextResponse.json({ results, note })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Asset search failed'
+    recordOp({ route: '/api/ai/assets', ms: Date.now() - __t0, ok: false, inChars: __in, outChars: __out, ts: Date.now() })
     console.error('[api/ai/assets]', e)
     return NextResponse.json({ error: message }, { status: 500 })
   }
