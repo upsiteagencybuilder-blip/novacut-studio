@@ -151,3 +151,31 @@ export async function cloudDeleteManifest(deviceId: string, localId: string): Pr
     { method: 'DELETE' },
   )
 }
+
+/* ---------- Day 42 — asset binary upload pipeline ---------- */
+
+export interface AssetUploadStatus {
+  assetId: string
+  name: string
+  size: number
+  uploaded: boolean
+  uploadedAt: string | null
+}
+
+/** Which of the project's media binaries are stored on the server. */
+export async function cloudGetAssetStatus(deviceId: string, projectId: string): Promise<{
+  assets: AssetUploadStatus[]
+  uploadedCount: number
+  count: number
+}> {
+  return jsonFetch(
+    `/api/cloud/assets?deviceId=${encodeURIComponent(deviceId)}&projectId=${encodeURIComponent(projectId)}`,
+  )
+}
+
+export async function cloudDeleteAssetBinaries(deviceId: string, projectId: string): Promise<void> {
+  await jsonFetch(
+    `/api/cloud/assets?deviceId=${encodeURIComponent(deviceId)}&projectId=${encodeURIComponent(projectId)}`,
+    { method: 'DELETE' },
+  )
+}

@@ -1696,3 +1696,23 @@ Stage Summary:
 - Day 41 shipped: cloud backups now carry a sha-256 manifest of every referenced media file — content identity the re-link/dedupe days (42/46) build on; verification is one tap.
 - Files: lib/cloud/manifest.ts (new), api/cloud/manifest/route.ts (new), prisma/schema.prisma (+CloudAsset), lib/cloud/client.ts, api/cloud/projects/route.ts, ProjectsDialog.tsx, sections/panels.ts.
 - Next: Day 42 — asset upload pipeline (media binaries travel with the backup).
+
+---
+Task ID: Day-42
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 42 — Asset upload pipeline (media binaries travel with the backup).
+
+Work Log:
+- Prisma: CloudAsset + `data` (base64 TEXT, null = manifest-only) + `uploadedAt` (set only after server-side hash verification) — pushed.
+- NEW /api/cloud/assets route: POST stores one binary AFTER decoding and re-hashing it server-side (node:crypto sha-256 must equal the Day-41 manifest hash — integrity is ENFORCED, not trusted from the client; mismatch → 400 with expected/actual disclosed); GET = upload status list OR one binary (assetId param); DELETE = drop binaries, keep manifest rows. Documented caps: 12 MB per payload, 64 MB stored per device (413 on breach), base64-in-TEXT chosen because the deployment DB is SQLite-dialect (local dev + Turso).
+- lib/cloud/manifest.ts: blobToBase64 (chunked 0x8000 — the spread trick dies on multi-MB buffers) + uploadProjectMedia() — reads blobs from IndexedDB, skips what the server already has (delta upload), per-file progress callback, failed entries listed with reasons.
+- backupWithManifest() now ends with the delta upload + a fresh status read; receipt toast: "structure + manifest (4 files · 1.1 MB) · binaries 4/4 verified". Cloud strip v2: "binaries N/M on server" (emerald when full, amber when missing) + conditional "Upload media" button (only when a delta exists) + live "uploading file (i/N)…" note.
+- Real restart lesson: the running dev server kept the OLD PrismaClient on globalThis after db:push — new uploadedAt queries 503'd until the server restarted. Documented as the standard cost of schema pushes under the globalThis-anchored client.
+- API receipts (python urllib, desktop): manifest entry → upload {"ok":true,"bytes":103876,"hashVerified":true} → TAMPERED payload (4 chars flipped) rejected 400 "hash mismatch" with expected/actual → status 1/1 → round-trip download byte-exact.
+- UI receipts (desktop 1280×800): backup toast "binaries 4/4 verified", strip "4 files · 1.1 MB · sha-256 · binaries 4/4 on server"; curl integrity sweep — all 4 server binaries (mountains.jpg/neon-city.jpg/novacut-vibe.wav/sunrise.jpg) sha-256 MATCH their manifest hashes; DELETE binaries → reopen → strip honestly shows "binaries 0/4 on server" (amber) → Upload media → toast "Media uploaded — 4 file(s) · 1.1 MB · sha-256 verified" → 4/4.
+- E2E mobile 390×844: same delta flow re-run — Upload media visible only when 0/4, click → "Media uploaded — 4 file(s) · 1.1 MB · sha-256 verified" → 4/4; screenshots both viewports; zero console/page errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 42 shipped: media binaries now travel with the backup — delta-uploaded, sha-256-verified on the server, re-downloadable byte-exact. Cross-device restore has everything it needs except the re-link UI (Day 46).
+- Files: api/cloud/assets/route.ts (new), lib/cloud/manifest.ts, lib/cloud/client.ts, prisma/schema.prisma, ProjectsDialog.tsx, sections/panels.ts (+1 panel-asset-upload).
+- Next: Day 43 — project versioning (snapshot history, restore any version).

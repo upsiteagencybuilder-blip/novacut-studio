@@ -26,12 +26,14 @@ import {
   ShieldCheck,
   Trash2,
   TriangleAlert,
+  UploadCloud,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
 import * as db from '@/lib/editor/db'
 import {
   cloudDeleteProject,
+  cloudGetAssetStatus,
   cloudGetManifest,
   cloudHealth,
   cloudListProjects,
@@ -44,7 +46,7 @@ import {
   type ManifestSummary,
 } from '@/lib/cloud/client'
 import { captureThumbnail, isCloudProjectPayload } from '@/lib/cloud/backup'
-import { buildProjectManifest, checkManifestAgainstLocal } from '@/lib/cloud/manifest'
+import { buildProjectManifest, checkManifestAgainstLocal, uploadProjectMedia } from '@/lib/cloud/manifest'
 import { formatBytes } from '@/lib/editor/utils'
 import { cn } from '@/lib/utils'
 import {
@@ -73,13 +75,22 @@ interface BackupReceipt {
   manifestCount: number
   totalBytes: number
   missing: number
+  /** Day 42 — binaries stored on the server after the delta upload */
+  binariesOnServer: number
+  binaryFiles: number
+  uploadedBytes: number
+  failed: number
 }
 
 /**
- * Day 41 — shared backup flow: structure payload + media manifest.
- * Returns a receipt so both entry points can toast the same truth.
+ * Day 41+42 — shared backup flow: structure payload + media manifest +
+ * delta upload of the binaries (server verifies every sha-256).
  */
-async function backupWithManifest(project: Project): Promise<BackupReceipt> {
+async function backupWithManifest(
+  project: Project,
+  onUploadProgress?: (file: string, index: number, total: number) => void,
+): Promise<BackupReceipt> {
+  const deviceId = getDeviceId()
   await cloudSyncProject({
     localId: project.id,
     name: project.name,
@@ -90,11 +101,23 @@ async function backupWithManifest(project: Project): Promise<BackupReceipt> {
   })
 
   const manifest = await buildProjectManifest(project)
-  await cloudSyncManifest(getDeviceId(), project.id, manifest.entries)
+  await cloudSyncManifest(deviceId, project.id, manifest.entries)
+
+  // Day 42 — upload binaries the server doesn't already have
+  const status = await cloudGetAssetStatus(deviceId, project.id).catch(() => ({ assets: [], uploadedCount: 0, count: 0 }))
+  const upload = await uploadProjectMedia(deviceId, project.id, manifest.entries, status.assets, (p) =>
+    onUploadProgress?.(p.file, p.index, p.total),
+  )
+
+  const after = await cloudGetAssetStatus(deviceId, project.id).catch(() => null)
   return {
     manifestCount: manifest.entries.length,
     totalBytes: manifest.totalBytes,
     missing: manifest.missing.length,
+    binariesOnServer: after?.uploadedCount ?? upload.uploaded.length,
+    binaryFiles: after?.count ?? manifest.entries.length,
+    uploadedBytes: upload.totalBytes,
+    failed: upload.failed.length,
   }
 }
 
@@ -135,6 +158,9 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
   const [manifest, setManifest] = useState<ManifestSummary | null>(null)
   const [verifying, setVerifying] = useState(false)
   const [verifyNote, setVerifyNote] = useState<string | null>(null)
+  const [binaries, setBinaries] = useState<{ uploadedCount: number; count: number } | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadNote, setUploadNote] = useState<string | null>(null)
 
   const currentProject = useEditor((s) => s.project)
 
@@ -150,11 +176,19 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
 
   const refreshManifest = useCallback(async () => {
     setVerifyNote(null)
+    const deviceId = getDeviceId()
+    const pid = useEditor.getState().project.id
     try {
-      const m = await cloudGetManifest(getDeviceId(), useEditor.getState().project.id)
+      const m = await cloudGetManifest(deviceId, pid)
       setManifest(m)
     } catch {
       setManifest(null)
+    }
+    try {
+      const b = await cloudGetAssetStatus(deviceId, pid)
+      setBinaries({ uploadedCount: b.uploadedCount, count: b.count })
+    } catch {
+      setBinaries(null)
     }
   }, [])
 
@@ -188,18 +222,52 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
     setBackingUp(true)
     try {
       const project = useEditor.getState().project
-      const receipt = await backupWithManifest(project)
+      const receipt = await backupWithManifest(project, (file, index, total) =>
+        setUploadNote(`uploading ${file} (${index}/${total})…`),
+      )
       toast.success(
-        `"${project.name}" backed up — structure + media manifest (${receipt.manifestCount} files · ${formatBytes(receipt.totalBytes)})`,
+        `"${project.name}" backed up — structure + manifest (${receipt.manifestCount} files · ${formatBytes(receipt.totalBytes)}) · binaries ${receipt.binariesOnServer}/${receipt.binaryFiles} verified`,
       )
       if (receipt.missing > 0) {
         toast.warning(`${receipt.missing} referenced media file(s) are missing on this device — manifest covers the rest`)
       }
+      if (receipt.failed > 0) {
+        toast.warning(`${receipt.failed} upload(s) failed — use "Upload media" to retry`)
+      }
+      setUploadNote(null)
       await Promise.all([refresh(), refreshManifest()])
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Cloud backup failed')
     } finally {
       setBackingUp(false)
+    }
+  }
+
+  const handleUploadMedia = async () => {
+    if (uploading || !manifest) return
+    setUploading(true)
+    setUploadNote(null)
+    try {
+      const deviceId = getDeviceId()
+      const pid = useEditor.getState().project.id
+      const status = await cloudGetAssetStatus(deviceId, pid)
+      const result = await uploadProjectMedia(deviceId, pid, manifest.assets, status.assets, (p) =>
+        setUploadNote(`uploading ${p.file} (${p.index}/${p.total})…`),
+      )
+      setUploadNote(null)
+      if (result.failed.length === 0) {
+        toast.success(`Media uploaded — ${result.uploaded.length} file(s) · ${formatBytes(result.totalBytes)} · sha-256 verified`)
+      } else {
+        toast.error(
+          `${result.failed.length} upload(s) failed: ${result.failed.map((f) => `${f.name} (${f.error})`).join(', ')}`,
+        )
+      }
+      await refreshManifest()
+    } catch (e) {
+      setUploadNote(null)
+      toast.error(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -269,7 +337,7 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
         </p>
       )}
 
-      {/* Day 41 — media manifest strip for the CURRENT project */}
+      {/* Day 41+42 — media manifest + binary upload strip for the CURRENT project */}
       <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold">
@@ -277,16 +345,30 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
             Media manifest
           </p>
           {manifest && manifest.count > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 border border-(--nc-line-strong) px-2 text-[10px] hover:border-fuchsia-400/50 hover:text-foreground"
-              disabled={verifying || cloudUnavailable}
-              onClick={() => void handleVerify()}
-            >
-              {verifying ? <Loader2 className="size-3 animate-spin" /> : <ShieldCheck className="size-3" />}
-              Verify hashes
-            </Button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {binaries && binaries.uploadedCount < binaries.count && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 border border-(--nc-line-strong) px-2 text-[10px] hover:border-fuchsia-400/50 hover:text-foreground"
+                  disabled={uploading || cloudUnavailable}
+                  onClick={() => void handleUploadMedia()}
+                >
+                  {uploading ? <Loader2 className="size-3 animate-spin" /> : <UploadCloud className="size-3" />}
+                  Upload media
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 border border-(--nc-line-strong) px-2 text-[10px] hover:border-fuchsia-400/50 hover:text-foreground"
+                disabled={verifying || cloudUnavailable}
+                onClick={() => void handleVerify()}
+              >
+                {verifying ? <Loader2 className="size-3 animate-spin" /> : <ShieldCheck className="size-3" />}
+                Verify
+              </Button>
+            </div>
           )}
         </div>
         {manifest && manifest.count > 0 ? (
@@ -294,11 +376,18 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
             {manifest.count} file{manifest.count === 1 ? '' : 's'} · {formatBytes(manifest.totalBytes)} · sha-256
             {manifest.syncedAt && ` · synced ${formatDistanceToNow(new Date(manifest.syncedAt), { addSuffix: true })}`}
             {verifyNote && <span className="text-emerald-300"> · {verifyNote}</span>}
+            {binaries && binaries.count > 0 && (
+              <span className={binaries.uploadedCount === binaries.count ? 'text-emerald-300' : 'text-amber-300'}>
+                {' '}· binaries {binaries.uploadedCount}/{binaries.count} on server
+              </span>
+            )}
+            {uploading && uploadNote && <span className="text-sky-300"> · {uploadNote}</span>}
+            {!uploading && uploadNote && <span> · {uploadNote}</span>}
           </p>
         ) : (
           <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
             No manifest synced for this project yet — a cloud backup stores the sha-256 hash map of every
-            media file it references.
+            media file it references, then uploads the binaries with server-side hash verification.
           </p>
         )}
       </div>
@@ -387,9 +476,9 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
       )}
 
       <p className="text-[9.5px] leading-relaxed text-muted-foreground/70">
-        Backups save the project structure PLUS a sha-256 manifest of every referenced media file.
-        Binaries still live in this browser — same-device restores are complete; other devices can
-        see exactly which files they are missing.
+        Backups save the project structure PLUS a sha-256 manifest, and the media binaries upload with
+        server-side hash verification (12 MB per file, 64 MB per device). Restores on any device can
+        re-link the exact files.
       </p>
     </div>
   )

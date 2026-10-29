@@ -62,6 +62,10 @@ model CloudAsset {
   height    Int      @default(0)
   /// sha-256 hex of the blob — content identity for re-link + dedupe
   hash      String
+  /// base64 of the blob once uploaded (Day 42) — null = manifest-only
+  data      String?
+  /// server-verified upload timestamp (set only after hash verification)
+  uploadedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -115,3 +115,80 @@ export async function checkManifestAgainstLocal(entries: ManifestEntry[]): Promi
   }
   return out
 }
+
+/* ---------- Day 42 — asset upload pipeline ---------- */
+
+/** Blob → base64 (chunked — the spread trick dies on multi-MB buffers). */
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = new Uint8Array(await blob.arrayBuffer())
+  let binary = ''
+  const CHUNK = 0x8000
+  for (let i = 0; i < buf.length; i += CHUNK) {
+    binary += String.fromCharCode(...buf.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
+export interface UploadProgress {
+  file: string
+  index: number
+  total: number
+}
+
+export interface UploadResult {
+  uploaded: { assetId: string; name: string; bytes: number }[]
+  skipped: { assetId: string; name: string }[]
+  failed: { assetId: string; name: string; error: string }[]
+  totalBytes: number
+}
+
+/**
+ * Upload every manifest-entry binary that the server doesn't already have.
+ * The server re-verifies each payload's sha-256 against the manifest hash —
+ * integrity is enforced, never assumed.
+ */
+export async function uploadProjectMedia(
+  deviceId: string,
+  projectId: string,
+  entries: ManifestEntry[],
+  status: { assetId: string; uploaded: boolean }[],
+  onProgress?: (p: UploadProgress) => void,
+): Promise<UploadResult> {
+  const uploadedSet = new Set(status.filter((s) => s.uploaded).map((s) => s.assetId))
+  const result: UploadResult = { uploaded: [], skipped: [], failed: [], totalBytes: 0 }
+
+  let index = 0
+  for (const entry of entries) {
+    index += 1
+    onProgress?.({ file: entry.name, index, total: entries.length })
+
+    if (uploadedSet.has(entry.assetId)) {
+      result.skipped.push({ assetId: entry.assetId, name: entry.name })
+      continue
+    }
+    const record = await idb.getAsset(entry.assetId).catch(() => undefined)
+    if (!record) {
+      result.failed.push({ assetId: entry.assetId, name: entry.name, error: 'missing on this device' })
+      continue
+    }
+    try {
+      const dataBase64 = await blobToBase64(record.blob)
+      const res = await fetch('/api/cloud/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, projectId, assetId: entry.assetId, dataBase64 }),
+      })
+      const body = (await res.json().catch(() => ({}))) as { error?: string; bytes?: number }
+      if (!res.ok) throw new Error(body.error || `upload failed (${res.status})`)
+      result.uploaded.push({ assetId: entry.assetId, name: entry.name, bytes: body.bytes ?? entry.size })
+      result.totalBytes += body.bytes ?? entry.size
+    } catch (e) {
+      result.failed.push({
+        assetId: entry.assetId,
+        name: entry.name,
+        error: e instanceof Error ? e.message : 'upload failed',
+      })
+    }
+  }
+  return result
+}
