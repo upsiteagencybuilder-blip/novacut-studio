@@ -27,6 +27,7 @@ import { Timeline } from '@/components/editor/timeline/Timeline'
 import { ExportDialog } from '@/components/editor/dialogs/ExportDialog'
 import { ProjectsDialog } from '@/components/editor/dialogs/ProjectsDialog'
 import { ShortcutsDialog } from '@/components/editor/dialogs/ShortcutsDialog'
+import { FeedbackDialog } from '@/components/editor/dialogs/FeedbackDialog'
 import { MixerDialog } from '@/components/editor/dialogs/MixerDialog'
 import { VersionsDialog } from '@/components/editor/dialogs/VersionsDialog'
 import { ThemeStudioDialog } from '@/components/editor/dialogs/ThemeStudioDialog'
@@ -617,6 +618,7 @@ export function EditorShell() {
       <ExportDialog />
       <ProjectsDialog />
       <ShortcutsDialog />
+      <FeedbackDialog />
       <MixerDialog />
       <VersionsDialog />
       <ThemeStudioDialog />

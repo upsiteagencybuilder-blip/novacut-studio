@@ -1806,3 +1806,22 @@ Stage Summary:
 - Day 46 shipped: restoring a cloud project on a fresh device now offers one-tap, hash-verified media re-link — the last manual step of cross-device editing is gone.
 - Files: lib/cloud/relink.ts (new), lib/cloud/client.ts, ProjectsDialog.tsx.
 - Next: Day 47 — in-app feedback widget → existing Feedback model.
+
+---
+Task ID: Day-47
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 47 — In-app feedback widget → existing Feedback model wiring.
+
+Work Log:
+- NEW /api/feedback route: POST writes to the EXISTING Feedback model (deviceId + optional rating 1–5 + message ≤ 2000) with an honest server-enforced rate limit — 5 messages/hour/device → 429 "Feedback limit reached (5 per hour) — thanks for the enthusiasm, try again later"; response reports sentThisHour + totalFromDevice. GET ?deviceId → total + last timestamp (the widget's status line).
+- NEW FeedbackDialog: header "Send feedback" button (MessageSquareHeart, next to shortcuts) → dialog with a 5-star radiogroup (toggleable, amber fill) + 2000-char counter textarea + live status line ("N sent from this device · last X ago") + Send disabled at zero chars; success resets the form and updates the count from the server response.
+- types.ts: DialogName + 'feedback'; EditorShell mounts FeedbackDialog; TopBar adds the button.
+- Catalog: +1 live panel-feedback-widget (header-entry, no deep-link action needed).
+- API receipts (python): rating-5 post → {ok, sentThisHour 1, totalFromDevice 1}; second post → 2; GET echoes total 2 + last timestamp; burst to the 6th within the hour → 429 with the honest message.
+- UI receipts (desktop 1280×800): header button → dialog; 4 stars + message → "Feedback sent — thank you!" + status "0/2000 · 1 sent from this device · last less than a minute ago"; curl cross-check: {"total":1,"last":{"rating":4}} — the rating survived to the DB.
+- Mobile 390×844: dialog renders with the persisted count; screenshots both viewports; console + dev.log clean; eslint + tsc clean.
+
+Stage Summary:
+- Day 47 shipped: the survey-era Feedback model finally has a producer — one header click away, rate-limited and receipt-backed.
+- Files: api/feedback/route.ts (new), FeedbackDialog.tsx (new), types.ts, EditorShell.tsx, TopBar.tsx, sections/panels.ts.
+- Next: Day 48 — auth scaffolding (NextAuth optional sign-in, device linking).

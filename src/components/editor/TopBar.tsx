@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Keyboard,
   Loader2,
+  MessageSquareHeart,
   Palette,
   Play,
   Redo2,
@@ -177,6 +178,16 @@ export function TopBar() {
           onClick={() => openDialog('shortcuts')}
         >
           <Keyboard className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          title="Send feedback"
+          aria-label="Send feedback"
+          onClick={() => openDialog('feedback')}
+        >
+          <MessageSquareHeart className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
