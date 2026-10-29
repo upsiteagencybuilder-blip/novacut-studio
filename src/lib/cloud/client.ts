@@ -180,6 +180,17 @@ export async function cloudDeleteAssetBinaries(deviceId: string, projectId: stri
   )
 }
 
+/** Download one stored binary (Day 46 re-link). */
+export async function cloudGetAssetBinary(
+  deviceId: string,
+  projectId: string,
+  assetId: string,
+): Promise<{ assetId: string; name: string; mimeType: string; dataBase64: string }> {
+  return jsonFetch(
+    `/api/cloud/assets?deviceId=${encodeURIComponent(deviceId)}&projectId=${encodeURIComponent(projectId)}&assetId=${encodeURIComponent(assetId)}`,
+  )
+}
+
 /* ---------- Day 43 — cloud project versioning ---------- */
 
 export interface CloudVersionMeta {

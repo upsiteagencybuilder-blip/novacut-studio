@@ -17,6 +17,7 @@ import { formatDistanceToNow } from 'date-fns'
 import {
   CloudUpload,
   Copy,
+  Download,
   ExternalLink,
   FileCheck2,
   FilePlus2,
@@ -55,6 +56,7 @@ import {
   checkManifestAgainstLocal,
   uploadProjectMedia,
 } from '@/lib/cloud/manifest'
+import { executeRelink, planRelink, type RelinkPlan } from '@/lib/cloud/relink'
 import {
   getAutosaveStatus,
   isAutosaveEnabled,
@@ -356,6 +358,9 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
   const [binaries, setBinaries] = useState<{ uploadedCount: number; count: number } | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadNote, setUploadNote] = useState<string | null>(null)
+  const [relink, setRelink] = useState<{ parsed: Project & { name: string; id: string }; plan: RelinkPlan } | null>(null)
+  const [relinkBusy, setRelinkBusy] = useState(false)
+  const [relinkNote, setRelinkNote] = useState<string | null>(null)
 
   const currentProject = useEditor((s) => s.project)
 
@@ -474,14 +479,71 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
       const raw = await cloudLoadProject(getDeviceId(), meta.localId)
       const parsed: unknown = JSON.parse(raw)
       if (!isCloudProjectPayload(parsed)) throw new Error('The cloud backup is corrupted or from an older build')
-      await db.saveProject(parsed)
-      await useEditor.getState().openProject(parsed.id)
-      toast.success(`Restored "${parsed.name}" from the cloud`)
-      onRestored()
+
+      // Day 46 — plan the media re-link BEFORE opening: the manifest knows
+      // exactly which files this device is missing
+      const manifest = await cloudGetManifest(getDeviceId(), meta.localId).catch(() => null)
+      if (manifest && manifest.assets.length > 0) {
+        const plan = await planRelink(parsed, manifest.assets)
+        if (plan.downloadable.length > 0) {
+          setRelink({ parsed, plan })
+          setRestoringId(null)
+          return // wait for the user's choice in the relink card
+        }
+        if (plan.conflicts.length > 0) {
+          toast.warning(
+            `${plan.conflicts.length} media file(s) differ on this device — local versions kept`,
+          )
+        }
+      }
+
+      await finishRestore(parsed, 0, 0, 0)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Restore failed')
-    } finally {
       setRestoringId(null)
+    }
+  }
+
+  const finishRestore = async (
+    parsed: Project & { name: string; id: string },
+    relinked: number,
+    bytes: number,
+    conflicts: number,
+  ) => {
+    await db.saveProject(parsed)
+    await useEditor.getState().openProject(parsed.id)
+    toast.success(
+      `Restored "${parsed.name}" from the cloud${relinked > 0 ? ` + ${relinked} media file(s) re-linked (${formatBytes(bytes)}, hash-verified)` : ''}`,
+    )
+    if (conflicts > 0) toast.warning(`${conflicts} file(s) differed on this device — local versions kept`)
+    setRelink(null)
+    onRestored()
+  }
+
+  const handleRelinkChoice = async (download: boolean) => {
+    if (!relink || relinkBusy) return
+    if (!download) {
+      await finishRestore(relink.parsed, 0, 0, relink.plan.conflicts.length)
+      return
+    }
+    setRelinkBusy(true)
+    setRelinkNote(null)
+    try {
+      const result = await executeRelink(relink.plan, (p) =>
+        setRelinkNote(`downloading ${p.file} (${p.index}/${p.total})…`),
+      )
+      setRelinkNote(null)
+      if (result.failed.length > 0) {
+        toast.warning(
+          `${result.failed.length} file(s) could not be re-linked: ${result.failed.map((f) => `${f.name} (${f.error})`).join(', ')}`,
+        )
+      }
+      await finishRestore(relink.parsed, result.restored.length, result.totalBytes, relink.plan.conflicts.length)
+    } catch (e) {
+      setRelinkNote(null)
+      toast.error(e instanceof Error ? e.message : 'Re-link failed')
+    } finally {
+      setRelinkBusy(false)
     }
   }
 
@@ -593,6 +655,56 @@ function CloudTab({ onRestored }: { onRestored: () => void }) {
           </p>
         )}
       </div>
+
+      {/* Day 46 — media re-link choice before opening a restored project */}
+      {relink && (
+        <div className="rounded-xl border border-sky-400/40 bg-sky-400/5 p-3">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold text-sky-200">
+            <Download className="size-3.5 shrink-0" />
+            Missing media on this device
+          </p>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            &quot;{relink.parsed.name}&quot; references {relink.plan.satisfied.length + relink.plan.downloadable.length + relink.plan.conflicts.length} media file(s){' '}
+            — {relink.plan.satisfied.length} already here,{' '}
+            <span className="text-sky-300">{relink.plan.downloadable.length} downloadable from the cloud ({formatBytes(relink.plan.totalBytes)})</span>
+            {relink.plan.conflicts.length > 0 && (
+              <>, {relink.plan.conflicts.length} differ locally (kept as-is)</>
+            )}
+            .
+          </p>
+          {relinkNote && <p className="mt-1 text-[10px] text-sky-300">{relinkNote}</p>}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="nc-gradient h-7 rounded-lg px-2.5 text-[10px] font-semibold text-white hover:opacity-90"
+              disabled={relinkBusy}
+              onClick={() => void handleRelinkChoice(true)}
+            >
+              {relinkBusy ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}
+              Download &amp; restore
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 border border-(--nc-line-strong) px-2.5 text-[10px] hover:border-fuchsia-400/50 hover:text-foreground"
+              disabled={relinkBusy}
+              onClick={() => void handleRelinkChoice(false)}
+            >
+              Restore without media
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+              disabled={relinkBusy}
+              onClick={() => setRelink(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {list === null ? (
         <div className="space-y-2">

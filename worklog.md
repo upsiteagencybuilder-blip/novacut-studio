@@ -1781,3 +1781,28 @@ Stage Summary:
 - Day 45 shipped: one click publishes a read-only /s/<token> snapshot — the share-link API from the survey finally has a producer AND a consumer.
 - Files: app/s/[token]/page.tsx (new), ProjectsDialog.tsx (ShareCard), sections/panels.ts.
 - Next: Day 46 — cross-device restore polish (media re-link flow).
+
+---
+Task ID: Day-46
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 46 — Cross-device restore polish (media re-link flow).
+
+Work Log:
+- NEW lib/cloud/relink.ts — the bridge between Day-41 (manifest identities) and Day-42 (stored binaries):
+  • planRelink(project, entries): compares the manifest against THIS device's IndexedDB by sha-256 → satisfied / downloadable / conflicts (same id, different content — NEVER overwritten silently); downloadable bytes totaled for an honest size preview.
+  • executeRelink(plan): downloads each binary via /api/cloud/assets, RE-VERIFIES sha-256 locally (the server verified at upload; this guards the transport), then registers through store.addMediaAsset — persists to IndexedDB AND appears in the running editor with no reload; failed entries listed with reasons (e.g. "binary not found" for manifest-only rows).
+  • Re-linked assets get a generated placeholder poster tile (kind-colored gradient + initial + name) — the binary is intact, the thumbnail is cosmetic; stated honestly.
+- Restore flow v2 (CloudTab): cloudLoadProject → shape-guard → cloudGetManifest → planRelink → if anything is downloadable, an inline "Missing media on this device" card waits for the user's choice: Download & restore (progress "downloading file (i/N)…") / Restore without media / Cancel. Receipt toasts: "Restored "X" from the cloud + N media file(s) re-linked (Y KB, hash-verified)"; conflicts warn "local versions kept".
+- client.ts: cloudGetAssetBinary wrapper (single-binary GET).
+- E2E receipts (desktop 1280×800, REAL cross-device simulation — sunrise.jpg wiped from IndexedDB via raw IDB eval, page reloaded → 4→3 media):
+  1. Restore → relink card: "references 4 media file(s) — 3 already here, 1 downloadable from the cloud (117.4 KB)".
+  2. Download & restore → "Restored "My First Edit ✨" from the cloud + 1 media file(s) re-linked (117.4 KB, hash-verified)"; store.media back to 4 with sunrise.jpg present immediately.
+  3. Restore without media → plain "Restored" toast, media stays 3 (nothing downloaded — honest).
+  4. Cancel → card closes, project untouched, no download.
+- E2E mobile 390×844: the card renders identically and Download & restore completes (media 3→4); screenshots; console + dev.log clean (one stale console line in browser history predates the build fix — absent from dev.log); eslint + tsc clean.
+- Catalog: no new entry — the flow deep-links through the existing panel-cloud-backup tool (its desc extended below in Day 50 audit if needed).
+
+Stage Summary:
+- Day 46 shipped: restoring a cloud project on a fresh device now offers one-tap, hash-verified media re-link — the last manual step of cross-device editing is gone.
+- Files: lib/cloud/relink.ts (new), lib/cloud/client.ts, ProjectsDialog.tsx.
+- Next: Day 47 — in-app feedback widget → existing Feedback model.
