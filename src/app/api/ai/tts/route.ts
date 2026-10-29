@@ -7,6 +7,9 @@ export const runtime = 'nodejs'
  * Body: { text: string (<= 1024 chars), voice?: string, speed?: number (0.5..2) }
  * Returns: { audioBase64: string, mimeType: 'audio/wav' }
  * Long scripts must be chunked by the client (max 900 chars per request recommended).
+ * NOTE: the SDK documents a `volume` param but this backend silently ignores it
+ * (measured RMS ratio 0.83 vs theory 4.0) — loudness is handled on the placed
+ * clip instead (real gain + Day 29 true-peak normalize).
  */
 const ALLOWED_VOICES = ['tongtong', 'chuichui', 'xiaochen', 'jam', 'kazi', 'douji', 'luodo'] as const
 const DEFAULT_VOICE = 'tongtong'
@@ -16,6 +19,7 @@ interface TtsBody {
   text?: string
   voice?: string
   speed?: number
+  volume?: number
 }
 
 export async function POST(req: Request) {

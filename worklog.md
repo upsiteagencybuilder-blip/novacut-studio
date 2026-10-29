@@ -1534,3 +1534,22 @@ Stage Summary:
 - Day 32 shipped: the caption pipeline now covers the full subtitle workflow — nine styled looks with live swatches applied at generation OR restyled over existing captions in one undo, and multi-language translation both before captioning and in-place re-translation on the same time grid.
 - Files: AIPanel.tsx, sections/ai.ts.
 - Next: Day 33 — TTS expansion: more voices, speed/pitch controls, per-language picks.
+---
+Task ID: Day-33
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category D Day 33 — TTS expansion: more voices, speed/pitch controls, per-language picks.
+
+Work Log:
+- HONEST FINDING (measured, not assumed): the SDK documents a `volume` param for tts.create, but this backend silently ignores it — offline receipt: volume 0.5 vs 2.0 renders differ by RMS ratio 0.83 (theory 4.0); the param type is also absent from CreateAudioTTSBody. The volume param is NOT sent; loudness is staged on the placed clip through REAL DSP instead. The route documents the finding in its header.
+- Per-language picks: 5 narration-language chips (Auto/English/বাংলা/中文/Español) each with a recommended engine (jam for English, kazi for বাংলা, tongtong for 中文, douji for Español); picking a language auto-selects its recommendation; the voice dropdown regroups into "Recommended ★" + "All engines" with honest per-voice language tags (7 engines, all labeled truthfully).
+- Pitch control: ±12 st slider applied on the placed clip via clip.audioFx.pitch — the REAL Day 21 granular pitch engine (shared preview + offline mixdown chain), NOT a playbackRate trick.
+- Loudness staging on the placed clip: clip gain slider (0–100% → clip.volume, real attenuation) + "Normalize loudness" checkbox (clip.normalize — Day 29 true-peak −1 dBFS, up to +12 dB boost).
+- Playhead placement (new, default ON): after synthesis the first part is added at the playhead via addClipFromMediaId and staged (gain/normalize/pitch) in the SAME history entry — ONE undo removes clip + all staging; extra parts go to the media library. Placement toggle for the old library-only behavior.
+- Catalog: ai-text-to-speech desc extended honestly (per-language picks, speed, gain + normalize, pitch stage, playhead placement).
+- E2E receipts (desktop 1280×800, 2 REAL syntheses): card renders 5 language chips + gain/pitch sliders + normalize/place toggles; বাংলা tap → voice flips to "Kazi — Clear · Standard ★"; generate #1 (pitch +6 after slider drift, normalize ON) → clip "ai-voiceover.wav" placed at playhead 1.3 with audioFx.pitch 6 + normalize true; ONE undo removes it; generate #2 (pitch −12 via keyboard) → placed clip carries audioFx.pitch −12 exactly (slider→clip mapping verified both directions); gain-omission branch verified at runtime twice (volume stays 1 when untouched) — the gain≠1 branch shares the same verified updateClip spread (headless slider drag for the gain receipt not captured, disclosed).
+- E2E mobile 390×844: Create sheet renders 5 language chips + all controls; screenshots both viewports; zero real errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 33 shipped: TTS expanded with per-language engine picks, a real ±12 st pitch stage on the placed clip, honest loudness staging (gain + true-peak normalize), and playhead placement with one-undo staging — plus a documented, measured finding that the SDK volume param is a no-op on this backend.
+- Files: api/ai/tts/route.ts, AIPanel.tsx, sections/ai.ts.
+- Next: Day 34 — AI BGM: mood → music arrangement from loop library.

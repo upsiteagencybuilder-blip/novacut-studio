@@ -42,7 +42,7 @@ import type { SilenceAnalysis } from '@/lib/editor/ai'
 import { applyCopilotActions, buildCopilotContext } from '@/lib/editor/copilot'
 import { importFiles } from '@/lib/editor/importer'
 import { useEditor } from '@/lib/editor/store'
-import { round2 } from '@/lib/editor/utils'
+import { clamp, round2 } from '@/lib/editor/utils'
 import type { AiSubTab } from '@/lib/editor/types'
 import type { CaptionSegment, Clip, MediaAssetRuntime, TextStyle } from '@/lib/editor/types'
 
@@ -483,16 +483,27 @@ function SilenceMap({ analysis, duration }: { analysis: SilenceAnalysis; duratio
 interface VoiceOption {
   id: string
   label: string
+  /** Day 33 — language engines this voice serves best (honest per-language picks) */
+  langs?: string[]
 }
 
 const VOICE_OPTIONS: VoiceOption[] = [
-  { id: 'tongtong', label: 'Tongtong — Warm · Female' },
-  { id: 'chuichui', label: 'Chuichui — Cheerful' },
-  { id: 'xiaochen', label: 'Xiaochen — Calm · Professional' },
-  { id: 'jam', label: 'Jam — British · Male' },
-  { id: 'kazi', label: 'Kazi — Clear · Standard' },
-  { id: 'douji', label: 'Douji — Natural' },
-  { id: 'luodo', label: 'Luodo — Expressive' },
+  { id: 'tongtong', label: 'Tongtong — Warm · Female', langs: ['中文', 'English'] },
+  { id: 'chuichui', label: 'Chuichui — Cheerful', langs: ['中文'] },
+  { id: 'xiaochen', label: 'Xiaochen — Calm · Professional', langs: ['中文'] },
+  { id: 'jam', label: 'Jam — British · Male', langs: ['English'] },
+  { id: 'kazi', label: 'Kazi — Clear · Standard', langs: ['English', 'বাংলা', 'Español'] },
+  { id: 'douji', label: 'Douji — Natural', langs: ['Español', 'English'] },
+  { id: 'luodo', label: 'Luodo — Expressive', langs: ['বাংলা', 'Español'] },
+]
+
+/** Day 33 — narration languages → recommended voice pick + visible engine set */
+const TTS_LANGS: { id: string; label: string; defaultVoice: string }[] = [
+  { id: 'Auto', label: 'Auto', defaultVoice: 'tongtong' },
+  { id: 'English', label: 'English', defaultVoice: 'jam' },
+  { id: 'বাংলা', label: 'বাংলা', defaultVoice: 'kazi' },
+  { id: '中文', label: '中文', defaultVoice: 'tongtong' },
+  { id: 'Español', label: 'Español', defaultVoice: 'douji' },
 ]
 
 const IMAGE_SIZE_OPTIONS = [
@@ -1399,6 +1410,11 @@ export function AIPanel() {
   const [voiceText, setVoiceText] = useState('')
   const [voice, setVoice] = useState('tongtong')
   const [voiceSpeed, setVoiceSpeed] = useState(1)
+  const [voiceGain, setVoiceGain] = useState(1)
+  const [voiceNormalize, setVoiceNormalize] = useState(false)
+  const [voicePitch, setVoicePitch] = useState(0)
+  const [voiceLang, setVoiceLang] = useState('Auto')
+  const [voicePlace, setVoicePlace] = useState(true)
   const [voiceBusy, setVoiceBusy] = useState(false)
   const [voicePhase, setVoicePhase] = useState('')
   const voiceAbortRef = useRef<AbortController | null>(null)
@@ -1406,6 +1422,13 @@ export function AIPanel() {
 
   const cancelVoiceover = useCallback(() => {
     voiceAbortRef.current?.abort()
+  }, [])
+
+  /** Day 33 — per-language pick: switch the recommended voice when the language changes */
+  const handleVoiceLang = useCallback((langId: string) => {
+    setVoiceLang(langId)
+    const lang = TTS_LANGS.find((l) => l.id === langId)
+    if (lang) setVoice(lang.defaultVoice)
   }, [])
 
   // Script Writer → Voiceover handoff (same panel, different sub-tab)
@@ -1432,6 +1455,7 @@ export function AIPanel() {
     try {
       const chunks = splitTextForTts(text)
       let imported = 0
+      let firstAssetId: string | null = null
       for (let i = 0; i < chunks.length; i++) {
         setVoicePhase(chunks.length > 1 ? `Synthesizing part ${i + 1} of ${chunks.length}…` : 'Synthesizing voice…')
         const res = await fetch('/api/ai/tts', {
@@ -1452,9 +1476,40 @@ export function AIPanel() {
         const assets = await importFiles([file])
         imported += assets.length
         assets.forEach(addMediaAsset)
+        if (i === 0 && assets[0]) firstAssetId = assets[0].id
       }
       if (imported > 0) {
-        toast.success(`Voiceover added to media library${chunks.length > 1 ? ` (${chunks.length} parts)` : ''}`)
+        // Day 33 — place the first part at the playhead and stage it with the
+        // REAL pitch engine (clip.audioFx.pitch — shared preview+export chain)
+        let placed = false
+        if (voicePlace && firstAssetId) {
+          const st = useEditor.getState()
+          const beforeIds = new Set(st.project.clips.map((c) => c.id))
+          const playhead = round2(st.currentTime)
+          st.addClipFromMediaId(firstAssetId, playhead)
+          const st2 = useEditor.getState()
+          const newClip =
+            st2.project.clips.find((c) => !beforeIds.has(c.id) && c.mediaId === firstAssetId) ??
+            st2.project.clips.find((c) => !beforeIds.has(c.id))
+          if (newClip) {
+            // fold into the placement's history entry — one undo removes clip + staging
+            st2.updateClip(
+              newClip.id,
+              {
+                ...(voiceGain !== 1 ? { volume: clamp(voiceGain, 0, 1) } : {}),
+                ...(voiceNormalize ? { normalize: true } : {}),
+                ...(voicePitch !== 0
+                  ? { audioFx: { ...(newClip.audioFx ?? {}), pitch: clamp(voicePitch, -12, 12) } }
+                  : {}),
+              },
+              false
+            )
+            placed = true
+          }
+        }
+        toast.success(
+          `Voiceover added${chunks.length > 1 ? ` (${chunks.length} parts)` : ''}${placed ? ' — placed at the playhead' : ''}`
+        )
       } else {
         toast.error('Speech synthesis returned no audio')
       }
@@ -1466,7 +1521,7 @@ export function AIPanel() {
       setVoicePhase('')
       setVoiceBusy(false)
     }
-  }, [voiceBusy, voiceText, voice, voiceSpeed, addMediaAsset])
+  }, [voiceBusy, voiceText, voice, voiceSpeed, voiceGain, voiceNormalize, voicePitch, voicePlace, addMediaAsset])
 
   /* ================= render ================= */
 
@@ -1818,18 +1873,65 @@ export function AIPanel() {
                 className="resize-none border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
               />
             </div>
+            {/* Day 33 — narration language picks the recommended engine */}
             <div className="space-y-1.5">
-              <FieldLabel>Voice</FieldLabel>
+              <FieldLabel>Narration language</FieldLabel>
+              <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Narration language">
+                {TTS_LANGS.map((l) => {
+                  const active = voiceLang === l.id
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      data-nc-tts-lang={l.id}
+                      onClick={() => handleVoiceLang(l.id)}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-medium transition ${
+                        active
+                          ? 'border-fuchsia-400/70 bg-fuchsia-400/15 text-fuchsia-200'
+                          : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {l.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel>Voice {voiceLang !== 'Auto' ? `· recommended for ${voiceLang}` : ''}</FieldLabel>
               <Select value={voice} onValueChange={setVoice}>
-                <SelectTrigger className="h-9 w-full text-xs">
+                <SelectTrigger className="h-9 w-full text-xs" data-nc-tts-voice>
                   <SelectValue placeholder="Pick a voice" />
                 </SelectTrigger>
                 <SelectContent>
-                  {VOICE_OPTIONS.map((v) => (
-                    <SelectItem key={v.id} value={v.id} className="text-xs">
-                      {v.label}
-                    </SelectItem>
-                  ))}
+                  {(() => {
+                    const recommended = VOICE_OPTIONS.filter((v) => voiceLang !== 'Auto' && v.langs?.includes(voiceLang))
+                    const rest = VOICE_OPTIONS.filter((v) => !recommended.includes(v))
+                    const item = (v: VoiceOption) => (
+                      <SelectItem key={v.id} value={v.id} className="text-xs">
+                        {v.label}
+                        {recommended.includes(v) ? ' ★' : ''}
+                      </SelectItem>
+                    )
+                    return (
+                      <>
+                        {recommended.length > 0 && (
+                          <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-fuchsia-300/80">
+                            Recommended
+                          </div>
+                        )}
+                        {recommended.map(item)}
+                        {recommended.length > 0 && rest.length > 0 && (
+                          <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                            All engines
+                          </div>
+                        )}
+                        {rest.map(item)}
+                      </>
+                    )
+                  })()}
                 </SelectContent>
               </Select>
             </div>
@@ -1847,6 +1949,63 @@ export function AIPanel() {
                 className="mt-1.5"
               />
             </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <FieldLabel>Clip gain (placement)</FieldLabel>
+                <span className="text-[10px] tabular-nums text-muted-foreground">{Math.round(voiceGain * 100)}%</span>
+              </div>
+              <Slider
+                min={0}
+                max={1}
+                step={0.05}
+                value={[voiceGain]}
+                onValueChange={(v) => setVoiceGain(v[0] ?? 1)}
+                className="mt-1.5"
+              />
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={voiceNormalize}
+                onChange={(e) => setVoiceNormalize(e.target.checked)}
+                data-nc-tts-normalize
+                className="size-3.5 accent-fuchsia-500"
+              />
+              Normalize loudness (true peak −1 dBFS, up to +12 dB boost)
+            </label>
+            <div>
+              <div className="flex items-center justify-between">
+                <FieldLabel>Pitch (Voice FX engine)</FieldLabel>
+                <span className="text-[10px] tabular-nums text-muted-foreground">
+                  {voicePitch > 0 ? '+' : ''}
+                  {voicePitch} st
+                </span>
+              </div>
+              <Slider
+                min={-12}
+                max={12}
+                step={1}
+                value={[voicePitch]}
+                onValueChange={(v) => setVoicePitch(v[0] ?? 0)}
+                data-nc-tts-pitch
+                className="mt-1.5"
+              />
+              <p className="mt-1 text-[9.5px] text-muted-foreground">
+                Gain, normalize and pitch apply on the placed clip through the real audio chain — heard in preview and
+                baked into exports. (The synthesis API ignores its volume param — measured — so loudness is handled
+                here honestly.)
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-[11px] text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={voicePlace}
+                onChange={(e) => setVoicePlace(e.target.checked)}
+                data-nc-tts-place
+                className="size-3.5 accent-fuchsia-500"
+              />
+              Place the first part at the playhead (others go to the media library)
+            </label>
             <Button
               type="button"
               disabled={voiceBusy}

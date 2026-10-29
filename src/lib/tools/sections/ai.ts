@@ -30,7 +30,7 @@ export const AI_TOOLS: ProTool[] = [
 
   // -------- AI captions & voice --------
   { id: 'ai-speech-to-text', name: 'AI Speech-to-Text (Auto Caption)', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Auto captions transcribe the selected clip into styled caption clips — nine preset looks (chips, karaoke, neon, meme, news bar) with live swatches', action: 'open-ai' },
-  { id: 'ai-text-to-speech', name: 'AI Text-to-Speech (TTS)', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'AI voiceover turns scripts into narrated audio, chunked automatically', action: 'open-ai' },
+  { id: 'ai-text-to-speech', name: 'AI Text-to-Speech (TTS)', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'AI voiceover turns scripts into narrated audio — per-language engine picks, speed 0.5–2×, clip gain + true-peak normalize, a real ±12 st pitch stage (shared preview+export chain) and playhead placement', action: 'open-ai' },
   { id: 'ai-caption-translate', name: 'AI Caption Translate', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Translate transcripts to 10 languages before captioning — or re-translate existing caption clips in place on the same time grid with one undo', action: 'open-ai' },
   { id: 'ai-caption-style-presets', name: 'Styled Caption Presets', section: 'ai', group: 'AI captions & voice', status: 'live', desc: 'Nine styled caption looks with live swatches — apply at generation or restyle every caption on the timeline in one undoable step', action: 'open-ai' },
 
