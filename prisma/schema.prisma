@@ -75,6 +75,28 @@ model CloudAsset {
 }
 
 // ---------------------------------------------------------------------------
+// Cloud versioning — named project snapshots with an ordinal per project
+// (Day 43). Newest 20 kept per (device, project); restore is client-side.
+// ---------------------------------------------------------------------------
+
+model CloudVersion {
+  id        String   @id @default(cuid())
+  deviceId  String
+  /// CloudProject.localId
+  projectId String
+  /// 1, 2, 3… per (device, project)
+  version   Int      @default(1)
+  label     String
+  /// full project JSON snapshot
+  data      String
+  clipCount Int      @default(0)
+  duration  Float    @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([deviceId, projectId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
 // Share links — read-only project snapshots reachable by token
 // ---------------------------------------------------------------------------
 

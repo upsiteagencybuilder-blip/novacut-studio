@@ -1716,3 +1716,24 @@ Stage Summary:
 - Day 42 shipped: media binaries now travel with the backup — delta-uploaded, sha-256-verified on the server, re-downloadable byte-exact. Cross-device restore has everything it needs except the re-link UI (Day 46).
 - Files: api/cloud/assets/route.ts (new), lib/cloud/manifest.ts, lib/cloud/client.ts, prisma/schema.prisma, ProjectsDialog.tsx, sections/panels.ts (+1 panel-asset-upload).
 - Next: Day 43 — project versioning (snapshot history, restore any version).
+
+---
+Task ID: Day-43
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category E Day 43 — Project versioning (snapshot history, restore any version).
+
+Work Log:
+- Prisma: NEW CloudVersion model — deviceId + projectId + ordinal `version` (max+1 per project), label, full project JSON `data`, clipCount, duration; indexed (deviceId, projectId, createdAt); pushed.
+- NEW /api/cloud/versions route: POST inside $transaction (ordinal = max+1, NEWEST 20 KEPT — stale pruned by version desc skip), GET light list (data withheld) or full snapshot by versionId, DELETE one (idempotent). Zod caps: data ≤ 20 MB, label ≤ 120.
+- client.ts: cloudSaveVersion / cloudListVersions / cloudLoadVersion / cloudDeleteVersion (deviceId always from getDeviceId()).
+- VersionsDialog rebuilt around a destination toggle: "On this device" (IndexedDB, unchanged semantics) | "Cloud" (ordinal v-badges, clips · duration · relative time, cloud-unreachable amber state, "newest 20 kept" note). Save input placeholder names the destination truthfully; cloud restore = fetch full JSON → shape-guard (isCloudProjectPayload) → saveProject → openProject; shared 2-click confirm pattern for restore AND delete on both tabs.
+- Real-UI tooling lesson (documented): the 3200 ms 2-click confirm window is shorter than agent-browser round-trips — the confirm click must be issued back-to-back via eval (`title="Delete snapshot"` → `title="Click again to confirm delete"`), otherwise the state auto-clears. Not a product bug; noted for future audits.
+- API receipts: ordinals 1→2→3; after 22 posts the list holds EXACTLY 20 (newest v22, oldest kept v3 — cap proven); light list carries NO data field; full fetch returns matching label/data; delete removes exactly one (22→20 list, id gone).
+- E2E receipts (desktop 1280×800): Cloud tab empty state → save "before-trim" → toast "Snapshot v1 saved to the cloud" → listed; save "after-color" → v2; RESTORE v1 via Confirm → "Restored "My First Edit ✨" from the cloud version history" + project reopened; delete v2 (fast double-click) → "Cloud snapshot deleted", list keeps only before-trim.
+- E2E mobile 390×844: dialog + Cloud tab render the saved history (before-trim listed, Save snapshot present); screenshots both viewports; zero console/page errors; eslint + tsc clean.
+- Catalog: +1 live panel-cloud-versioning (deep link open-versions — already a valid action mapping).
+
+Stage Summary:
+- Day 43 shipped: cloud snapshot history with ordinals and a hard newest-20 cap — save, restore-any-version, delete, all through the existing versions dialog.
+- Files: api/cloud/versions/route.ts (new), prisma/schema.prisma (+CloudVersion), lib/cloud/client.ts, VersionsDialog.tsx, sections/panels.ts.
+- Next: Day 44 — debounced auto-save to cloud + offline queue with retry.

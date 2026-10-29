@@ -179,3 +179,48 @@ export async function cloudDeleteAssetBinaries(deviceId: string, projectId: stri
     { method: 'DELETE' },
   )
 }
+
+/* ---------- Day 43 — cloud project versioning ---------- */
+
+export interface CloudVersionMeta {
+  id: string
+  version: number
+  label: string
+  clipCount: number
+  duration: number
+  createdAt: string
+}
+
+export async function cloudSaveVersion(input: {
+  localId: string
+  label?: string
+  clipCount: number
+  duration: number
+  data: string
+}): Promise<{ id: string; version: number; label: string }> {
+  return jsonFetch('/api/cloud/versions', {
+    method: 'POST',
+    body: JSON.stringify({ deviceId: getDeviceId(), ...input }),
+  })
+}
+
+export async function cloudListVersions(localId: string): Promise<CloudVersionMeta[]> {
+  const data = await jsonFetch<{ versions: CloudVersionMeta[] }>(
+    `/api/cloud/versions?deviceId=${encodeURIComponent(getDeviceId())}&localId=${encodeURIComponent(localId)}`,
+  )
+  return data.versions
+}
+
+export async function cloudLoadVersion(localId: string, versionId: string): Promise<string> {
+  const data = await jsonFetch<{ version: { data: string } }>(
+    `/api/cloud/versions?deviceId=${encodeURIComponent(getDeviceId())}&localId=${encodeURIComponent(localId)}&versionId=${encodeURIComponent(versionId)}`,
+  )
+  return data.version.data
+}
+
+export async function cloudDeleteVersion(localId: string, versionId: string): Promise<void> {
+  await jsonFetch(
+    `/api/cloud/versions?deviceId=${encodeURIComponent(getDeviceId())}&localId=${encodeURIComponent(localId)}&versionId=${encodeURIComponent(versionId)}`,
+    { method: 'DELETE' },
+  )
+}
