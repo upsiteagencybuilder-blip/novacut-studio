@@ -16,7 +16,9 @@ import {
   CheckCircle2,
   ChevronDown,
   Download,
+  FileImage,
   Gauge,
+  Images,
   MonitorPlay,
   Package,
   PauseCircle,
@@ -52,6 +54,7 @@ import {
   type LadderRung,
 } from '@/lib/editor/export-bundles'
 import { buildSrtFromCaptions, formatBytes, formatTimecode, projectDuration } from '@/lib/editor/utils'
+import { exportGif, exportPngSequence } from '@/lib/editor/frame-export'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -105,6 +108,15 @@ export function ExportDialog() {
   const [audioRendering, setAudioRendering] = useState(false)
   const [loudnessTarget, setLoudnessTarget] = useState<'off' | '-14' | '-16' | '-23'>('off')
   const [audioResult, setAudioResult] = useState<{ url: string; size: number; ext: 'wav' | 'mp3' } | null>(null)
+
+  // Day 53: frame exports (GIF + PNG sequence)
+  const [gifWidth, setGifWidth] = useState<'360' | '480' | '640'>('480')
+  const [gifFps, setGifFps] = useState<'10' | '12' | '15'>('12')
+  const [pngWidth, setPngWidth] = useState<'full' | '1280' | '960' | '640'>('full')
+  const [pngFps, setPngFps] = useState<'12' | '24'>('12')
+  const [frameBusy, setFrameBusy] = useState<'gif' | 'png' | null>(null)
+  const [frameProgress, setFrameProgress] = useState(0)
+  const [frameResult, setFrameResult] = useState<{ url: string; size: number; label: string; download: string } | null>(null)
 
   const duration = projectDuration(project)
   const phase = exportState.phase
@@ -216,6 +228,18 @@ export function ExportDialog() {
       }
     }
   }, [open])
+
+  // free previous result blobs when the dialog closes
+  useEffect(() => {
+    if (!open && audioResult) {
+      URL.revokeObjectURL(audioResult.url)
+      setAudioResult(null)
+    }
+    if (!open && frameResult) {
+      URL.revokeObjectURL(frameResult.url)
+      setFrameResult(null)
+    }
+  }, [open, audioResult, frameResult])
 
   const handlePreset = (id: string) => {
     const preset = EXPORT_PRESETS.find((p) => p.id === id)
@@ -332,6 +356,55 @@ export function ExportDialog() {
     a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 4000)
     toast.success('Subtitle sidecar (.srt) downloaded')
+  }
+
+  const handleFrameExport = async (kind: 'gif' | 'png') => {
+    if (frameResult) {
+      URL.revokeObjectURL(frameResult.url)
+      setFrameResult(null)
+    }
+    setFrameBusy(kind)
+    setFrameProgress(0)
+    try {
+      if (kind === 'gif') {
+        const result = await exportGif(project, {
+          fps: Number(gifFps),
+          width: Number(gifWidth),
+          onProgress: setFrameProgress,
+        })
+        const url = URL.createObjectURL(result.blob)
+        const label = `GIF ${result.width}×${result.height} · ${result.frames} frames · ${formatBytes(result.blob.size)} · ${(result.durationMs / 1000).toFixed(1)}s`
+        setFrameResult({ url, size: result.blob.size, label, download: `${safeFileName(fileName)}.gif` })
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${safeFileName(fileName)}.gif`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        toast.success(`GIF exported — ${result.width}×${result.height}, ${result.frames} frames (${formatBytes(result.blob.size)})`)
+      } else {
+        const result = await exportPngSequence(project, {
+          fps: Number(pngFps),
+          width: pngWidth === 'full' ? project.canvasWidth : Number(pngWidth),
+          onProgress: setFrameProgress,
+        })
+        const url = URL.createObjectURL(result.blob)
+        const label = `PNG ×${result.frames} @ ${result.width}×${result.height} · ${formatBytes(result.blob.size)} · ${(result.durationMs / 1000).toFixed(1)}s`
+        setFrameResult({ url, size: result.blob.size, label, download: `${safeFileName(fileName)}-frames.zip` })
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${safeFileName(fileName)}-frames.zip`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        toast.success(`PNG sequence exported — ${result.frames} frames at ${result.width}×${result.height} (${formatBytes(result.blob.size)})`)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Frame export failed')
+    } finally {
+      setFrameBusy(null)
+      setFrameProgress(0)
+    }
   }
 
   const handleClose = (o: boolean) => {
@@ -753,6 +826,104 @@ export function ExportDialog() {
                   {safeFileName(fileName)}.{extensionForMime(selectedMime)}
                 </span>
               </div>
+            </div>
+
+            {/* Day 53: frame exports — GIF + PNG sequence */}
+            <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel) p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <FileImage className="h-4 w-4 shrink-0 text-violet-400" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold">Frame exports</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Offline frame walk — no realtime recording · {Math.round(duration * (frameBusy === 'png' ? Number(pngFps) : Number(gifFps)))} frames for the current selects
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2.5 space-y-2">
+                {/* GIF row */}
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-[10px] font-semibold text-muted-foreground">GIF</span>
+                  <Select value={gifWidth} onValueChange={(v) => setGifWidth(v as typeof gifWidth)}>
+                    <SelectTrigger aria-label="GIF width" className="h-8 w-28 text-[11px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="360" className="text-[11px]">360 px wide</SelectItem>
+                      <SelectItem value="480" className="text-[11px]">480 px wide</SelectItem>
+                      <SelectItem value="640" className="text-[11px]">640 px wide</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={gifFps} onValueChange={(v) => setGifFps(v as typeof gifFps)}>
+                    <SelectTrigger aria-label="GIF fps" className="h-8 w-24 text-[11px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10" className="text-[11px]">10 fps</SelectItem>
+                      <SelectItem value="12" className="text-[11px]">12 fps</SelectItem>
+                      <SelectItem value="15" className="text-[11px]">15 fps</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    disabled={duration <= 0 || frameBusy !== null}
+                    onClick={() => void handleFrameExport('gif')}
+                    className="ml-auto h-8 shrink-0 rounded-lg border border-violet-400/40 bg-violet-500/10 px-3 text-xs font-semibold text-violet-300 hover:bg-violet-500/20"
+                  >
+                    {frameBusy === 'gif' ? `Encoding… ${Math.round(frameProgress * 100)}%` : 'Export GIF'}
+                  </Button>
+                </div>
+                {/* PNG sequence row */}
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-[10px] font-semibold text-muted-foreground">PNG</span>
+                  <Select value={pngWidth} onValueChange={(v) => setPngWidth(v as typeof pngWidth)}>
+                    <SelectTrigger aria-label="PNG width" className="h-8 w-28 text-[11px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="full" className="text-[11px]">Full width</SelectItem>
+                      <SelectItem value="1280" className="text-[11px]">1280 px</SelectItem>
+                      <SelectItem value="960" className="text-[11px]">960 px</SelectItem>
+                      <SelectItem value="640" className="text-[11px]">640 px</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={pngFps} onValueChange={(v) => setPngFps(v as typeof pngFps)}>
+                    <SelectTrigger aria-label="PNG fps" className="h-8 w-24 text-[11px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="12" className="text-[11px]">12 fps</SelectItem>
+                      <SelectItem value="24" className="text-[11px]">24 fps</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    disabled={duration <= 0 || frameBusy !== null}
+                    onClick={() => void handleFrameExport('png')}
+                    className="ml-auto h-8 shrink-0 rounded-lg border border-violet-400/40 bg-violet-500/10 px-3 text-xs font-semibold text-violet-300 hover:bg-violet-500/20"
+                  >
+                    {frameBusy === 'png' ? `Zipping… ${Math.round(frameProgress * 100)}%` : 'Export .zip'}
+                  </Button>
+                </div>
+              </div>
+              <p className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Images className="h-3 w-3 shrink-0" />
+                GIF quantizes to 256 colors per frame at reduced size/fps — the ZIP holds numbered PNGs (frame_00001.png…)
+              </p>
+              {frameResult && !frameBusy && (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-violet-500/10 px-2.5 py-1.5">
+                  <span className="truncate font-mono text-[10px] text-violet-300">{frameResult.label}</span>
+                  <a
+                    href={frameResult.url}
+                    download={frameResult.download}
+                    className="flex shrink-0 items-center gap-1 text-[10px] font-semibold text-violet-300 underline-offset-2 hover:underline"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download again
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* audio-only mixdown */}

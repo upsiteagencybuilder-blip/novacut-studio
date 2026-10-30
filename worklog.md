@@ -1952,3 +1952,23 @@ Stage Summary:
 - Day 52 shipped: the 4K and 60 fps paths are not just selectable — they are EXPORT-VERIFIED, and the ladder makes the whole quality range one click with honest caveats.
 - Files: lib/editor/export-bundles.ts, components/editor/dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
 - Next: Day 53 — GIF export + PNG frame-sequence export.
+
+---
+Task ID: Day-53
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category F Day 53 — GIF export + PNG frame-sequence export.
+
+Work Log:
+- NEW lib/editor/frame-export.ts — offline frame walk (seek → 2×rAF settle → drawImage from the engine canvas into a willReadFrequently sampling canvas; even-rounded dims, width clamped to project width): exportGif (gifenc per-frame quantize(256)+applyPalette, delay = 1000/fps) and exportPngSequence (numbered frame_00001.png… zipped with fflate zipSync level 0 — PNGs are pre-compressed, deflate would burn seconds for ~0%); both restore the engine's prior playing state and report {frames, dims, size, durationMs}.
+- Packages: gifenc + fflate (both tiny, pure client).
+- ExportDialog: new "Frame exports" card (violet) above Audio only — GIF row (360/480/640 px · 10/12/15 fps) + PNG row (Full/1280/960/640 px · 12/24 fps), live frame-count estimate in the subtitle, % progress on the busy button, honest limits line ("GIF quantizes to 256 colors per frame at reduced size/fps — the ZIP holds numbered PNGs"), persistent violet result line + Download-again; result blob revoked on dialog close (also RESTORED a previously-lost revoke effect for audioResult blobs — memory-leak fix found during this day's restructure).
+- Catalog: +2 delivery-gif-export, delivery-png-frame-sequence (live, open-export).
+- E2E receipts (desktop 1280×800, demo project ~7.8 s):
+  • GIF @480px/12fps → "GIF 480×270 · 94 frames · 6.2 MB · 83.0s"; blob probe: magic GIF89a, Image decodes at exactly 480×270. Honest note: 83 s encode is software-rendering reality for 94 quantized frames — progress % shown live.
+  • PNG zip @640px/12fps → "PNG ×94 @ 640×360 · 44.3 MB · 11.6s"; blob probe: magic 50 4b 03 04 (PK), central-directory scan finds all 94 frame_ names.
+  • Auto-download fired for both; toasts + persistent result lines; mobile 390×844 renders both rows + selects + result; console + dev.log clean; eslint + tsc clean.
+
+Stage Summary:
+- Day 53 shipped: two genuinely offline (non-realtime) export paths — animated GIF and a zipped PNG frame sequence — with honest format limits and probed-valid outputs.
+- Files: lib/editor/frame-export.ts (new), components/editor/dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts, package.json (+gifenc, +fflate).
+- Next: Day 54 — subtitle burn toggle + SRT/VTT/ASS sidecars.

@@ -61,6 +61,8 @@ export const DELIVERY_TOOLS: ProTool[] = [
 
   // -------- Audio export --------
   { id: 'delivery-wav', name: 'Waveform Audio (.wav)', section: 'delivery', group: 'Audio export', status: 'live', desc: 'Offline mixdown renders a lossless 16-bit WAV in seconds — full FX, fades, duck', action: 'open-export' },
+  { id: 'delivery-gif-export', name: 'Animated GIF Export', section: 'delivery', group: 'Formats & containers', status: 'live', desc: 'Offline frame walk → gifenc per-frame 256-color quantization at 360/480/640 px, 10/12/15 fps — no realtime recording, honest format limits disclosed in the dialog', action: 'open-export' },
+  { id: 'delivery-png-frame-sequence', name: 'PNG Frame Sequence (.zip)', section: 'delivery', group: 'Formats & containers', status: 'live', desc: 'Every Nth frame as numbered full/scaled-width PNGs zipped with fflate (store level — PNGs are pre-compressed), live frame-count estimate', action: 'open-export' },
   { id: 'delivery-mp3', name: 'MPEG Audio Layer 3 (.mp3)', section: 'delivery', group: 'Audio export', status: 'live', desc: 'MP3 encode at 192/320 kbps from the same offline mixdown', action: 'open-export' },
   { id: 'delivery-aac', name: 'Advanced Audio Coding (.aac)', section: 'delivery', group: 'Audio export', status: 'planned', desc: 'MP4 video exports carry AAC audio; a standalone .aac file stays roadmap' },
   { id: 'delivery-audio-sample-rate', name: 'Audio Sample Rate Dropdown', section: 'delivery', group: 'Audio export', status: 'live', desc: 'Pick 44.1 or 48 kHz for the audio mixdown', action: 'open-export' },
