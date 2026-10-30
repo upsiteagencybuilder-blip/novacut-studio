@@ -1912,3 +1912,21 @@ Work Log:
 Stage Summary:
 - Category E re-verified end-to-end AFTER its completion commit: backup → sha-256 manifest → verified binary upload → restore → media re-link all reproduce live through the real UI.
 - No code changes; worklog note only. Next per roadmap: Category F — Export & Delivery (Days 51–58).
+
+---
+Task ID: Day-51
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category F Day 51 — Export preset manager (YouTube / Reels / TikTok / Square bundles).
+
+Work Log:
+- NEW lib/editor/export-bundles.ts — ExportBundle type {name, width, height, fps, bitrate, format, audioKbps, burnIn, builtin, createdAt}; 5 stock bundles (YouTube 1080p WEBM 10 Mbps, YouTube 4K WEBM 35 Mbps, Reels/Shorts MP4 9 Mbps 1080×1920, TikTok MP4 1080×1920, Square Post MP4 1080×1080); customs persist in localStorage (novacut.exportBundles.v1, cap 30 newest-wins, name-uniqueness check), default-bundle key separate (novacut.exportBundleDefault.v1); builtins never delete; deleting the default clears its key.
+- ExportDialog: new "Export bundles" section ABOVE platform presets — one-click apply row (canvas resize + bitrate + format + audio kbps + burn-in in one hit, gradient selected state), star toggle = set/clear default with amber badge + honest "auto-applies every time this dialog opens" note, trash for customs only, "Save current as bundle" inline form (captures canvas W×H + fps + current quality/format/audio/burn-in, Enter saves, Esc cancels); dialog-open effect auto-applies the saved default bundle silently.
+- Consistency: applying a platform preset or custom resolution now clears the applied-bundle highlight (mutually exclusive selection states).
+- Catalog: +1 delivery-export-preset-manager (live, open-export action).
+- BUG found by own E2E and fixed: deleting the bundle that was the default cleared the localStorage key but left the UI note + state stale — handleDeleteBundle now mirrors the clear into defaultBundleId state.
+- E2E receipts (desktop 1280×800): apply TikTok → canvas 1080×1920 @30 + toast "Bundle applied — TikTok (1080×1920 · 30 fps · 9 Mbps · MP4)"; apply YouTube 4K → Save current as bundle "Client Master" → row "3840×2160 · 30 fps · 35 Mbps · WEBM" + localStorage payload cross-checked; star → "Client Master is now the default bundle" + badge + note; close/reopen dialog → canvas still 3840×2160 (silent auto-apply) + badge; FULL page reload → bundle persists + auto-applies again; delete default custom → row gone, note gone, key null (the fix's receipt); star-on/star-off builtin toggle → "Default cleared — YouTube 4K" + key null. Mobile 390×844: bundles section renders all 5 stock rows with star buttons and scrollable list. Screenshots both viewports; console + dev.log clean; eslint + tsc clean.
+
+Stage Summary:
+- Day 51 shipped: the export dialog's static preset grid grew a real manager — stock platform bundles, savable customs that capture the full render config, and a persistent default that applies itself.
+- Files: lib/editor/export-bundles.ts (new), components/editor/dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
+- Next: Day 52 — 4K + 60 fps path with quality ladder verification.

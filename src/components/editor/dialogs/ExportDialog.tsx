@@ -2,9 +2,10 @@
 
 /**
  * Export dialog — Pro edition.
- * Platform preset grid (resizes the canvas), quality/fps/format selects,
- * free bitrate slider, custom resolution, audio-track bitrate, timecode
- * burn-in, estimated size, the real-time recording flow — plus an offline
+ * Platform preset grid (resizes the canvas), Day-51 export BUNDLES (named,
+ * savable YouTube / Reels / TikTok / Square bundles with a persistent default),
+ * quality/fps/format selects, free bitrate slider, custom resolution,
+ * audio-track bitrate, timecode burn-in, estimated size, the real-time recording flow — plus an offline
  * AUDIO mixdown (WAV / MP3, faster than real time) and .srt caption sidecar.
  */
 import { useEffect, useMemo, useState } from 'react'
@@ -16,9 +17,13 @@ import {
   ChevronDown,
   Download,
   MonitorPlay,
+  Package,
   PauseCircle,
+  Save,
   Settings2,
+  Star,
   TriangleAlert,
+  Trash2,
   XCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -31,6 +36,17 @@ import {
   supportedExportMimeTypes,
 } from '@/lib/editor/exporter'
 import { EXPORT_PRESETS, EXPORT_QUALITY_PRESETS } from '@/lib/editor/constants'
+import {
+  applyBundleToProject,
+  bundleNameTaken,
+  bundleSummary,
+  deleteCustomBundle,
+  getDefaultBundleId,
+  loadAllBundles,
+  saveCustomBundle,
+  setDefaultBundleId,
+  type ExportBundle,
+} from '@/lib/editor/export-bundles'
 import { buildSrtFromCaptions, formatBytes, formatTimecode, projectDuration } from '@/lib/editor/utils'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -70,6 +86,13 @@ export function ExportDialog() {
   const [audioKbps, setAudioKbps] = useState(128)
   const [burnIn, setBurnIn] = useState(false)
 
+  // Day 51: export bundle manager state
+  const [bundles, setBundles] = useState<ExportBundle[]>([])
+  const [appliedBundleId, setAppliedBundleId] = useState<string | null>(null)
+  const [defaultBundleId, setDefaultId] = useState<string | null>(null)
+  const [bundleName, setBundleName] = useState('')
+  const [showSaveBundle, setShowSaveBundle] = useState(false)
+
   // v2: offline audio mixdown state
   const [audioFormat, setAudioFormat] = useState<AudioFormat>('wav')
   const [sampleRate, setSampleRate] = useState<'44100' | '48000'>('48000')
@@ -102,27 +125,87 @@ export function ExportDialog() {
   // caption sidecar (.srt) built from AI caption clips
   const srtContent = useMemo(() => buildSrtFromCaptions(project.clips), [project.clips])
 
+  // ---------------- Day 51: bundle manager handlers ----------------
+
+  const applyBundle = (bundle: ExportBundle, opts?: { silent?: boolean }) => {
+    const store = useEditor.getState()
+    applyBundleToProject(bundle, store)
+    setBitrate(bundle.bitrate)
+    setFormat(bundle.format)
+    setAudioKbps(bundle.audioKbps)
+    setBurnIn(bundle.burnIn)
+    setPresetId(null)
+    setAppliedBundleId(bundle.id)
+    if (!opts?.silent) toast.success(`Bundle applied — ${bundle.name} (${bundleSummary(bundle)})`)
+  }
+
+  const handleSaveBundle = () => {
+    const name = bundleName.trim()
+    if (!name) {
+      toast.error('Give the bundle a name first')
+      return
+    }
+    if (bundleNameTaken(name)) {
+      toast.error(`A bundle named "${name}" already exists`)
+      return
+    }
+    const saved = saveCustomBundle({
+      name,
+      width: project.canvasWidth,
+      height: project.canvasHeight,
+      fps: project.fps,
+      bitrate,
+      format,
+      audioKbps,
+      burnIn,
+    })
+    setBundles(loadAllBundles())
+    setAppliedBundleId(saved.id)
+    setBundleName('')
+    setShowSaveBundle(false)
+    toast.success(`Bundle saved — ${saved.name} (${bundleSummary(saved)})`)
+  }
+
+  const handleDeleteBundle = (bundle: ExportBundle) => {
+    if (deleteCustomBundle(bundle.id)) {
+      setBundles(loadAllBundles())
+      if (appliedBundleId === bundle.id) setAppliedBundleId(null)
+      // deleting the default bundle clears it server-side (lib) — mirror that in state
+      if (defaultBundleId === bundle.id) setDefaultId(null)
+      toast.success(`Bundle deleted — ${bundle.name}`)
+    }
+  }
+
+  const handleToggleDefault = (bundle: ExportBundle) => {
+    const isDefault = defaultBundleId === bundle.id
+    setDefaultBundleId(isDefault ? null : bundle.id)
+    setDefaultId(isDefault ? null : bundle.id)
+    toast.success(isDefault ? `Default cleared — ${bundle.name}` : `${bundle.name} is now the default bundle`)
+  }
+
   // always start paused — the export loop drives the playhead itself
   useEffect(() => {
     if (open) {
       useEditor.getState().pause()
       setFileName(useEditor.getState().project.name || 'novacut-export')
+      // Day 51: refresh bundle list; auto-apply the default bundle when one is set
+      const all = loadAllBundles()
+      setBundles(all)
+      const defId = getDefaultBundleId()
+      setDefaultId(defId)
+      const def = all.find((b) => b.id === defId)
+      if (def) {
+        applyBundle(def, { silent: true })
+      }
     }
   }, [open])
-
-  // free previous result blobs when the dialog closes
-  useEffect(() => {
-    if (!open && audioResult) {
-      URL.revokeObjectURL(audioResult.url)
-      setAudioResult(null)
-    }
-  }, [open, audioResult])
 
   const handlePreset = (id: string) => {
     const preset = EXPORT_PRESETS.find((p) => p.id === id)
     if (!preset) return
     const store = useEditor.getState()
     setPresetId(preset.id)
+    setAppliedBundleId(null)
     setBitrate(preset.bitrate)
     store.setCanvasSize(preset.width, preset.height)
     store.setFps(preset.fps)
@@ -145,6 +228,7 @@ export function ExportDialog() {
     }
     useEditor.getState().setCanvasSize(w, h)
     setPresetId(null)
+    setAppliedBundleId(null)
   }
 
   const handleStart = async () => {
@@ -262,6 +346,118 @@ export function ExportDialog() {
         {/* ---------------- idle / preparing: settings ---------------- */}
         {(phase === 'idle' || phase === 'preparing') && (
           <div className="space-y-4">
+            {/* Day 51: export bundle manager */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Package className="h-3.5 w-3.5 text-fuchsia-400" />
+                  Export bundles
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => setShowSaveBundle(!showSaveBundle)}
+                  className="flex items-center gap-1 text-[11px] text-fuchsia-300 transition-colors hover:text-fuchsia-200"
+                >
+                  <Save className="h-3 w-3" />
+                  {showSaveBundle ? 'Cancel' : 'Save current as bundle'}
+                </button>
+              </div>
+
+              {showSaveBundle && (
+                <div className="space-y-1 rounded-xl border border-(--nc-line) bg-(--nc-panel) p-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={bundleName}
+                      onChange={(e) => setBundleName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveBundle()
+                        if (e.key === 'Escape') setShowSaveBundle(false)
+                      }}
+                      placeholder="Bundle name — e.g. Client Master"
+                      aria-label="Bundle name"
+                      className="h-8 flex-1 border-(--nc-line) bg-(--nc-sheet) text-xs"
+                      maxLength={40}
+                    />
+                    <Button type="button" size="sm" onClick={handleSaveBundle} className="h-8 px-3 text-xs">
+                      Save
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Captures the canvas {project.canvasWidth}×{project.canvasHeight} · {project.fps} fps plus quality,
+                    format, audio bitrate and burn-in as they are right now.
+                  </p>
+                </div>
+              )}
+
+              <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
+                {bundles.map((b) => {
+                  const selected = appliedBundleId === b.id
+                  const isDefault = defaultBundleId === b.id
+                  return (
+                    <div
+                      key={b.id}
+                      className={cn(
+                        'group flex items-center gap-1 rounded-xl p-px transition-colors',
+                        selected ? 'nc-gradient' : 'bg-(--nc-panel-strong) hover:bg-(--nc-line-strong)'
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => applyBundle(b)}
+                        className="min-w-0 flex-1 rounded-[11px] bg-(--nc-sheet) px-3 py-1.5 text-left transition-colors hover:bg-(--nc-panel-strong)"
+                      >
+                        <span
+                          className={cn('flex items-center gap-1.5 text-xs font-semibold', selected && 'nc-gradient-text')}
+                        >
+                          {b.name}
+                          {isDefault && (
+                            <Badge
+                              variant="outline"
+                              className="gap-0.5 border-amber-400/40 bg-amber-500/10 px-1 py-0 text-[8px] font-medium text-amber-300"
+                            >
+                              <Star className="h-2.5 w-2.5" />
+                              default
+                            </Badge>
+                          )}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                          {bundleSummary(b)}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={isDefault ? `Clear default ${b.name}` : `Set ${b.name} as default bundle`}
+                        title={isDefault ? 'Clear default' : 'Set as default'}
+                        onClick={() => handleToggleDefault(b)}
+                        className={cn(
+                          'rounded-lg p-1.5 transition-colors',
+                          isDefault ? 'text-amber-300' : 'text-muted-foreground/50 hover:text-amber-300'
+                        )}
+                      >
+                        <Star className={cn('h-3.5 w-3.5', isDefault && 'fill-amber-300')} />
+                      </button>
+                      {!b.builtin && (
+                        <button
+                          type="button"
+                          aria-label={`Delete bundle ${b.name}`}
+                          title="Delete bundle"
+                          onClick={() => handleDeleteBundle(b)}
+                          className="mr-1.5 rounded-lg p-1.5 text-muted-foreground/50 transition-colors hover:text-red-400"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {defaultBundleId && (
+                <p className="text-[10px] text-muted-foreground">
+                  The default bundle auto-applies every time this dialog opens.
+                </p>
+              )}
+            </div>
+
             {/* platform presets */}
             <div className="space-y-1.5">
               <Label className="text-[11px] text-muted-foreground">Platform presets</Label>
