@@ -1895,3 +1895,20 @@ Stage Summary:
 - Day 50 shipped: the named cloud failure modes are now E2E-proven (multi-tab propagation, quota 413, LWW conflict) and the full Category E audit passed with every receipt reproducing.
 - Files: no product code — pure verification day (python suites + agent-browser UI runs); audit recorded here.
 - CATEGORY E (Cloud, Sync & Collaboration) COMPLETE: Days 41–50 all live. Media manifest → binary pipeline → versioning → auto-save/offline queue → share links → cross-device re-link → feedback → auth scaffolding → project manager → E2E suite + audit. Next: Category F — Export & Delivery (Days 51–58).
+
+---
+Task ID: E-Reverify
+Agent: main (orchestrator)
+Task: Category E — Cloud, Sync & Collaboration (Day 41–50): re-verification pass on repeat instruction.
+
+Work Log:
+- State check: Category E was already COMPLETE — commit 58316db (Day 50 audit, "CATEGORY E COMPLETE") is on origin/main; worklog Days 41–50 entries all present. No product work was redone; nothing was faked.
+- Repair: an accidental unpushed commit a733858 (UUID message, contained only .zscripts/dev.pid + db binary churn) was dropped via git reset; mode-change + png/db noise restored. Working tree back to 58316db baseline.
+- Lesson re-applied: git checkout -- db/custom.db under a RUNNING server breaks the globalThis-anchored PrismaClient (all cloud routes 503, Day-42 documented cost) — dev server restarted via .zscripts/dev.sh (official startup: install → db:push → dev → health → mini-services).
+- FRESH live receipts (this session, real UI): cloud health "Local SQLite (dev fallback) · 213 ms"; backup → toast '"My First Edit ✨" backed up — structure + manifest (4 files · 1.1 MB) · binaries 4/4 verified'; sqlite cross-check CloudProject row (6 clips · 7.8s) + 4 CloudAsset manifest rows; Restore → 'Restored "My First Edit ✨" from the cloud'; fresh reload → 6 clips, media re-linked, preview renders restored assets.
+- E2E: desktop 1280×800 + mobile 390×844 both render the restored project fully (media library 4 assets, timeline + audio track); fresh-session zero console errors; dev.log clean (all routes 200).
+- Gates: eslint clean, tsc clean.
+
+Stage Summary:
+- Category E re-verified end-to-end AFTER its completion commit: backup → sha-256 manifest → verified binary upload → restore → media re-link all reproduce live through the real UI.
+- No code changes; worklog note only. Next per roadmap: Category F — Export & Delivery (Days 51–58).
