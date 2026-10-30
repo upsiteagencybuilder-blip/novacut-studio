@@ -112,3 +112,41 @@ export function applyBundleToProject(bundle: ExportBundle, store: { setCanvasSiz
   store.setFps(bundle.fps)
   void store.project // shape guard — callers pass the zustand store snapshot
 }
+
+/* ---------------- Day 52: quality ladder ---------------- */
+
+export interface LadderRung {
+  id: string
+  /** short chip label, e.g. "1080p · 60" */
+  label: string
+  /** one-line purpose of the rung */
+  sub: string
+  width: number
+  height: number
+  fps: number
+  bitrate: number
+  /** honest per-rung caveat rendered when the rung is active */
+  note?: string
+}
+
+/**
+ * The full quality ladder, bottom to top. Export is REALTIME (canvas
+ * captureStream + MediaRecorder), so every rung takes ~project duration in
+ * wall-clock time — heavier rungs spend more bits and more encode headroom,
+ * they don't take longer, but they can drop frames on weak devices.
+ * Bitrates stay inside the 1–40 Mbps dialog slider range.
+ */
+export const QUALITY_LADDER: LadderRung[] = [
+  { id: 'rung-540-24', label: '540p · 24', sub: 'Draft review', width: 960, height: 540, fps: 24, bitrate: 3_000_000 },
+  { id: 'rung-720-30', label: '720p · 30', sub: 'Good', width: 1280, height: 720, fps: 30, bitrate: 6_000_000 },
+  { id: 'rung-1080-30', label: '1080p · 30', sub: 'High', width: 1920, height: 1080, fps: 30, bitrate: 12_000_000 },
+  { id: 'rung-1080-60', label: '1080p · 60', sub: 'Smooth motion', width: 1920, height: 1080, fps: 60, bitrate: 16_000_000 },
+  { id: 'rung-1440-30', label: '1440p · 30', sub: 'QHD', width: 2560, height: 1440, fps: 30, bitrate: 20_000_000 },
+  { id: 'rung-4k-30', label: '4K · 30', sub: 'UHD', width: 3840, height: 2160, fps: 30, bitrate: 35_000_000, note: 'Realtime 4K capture — heavy on software-rendered or low-power devices' },
+  { id: 'rung-4k-60', label: '4K · 60', sub: 'UHD smooth', width: 3840, height: 2160, fps: 60, bitrate: 40_000_000, note: 'Heaviest rung — realtime 4K60 needs a strong GPU; frame drops are honest, not silent' },
+]
+
+/** Match the dialog's current state (canvas + fps + bitrate) back to a rung. */
+export function matchLadderRung(width: number, height: number, fps: number, bitrate: number): LadderRung | null {
+  return QUALITY_LADDER.find((r) => r.width === width && r.height === height && r.fps === fps && r.bitrate === bitrate) ?? null
+}

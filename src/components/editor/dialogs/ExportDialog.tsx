@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Download,
+  Gauge,
   MonitorPlay,
   Package,
   PauseCircle,
@@ -43,9 +44,12 @@ import {
   deleteCustomBundle,
   getDefaultBundleId,
   loadAllBundles,
+  matchLadderRung,
+  QUALITY_LADDER,
   saveCustomBundle,
   setDefaultBundleId,
   type ExportBundle,
+  type LadderRung,
 } from '@/lib/editor/export-bundles'
 import { buildSrtFromCaptions, formatBytes, formatTimecode, projectDuration } from '@/lib/editor/utils'
 import { cn } from '@/lib/utils'
@@ -182,6 +186,19 @@ export function ExportDialog() {
     setDefaultId(isDefault ? null : bundle.id)
     toast.success(isDefault ? `Default cleared — ${bundle.name}` : `${bundle.name} is now the default bundle`)
   }
+
+  // Day 52: quality ladder — one rung = resolution + fps + bitrate in a single hit
+  const applyRung = (rung: LadderRung) => {
+    const store = useEditor.getState()
+    store.setCanvasSize(rung.width, rung.height)
+    store.setFps(rung.fps)
+    setBitrate(rung.bitrate)
+    setPresetId(null)
+    setAppliedBundleId(null)
+    toast.success(`Quality rung set — ${rung.label} (${rung.sub})`)
+  }
+
+  const activeRung = matchLadderRung(project.canvasWidth, project.canvasHeight, fps, bitrate)
 
   // always start paused — the export loop drives the playhead itself
   useEffect(() => {
@@ -456,6 +473,50 @@ export function ExportDialog() {
                   The default bundle auto-applies every time this dialog opens.
                 </p>
               )}
+            </div>
+
+            {/* Day 52: quality ladder */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Gauge className="h-3.5 w-3.5 text-fuchsia-400" />
+                Quality ladder
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {QUALITY_LADDER.map((rung) => {
+                  const active = activeRung?.id === rung.id
+                  const est = (rung.bitrate * duration) / 8
+                  return (
+                    <button
+                      key={rung.id}
+                      type="button"
+                      onClick={() => applyRung(rung)}
+                      title={`${rung.width}×${rung.height} · ${rung.fps} fps · ${Math.round(rung.bitrate / 1_000_000)} Mbps`}
+                      className={cn(
+                        'rounded-xl border px-2.5 py-1.5 text-left transition-colors',
+                        active
+                          ? 'border-fuchsia-400/60 bg-fuchsia-500/10'
+                          : 'border-(--nc-line) bg-(--nc-panel) hover:border-(--nc-line-strong) hover:bg-(--nc-panel-strong)'
+                      )}
+                    >
+                      <span className={cn('block text-[11px] font-semibold', active && 'nc-gradient-text')}>
+                        {rung.label}
+                      </span>
+                      <span className="block text-[9px] text-muted-foreground">
+                        {rung.sub} · ~{formatBytes(est)}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              {activeRung?.note && (
+                <p className="flex items-start gap-1.5 text-[10px] text-amber-300/90">
+                  <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+                  {activeRung.note}
+                </p>
+              )}
+              <p className="text-[10px] text-muted-foreground">
+                Export runs in realtime — every rung takes about the project duration; heavier rungs just need more encode headroom.
+              </p>
             </div>
 
             {/* platform presets */}

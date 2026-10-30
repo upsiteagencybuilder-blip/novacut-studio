@@ -55,6 +55,7 @@ export const DELIVERY_TOOLS: ProTool[] = [
   { id: 'delivery-vbr-1-pass', name: 'VBR 1-Pass (Variable Bitrate)', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Single-pass variable bitrate spending bits adaptively' },
   { id: 'delivery-vbr-2-pass', name: 'VBR 2-Pass', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Two-pass analysis for the best quality ceiling' },
   { id: 'delivery-target-bitrate-slider', name: 'Target Bitrate Slider', section: 'delivery', group: 'Bitrate & quality', status: 'live', desc: 'Free 1–40 Mbps slider in the export dialog — quality tiers snap it to presets', action: 'open-export' },
+  { id: 'delivery-quality-ladder', name: 'Quality Ladder (540p·24 → 4K·60)', section: 'delivery', group: 'Bitrate & quality', status: 'live', desc: 'Seven one-click rungs setting resolution+fps+bitrate together with per-rung estimated size, honest device-capability caveats on 4K rungs, and verified real exports (720p30, 1080p60, 4K30, 4K60 blobs probed to exact dimensions)', action: 'open-export' },
   { id: 'delivery-max-bitrate-slider', name: 'Maximum Bitrate Slider', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Cap VBR spikes with a maximum bitrate' },
   { id: 'delivery-keyframe-distance', name: 'Keyframe Distance Input', section: 'delivery', group: 'Bitrate & quality', status: 'planned', desc: 'Control GOP length for streaming compatibility' },
 

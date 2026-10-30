@@ -1930,3 +1930,25 @@ Stage Summary:
 - Day 51 shipped: the export dialog's static preset grid grew a real manager — stock platform bundles, savable customs that capture the full render config, and a persistent default that applies itself.
 - Files: lib/editor/export-bundles.ts (new), components/editor/dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
 - Next: Day 52 — 4K + 60 fps path with quality ladder verification.
+
+---
+Task ID: Day-52
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category F Day 52 — 4K + 60 fps path with quality ladder verification.
+
+Work Log:
+- lib/editor/export-bundles.ts += QUALITY_LADDER: 7 rungs (540p·24 draft 3 Mbps → 720p·30 6 Mbps → 1080p·30 12 Mbps → 1080p·60 16 Mbps → 1440p·30 20 Mbps → 4K·30 35 Mbps → 4K·60 40 Mbps), each with per-rung honest note; matchLadderRung() detects the active rung from canvas+fps+bitrate; bitrates stay inside the dialog's 1–40 Mbps slider; documented truth: export is realtime, rungs differ in bits + encode headroom, not wall time.
+- ExportDialog: "Quality ladder" card (Gauge icon) between bundles and platform presets — 7 one-click chips showing label + purpose + live estimated size (bitrate × duration / 8), fuchsia active state, amber TriangleAlert caveat line for the 4K rungs ("heaviest rung — realtime 4K60 needs a strong GPU; frame drops are honest, not silent"), realtime explainer; applying a rung clears platform-preset and bundle selection (three-way exclusive).
+- Catalog: +1 delivery-quality-ladder (live, open-export).
+- QUALITY LADDER VERIFICATION (real exports through the real UI, blobs probed via <video> metadata):
+  • 720p·30  → phase done, 3.05 MB, 8.5 s wall → videoWidth×Height = 1280×720 ✓
+  • 1080p·60 → phase done, 4.54 MB, 8.5 s wall → 1920×1080 ✓ (60 fps captureStream path proven)
+  • 4K·30    → phase done, 4.31 MB, 10.0 s wall → 3840×2160 ✓ (honest note shown before export)
+  • 4K·60    → phase done, 4.48 MB, 10.0 s wall → 3840×2160 ✓ (top rung; heavy caveat shown)
+  All four blobs load and report exact expected dimensions; MediaRecorder never errored.
+- Mobile 390×844: ladder renders all 7 rungs with active 4K·60 highlight + amber caveat; screenshots; console + dev.log clean; eslint + tsc clean.
+
+Stage Summary:
+- Day 52 shipped: the 4K and 60 fps paths are not just selectable — they are EXPORT-VERIFIED, and the ladder makes the whole quality range one click with honest caveats.
+- Files: lib/editor/export-bundles.ts, components/editor/dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
+- Next: Day 53 — GIF export + PNG frame-sequence export.
