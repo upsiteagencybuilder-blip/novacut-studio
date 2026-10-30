@@ -17,6 +17,8 @@ export interface ExportOptions {
   audioBitsPerSecond?: number
   /** burn a running timecode into the picture (review copies) */
   burnIn?: 'timecode'
+  /** Day 54 — export WITHOUT caption clips painted into the picture (subtitles ship as sidecar instead) */
+  skipCaptions?: boolean
   onProgress?: (progress: number) => void
 }
 
@@ -24,6 +26,8 @@ export interface ExportResult {
   blob: Blob
   mimeType: string
   durationMs: number
+  /** Day 54 — false when the audio engine could not start and the file is video-only (disclosed) */
+  audioIncluded: boolean
 }
 
 let activeRecorder: MediaRecorder | null = null
@@ -68,7 +72,15 @@ export function cancelExport(): void {
 
 export async function startExport(opts: ExportOptions): Promise<ExportResult> {
   const engine = getEngine()
-  const stream = engine.beginExport(opts.fps, { burnIn: opts.burnIn })
+  // Day 54 — probe the audio engine FIRST: a suspended context's track stalls
+  // MediaRecorder into a silent 0-byte file, so when it can't start we record
+  // video-only and let the UI disclose it honestly.
+  const audioState = await engine.prepareExportAudio()
+  const stream = engine.beginExport(opts.fps, {
+    burnIn: opts.burnIn,
+    skipCaptions: opts.skipCaptions,
+    includeAudio: audioState === 'running',
+  })
   if (!stream) throw new Error('Canvas is not ready for export')
   if (!stream.getVideoTracks().length) throw new Error('No video track available')
 
@@ -123,10 +135,16 @@ export async function startExport(opts: ExportOptions): Promise<ExportResult> {
         reject(new DOMException('Export cancelled', 'AbortError'))
         return
       }
+      const blob = new Blob(chunks, { type: mimeType })
+      if (blob.size === 0) {
+        reject(new Error('Recording produced no data — try a lower resolution or another format.'))
+        return
+      }
       resolve({
-        blob: new Blob(chunks, { type: mimeType }),
+        blob,
         mimeType,
         durationMs: performance.now() - startedAt,
+        audioIncluded: audioState === 'running',
       })
     }
 

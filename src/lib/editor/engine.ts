@@ -202,6 +202,10 @@ class PreviewEngine {
   private exportScaleOverride: number | null = null
   /** timecode burn-in overlay, armed only between beginExport/endExport */
   private exportBurnIn: 'timecode' | null = null
+  /** Day 54 — while armed (export only), caption clips (isCaption) are NOT drawn into the picture */
+  private exportSkipCaptions = false
+  /** Day 54 — when false, beginExport hands out a VIDEO-ONLY stream (audio engine unavailable) */
+  private exportIncludeAudio = true
 
   /** Day 13 — compare split: 0..1 fraction; LEFT of the cut shows the ORIGINAL, right shows the graded frame. null = off */
   private compareSplit: number | null = null
@@ -394,11 +398,13 @@ class PreviewEngine {
   /* -------------------------------------------------- audio graph (export) */
 
   /** Route all element audio through WebAudio and return a capture stream for export */
-  beginExport(fps: number, opts?: { burnIn?: 'timecode' }): MediaStream | null {
+  beginExport(fps: number, opts?: { burnIn?: 'timecode'; skipCaptions?: boolean; includeAudio?: boolean }): MediaStream | null {
     if (!this.canvas) return null
     // Export always records at full project resolution — never the adaptive preview scale.
     this.exportScaleOverride = 1
     this.exportBurnIn = opts?.burnIn ?? null
+    this.exportSkipCaptions = opts?.skipCaptions ?? false
+    this.exportIncludeAudio = opts?.includeAudio ?? true
     const proj = this.snapshotFn?.().project
     if (proj) {
       this.canvas.width = proj.canvasWidth
@@ -425,8 +431,15 @@ class PreviewEngine {
         if (clip) this.routeEntry(clip, entry)
       }
       const videoStream = this.canvas.captureStream(fps)
-      const audioTracks = this.exportDest.stream.getAudioTracks()
-      for (const track of audioTracks) videoStream.addTrack(track)
+      // Day 54 — audio-engine-unavailable environments (autoplay policy, no audio
+      // thread): a SUSPENDED context's track stalls MediaRecorder into a 0-byte
+      // file, so we hand out a video-only stream instead — the caller discloses it.
+      if (this.exportIncludeAudio) {
+        const audioTracks = this.exportDest.stream.getAudioTracks()
+        for (const track of audioTracks) videoStream.addTrack(track)
+      } else {
+        this.exportIncludeAudio = true // reset for next call
+      }
       return videoStream
     } catch (e) {
       console.error('beginExport failed', e)
@@ -437,9 +450,32 @@ class PreviewEngine {
   endExport() {
     // keep audioCtx alive (elements are permanently routed); nothing to tear down
     this.exportBurnIn = null
+    this.exportSkipCaptions = false
     if (this.exportScaleOverride !== null) {
       this.exportScaleOverride = null
       this.invalidate()
+    }
+  }
+
+  /**
+   * Day 54 — prepare the export AudioContext BEFORE captureStream.
+   * Resolves 'running' when the audio thread is available (normal browsers,
+   * user-gesture initiated) or 'unavailable' when it cannot start within the
+   * grace window (autoplay policy denials, headless/no-audio-device sandboxes).
+   * The caller then exports video-only and DISCLOSES it — a suspended track
+   * handed to MediaRecorder silently produces a 0-byte file.
+   */
+  async prepareExportAudio(): Promise<'running' | 'unavailable'> {
+    try {
+      if (!this.audioCtx) this.audioCtx = new AudioContext()
+      if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => undefined)
+      const start = performance.now()
+      while (this.audioCtx.state !== 'running' && performance.now() - start < 700) {
+        await new Promise((r) => setTimeout(r, 60))
+      }
+      return this.audioCtx.state === 'running' ? 'running' : 'unavailable'
+    } catch {
+      return 'unavailable'
     }
   }
 
@@ -1286,6 +1322,8 @@ class PreviewEngine {
       const track = tracks[i]
       if (track.kind === 'audio' || track.hidden) continue
       const active = project.clips
+        // Day 54 — export-only caption skip: the burned-in toggle in the export dialog
+        .filter((c) => !(this.exportSkipCaptions && c.isCaption))
         .filter((c) => c.trackId === track.id && t >= c.start - 0.0001 && t < c.start + c.duration)
         .sort((a, b) => a.start - b.start)
       for (const clip of active) {

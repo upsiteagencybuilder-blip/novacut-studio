@@ -978,6 +978,76 @@ export function buildSrtFromCaptions(clips: Clip[]): string {
   )
 }
 
+/** Day 54 — shared caption lookup: text clips flagged by AI auto-captions, in timeline order */
+function getCaptionClips(clips: Clip[]) {
+  return clips
+    .filter((c) => c.isCaption && c.kind === 'text' && (c.textStyle?.content ?? '').trim())
+    .sort((a, b) => a.start - b.start)
+}
+
+/** WebVTT sidecar — like SRT but with a WEBVTT header and a dot milliseconds separator. */
+export function buildVttFromCaptions(clips: Clip[]): string {
+  const captions = getCaptionClips(clips)
+  if (!captions.length) return ''
+  const vttTimestamp = (t: number) => srtTimestamp(t).replace(',', '.')
+  return (
+    'WEBVTT\n\n' +
+    captions
+      .map((c, i) => {
+        const start = c.start
+        const end = Math.max(start + 0.2, start + c.duration)
+        const text = (c.textStyle?.content ?? '').trim().replace(/\r?\n/g, '\n')
+        return `${i + 1}\n${vttTimestamp(start)} --> ${vttTimestamp(end)}\n${text}`
+      })
+      .join('\n\n') +
+    '\n'
+  )
+}
+
+/**
+ * Advanced SubStation Alpha sidecar — minimal-but-valid v4+ script:
+ * default style derived from the first caption's text style (fallback 48px),
+ * Dialogue lines with h:mm:ss.cc timestamps and a bottom-center alignment.
+ */
+export function buildAssFromCaptions(clips: Clip[], canvasWidth = 1920, canvasHeight = 1080): string {
+  const captions = getCaptionClips(clips)
+  if (!captions.length) return ''
+  const assTimestamp = (t: number) => {
+    const safe = Math.max(0, t)
+    const h = Math.floor(safe / 3600)
+    const m = Math.floor((safe % 3600) / 60)
+    const s = safe % 60
+    return `${h}:${String(m).padStart(2, '0')}:${s.toFixed(2).padStart(5, '0')}`
+  }
+  const first = captions[0]
+  const fontSize = Math.round(first.textStyle?.fontSize ?? 48)
+  const header = [
+    '[Script Info]',
+    '; NovaCut caption sidecar',
+    `PlayResX: ${canvasWidth}`,
+    `PlayResY: ${canvasHeight}`,
+    'WrapStyle: 0',
+    '',
+    '[V4+ Styles]',
+    'Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, BorderStyle',
+    `Style: Default,Arial,${fontSize},&H00FFFFFF,&H00000000,&H64000000,0,2,2,2,40,40,60,1`,
+    '',
+    '[Events]',
+    'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+  ].join('\n')
+  const events = captions
+    .map((c) => {
+      const start = c.start
+      const end = Math.max(start + 0.2, start + c.duration)
+      const text = (c.textStyle?.content ?? '')
+        .trim()
+        .replace(/\r?\n/g, '\\N')
+      return `Dialogue: 0,${assTimestamp(start)},${assTimestamp(end)},Default,,0,0,0,,${text}`
+    })
+    .join('\n')
+  return header + '\n' + events + '\n'
+}
+
 /**
  * Goertzel magnitude at one frequency over a mono slice — the shared DSP
  * measurement used by the audio QA harnesses (voice FX, EQ).

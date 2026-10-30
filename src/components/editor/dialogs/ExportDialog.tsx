@@ -53,7 +53,7 @@ import {
   type ExportBundle,
   type LadderRung,
 } from '@/lib/editor/export-bundles'
-import { buildSrtFromCaptions, formatBytes, formatTimecode, projectDuration } from '@/lib/editor/utils'
+import { buildSrtFromCaptions, buildVttFromCaptions, buildAssFromCaptions, formatBytes, formatTimecode, projectDuration } from '@/lib/editor/utils'
 import { exportGif, exportPngSequence } from '@/lib/editor/frame-export'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -118,6 +118,10 @@ export function ExportDialog() {
   const [frameProgress, setFrameProgress] = useState(0)
   const [frameResult, setFrameResult] = useState<{ url: string; size: number; label: string; download: string } | null>(null)
 
+  // Day 54: subtitles — burn toggle + sidecar format
+  const [burnCaptions, setBurnCaptions] = useState(true)
+  const [sidecarFormat, setSidecarFormat] = useState<'srt' | 'vtt' | 'ass'>('srt')
+
   const duration = projectDuration(project)
   const phase = exportState.phase
   const fps = project.fps
@@ -138,8 +142,14 @@ export function ExportDialog() {
     [fps]
   )
 
-  // caption sidecar (.srt) built from AI caption clips
+  // caption sidecars — SRT, WebVTT and ASS built from AI caption clips
   const srtContent = useMemo(() => buildSrtFromCaptions(project.clips), [project.clips])
+  const sidecarContent = useMemo(() => {
+    if (sidecarFormat === 'vtt') return buildVttFromCaptions(project.clips)
+    if (sidecarFormat === 'ass') return buildAssFromCaptions(project.clips, project.canvasWidth, project.canvasHeight)
+    return srtContent
+  }, [sidecarFormat, srtContent, project.clips, project.canvasWidth, project.canvasHeight])
+  const captionCount = srtContent ? srtContent.trim().split('\n\n').length : 0
 
   // ---------------- Day 51: bundle manager handlers ----------------
 
@@ -285,6 +295,7 @@ export function ExportDialog() {
         format,
         audioBitsPerSecond: audioKbps * 1000,
         burnIn: burnIn ? 'timecode' : undefined,
+        skipCaptions: !burnCaptions,
         onProgress: (p) => useEditor.getState().setExportState({ progress: p }),
       })
       setLastMime(result.mimeType)
@@ -294,6 +305,12 @@ export function ExportDialog() {
         sizeBytes: result.blob.size,
         durationMs: result.durationMs,
       })
+      // Day 54 — honest disclosure when the audio engine could not start
+      if (!result.audioIncluded) {
+        toast.warning('Exported WITHOUT audio — the audio engine could not start in this environment', {
+          duration: 8000,
+        })
+      }
     } catch (err) {
       const e = err as DOMException
       if (e.name === 'AbortError') {
@@ -344,18 +361,19 @@ export function ExportDialog() {
     }
   }
 
-  const handleSrtDownload = () => {
-    if (!srtContent) return
-    const blob = new Blob([srtContent], { type: 'text/plain;charset=utf-8' })
+  const handleSidecarDownload = () => {
+    if (!sidecarContent) return
+    const mime = sidecarFormat === 'vtt' ? 'text/vtt;charset=utf-8' : sidecarFormat === 'ass' ? 'text/plain;charset=utf-8' : 'text/plain;charset=utf-8'
+    const blob = new Blob([sidecarContent], { type: mime })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${safeFileName(fileName)}.srt`
+    a.download = `${safeFileName(fileName)}.${sidecarFormat}`
     document.body.appendChild(a)
     a.click()
     a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 4000)
-    toast.success('Subtitle sidecar (.srt) downloaded')
+    toast.success(`Subtitle sidecar (.${sidecarFormat}) downloaded`)
   }
 
   const handleFrameExport = async (kind: 'gif' | 'png') => {
@@ -1033,22 +1051,56 @@ export function ExportDialog() {
                 <div className="flex min-w-0 items-center gap-2">
                   <Captions className="h-4 w-4 shrink-0 text-sky-400" />
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold">Captions (.srt sidecar)</p>
+                    <p className="text-xs font-semibold">Subtitles &amp; captions</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {srtContent
-                        ? `${srtContent.trim().split('\n\n').length} caption${srtContent.trim().split('\n\n').length > 1 ? 's' : ''} from AI Auto Captions`
+                      {captionCount > 0
+                        ? `${captionCount} caption${captionCount > 1 ? 's' : ''} from AI Auto Captions`
                         : 'Run AI Auto Captions first — caption clips become sidecar cues'}
                     </p>
                   </div>
                 </div>
                 <Button
                   size="sm"
-                  disabled={!srtContent}
-                  onClick={handleSrtDownload}
+                  disabled={!sidecarContent}
+                  onClick={handleSidecarDownload}
                   className="h-8 shrink-0 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 text-xs font-semibold text-sky-300 hover:bg-sky-500/20"
                 >
-                  Download .srt
+                  Download .{sidecarFormat}
                 </Button>
+              </div>
+
+              {/* Day 54 — burn toggle + sidecar format */}
+              <div className="mt-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold">Burn captions into the exported video</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Off = captions stay OUT of the picture — ship them as the sidecar instead. Preview always shows them.
+                    </p>
+                  </div>
+                  <Switch
+                    aria-label="Burn captions into exported video"
+                    checked={burnCaptions}
+                    onCheckedChange={(v) => setBurnCaptions(v)}
+                    className="shrink-0"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">Sidecar format</span>
+                  <Select value={sidecarFormat} onValueChange={(v) => setSidecarFormat(v as typeof sidecarFormat)}>
+                    <SelectTrigger aria-label="Sidecar format" className="h-7 w-32 text-[11px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="srt" className="text-[11px]">SubRip (.srt)</SelectItem>
+                      <SelectItem value="vtt" className="text-[11px]">WebVTT (.vtt)</SelectItem>
+                      <SelectItem value="ass" className="text-[11px]">SubStation (.ass)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {sidecarFormat === 'ass' && captionCount > 0 && (
+                    <span className="text-[10px] text-muted-foreground/70">style from the first caption</span>
+                  )}
+                </div>
               </div>
             </div>
 

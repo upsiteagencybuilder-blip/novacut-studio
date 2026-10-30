@@ -1972,3 +1972,25 @@ Stage Summary:
 - Day 53 shipped: two genuinely offline (non-realtime) export paths — animated GIF and a zipped PNG frame sequence — with honest format limits and probed-valid outputs.
 - Files: lib/editor/frame-export.ts (new), components/editor/dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts, package.json (+gifenc, +fflate).
 - Next: Day 54 — subtitle burn toggle + SRT/VTT/ASS sidecars.
+
+---
+Task ID: Day-54
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category F Day 54 — Subtitle burn toggle + SRT/VTT/ASS sidecars.
+
+Work Log:
+- Subtitles & captions card (rebuilt from the old .srt-only row): BURN TOGGLE (default ON = captions painted into the picture as before; OFF = captions stay OUT of the exported file so subtitles ship as the sidecar; honest note that the preview ALWAYS shows them) + SIDECAR FORMAT select (SubRip .srt / WebVTT .vtt / SubStation .ass) driving the download button label and toast.
+- utils.ts: buildVttFromCaptions (WEBVTT header, dot-ms timestamps) + buildAssFromCaptions (V4+ script: PlayRes from the real canvas, Default style sized from the first caption's fontSize, Dialogue lines with h:mm:ss.cc times) sharing a caption-clip lookup with the SRT builder.
+- Engine: export-only skipCaptions flag — beginExport({skipCaptions}) arms it, renderVisual filters isCaption clips while armed, endExport clears it. Preview rendering untouched.
+- AUDIO FALLBACK (found by E2E, root-caused, fixed): exports suddenly produced 0-byte files. Isolation: plain canvas+MediaRecorder → 5.6 KB OK; engine canvas via setInterval draws → 99 KB OK; engine play → canvas repaints (pixel hashes change) yet 0 bytes. A/B: video-only stream → 169 KB, stream WITH audio track → 0 bytes. Root cause: the export AudioContext stays 'suspended' in this sandbox (resume() never settles even under a trusted click — headless audio thread gone after a browser relaunch); a suspended track stalls MediaRecorder completely. FIX: engine.prepareExportAudio() probes/resumes with a 700 ms grace → 'running' | 'unavailable'; startExport requests includeAudio=false when unavailable (video-only stream records fine) + ExportResult.audioIncluded + a toast.warning 'Exported WITHOUT audio — the audio engine could not start in this environment'; defensive 0-byte blob → explicit error instead of a corrupt download. Normal browsers keep full audio.
+- Catalog: delivery-burn-captions desc updated (toggle semantics); +2 delivery-sidecar-vtt, delivery-sidecar-ass.
+- E2E receipts (desktop 1280×800, demo + one injected magenta caption 'E2E CAPTION TEST' @1.0–3.0s):
+  • Sidecar CONTENT (blob intercepted): SRT '1\n00:00:01,000 --> 00:00:03,000\nE2E CAPTION TEST'; VTT 'WEBVTT\n\n1\n00:00:01.000 --> …' (dot separator); ASS '[Script Info] PlayResX: 1280, PlayResY: 720 … Style: Default,Arial,88 … Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,E2E CAPTION TEST'.
+  • BURN A/B through real exports at 540p·24 (960×540, ~1.8 MB each, WITH the new audio fallback): burn ON → frame @1.5 s contains 5,953 magenta px; burn OFF → 0 magenta px. Caption burn is toggle-proven, not assumed.
+  • Audio fallback receipt: 'Exported WITHOUT audio…' toast + valid non-empty files.
+  • Mobile 390×844: card, toggle, format select all render; fresh-session zero console errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 54 shipped: subtitle burn is now a choice (burn in or sidecar-out) across three real sidecar formats — and a silent 0-byte export failure mode was root-caused and replaced with a graceful, disclosed video-only path.
+- Files: engine.ts, exporter.ts, utils.ts, ExportDialog.tsx, delivery.ts.
+- Next: Day 55 — branding kit (logo watermark, intro/outro auto-attach).

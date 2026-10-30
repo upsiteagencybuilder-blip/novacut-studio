@@ -71,8 +71,10 @@ export const DELIVERY_TOOLS: ProTool[] = [
 
   // -------- Captions & metadata --------
   { id: 'delivery-captions-export', name: 'Captions Export Dropdown', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'Captions export as an .srt sidecar and render into the picture as text clips', action: 'open-export' },
-  { id: 'delivery-burn-captions', name: 'Burn Captions into Video Option', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'AI captions are ordinary text clips — every export renders them into the picture', action: 'open-export' },
+  { id: 'delivery-burn-captions', name: 'Burn Captions into Video Option', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'Toggle in the export dialog — ON paints caption clips into the picture (default), OFF keeps them OUT so subtitles ship as the sidecar instead; export-only flag, preview always shows them', action: 'open-export' },
   { id: 'delivery-sidecar-srt', name: 'Create Sidecar File (.srt)', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'Download an .srt built from AI Auto Captions with timestamps', action: 'open-export' },
+  { id: 'delivery-sidecar-vtt', name: 'Create Sidecar File (.vtt WebVTT)', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'WEBVTT header + dot-millisecond timestamps, one format-select away from the SRT path', action: 'open-export' },
+  { id: 'delivery-sidecar-ass', name: 'Create Sidecar File (.ass SubStation)', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'V4+ script with PlayRes from the canvas, Default style sized from the first caption, Dialogue lines with h:mm:ss.cc times', action: 'open-export' },
   { id: 'delivery-metadata-export', name: 'Metadata Export Options', section: 'delivery', group: 'Captions & metadata', status: 'planned', desc: 'Embed title, creator and rights metadata' },
   { id: 'delivery-timecode-burn-in', name: 'Timecode Burn-in Effect', section: 'delivery', group: 'Captions & metadata', status: 'live', desc: 'Toggle in the export dialog stamps a running timecode pill for review copies', action: 'open-export' },
 
