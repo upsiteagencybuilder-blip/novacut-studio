@@ -24,6 +24,7 @@ import {
   Film,
   FolderOpen,
   FolderInput,
+  HardDrive,
   History,
   Link2,
   Loader2,
@@ -38,6 +39,7 @@ import {
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
 import * as db from '@/lib/editor/db'
+import { StoragePanel } from '@/components/editor/dialogs/StorageDialog'
 import {
   cloudDeleteProject,
   cloudDuplicateProject,
@@ -102,7 +104,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import type { Project } from '@/lib/editor/types'
 
-type Tab = 'device' | 'cloud'
+type Tab = 'device' | 'cloud' | 'storage'
 
 function byUpdatedAtDesc(a: Project, b: Project): number {
   return b.updatedAt - a.updatedAt
@@ -1214,11 +1216,12 @@ function ProjectsBody() {
         </DialogDescription>
       </DialogHeader>
 
-      <div role="tablist" aria-label="Project locations" className="grid grid-cols-2 gap-1.5 rounded-xl border border-(--nc-line) bg-(--nc-panel) p-1.5">
+      <div role="tablist" aria-label="Project locations" className="grid grid-cols-3 gap-1.5 rounded-xl border border-(--nc-line) bg-(--nc-panel) p-1.5">
         {(
           [
             { id: 'device', label: 'On this device' },
             { id: 'cloud', label: 'Cloud backup' },
+            { id: 'storage', label: 'Storage' },
           ] as const
         ).map((t) => {
           const active = tab === t.id
@@ -1243,7 +1246,7 @@ function ProjectsBody() {
         })}
       </div>
 
-      {tab === 'device' ? <DeviceTab /> : <CloudTab onRestored={handleRestored} />}
+      {tab === 'device' ? <DeviceTab /> : tab === 'cloud' ? <CloudTab onRestored={handleRestored} /> : <StoragePanel />}
     </>
   )
 }

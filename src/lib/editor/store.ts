@@ -6,6 +6,7 @@
  * All components read/write through this store.
  */
 import { create } from 'zustand'
+import { toast } from 'sonner'
 import type {
   CaptionSegment,
   ChromaKey,
@@ -109,6 +110,8 @@ interface EditorStore {
   openProject: (id: string) => Promise<void>
   loadDemoProject: () => Promise<void>
   saveNow: () => Promise<void>
+  /** Day 60 — suspend autosave around a transient project swap; unpausing flushes the real state */
+  pauseAutosave: (on: boolean) => void
   setProjectName: (name: string) => void
   setCanvasSize: (width: number, height: number) => void
   setFps: (fps: number) => void
@@ -289,6 +292,19 @@ let lastHistoryKey: string | null = null
 let lastHistoryTime = 0
 let savingTimer: ReturnType<typeof setTimeout> | null = null
 let suppressSave = false
+/** Day 60 — true while a transient project overlay (export branding) is live */
+let autosavePaused = false
+/** warn about quota only once per session — repeated toasts would be noise */
+let storageWarned = false
+
+function surfaceStorageError(err: unknown) {
+  const e = err as { name?: string; code?: number }
+  const quota = e?.name === 'QuotaExceededError' || e?.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e?.code === 22
+  if (quota && !storageWarned) {
+    storageWarned = true
+    toast.error('Local storage is FULL — saving stopped. Free space in Projects → Storage.', { duration: 10000 })
+  }
+}
 /** internal copy/cut clipboard — session scope, deep-cloned clips */
 let clipboardClips: Clip[] = []
 
@@ -479,9 +495,12 @@ export const useEditor = create<EditorStore>((set, get) => ({
         }
         // 'export' is handled in EditorShell once ready
       }
-      // autosave subscription (runs once)
+      // autosave subscription (runs once). Day 60 hardening: the subscription is
+      // PAUSED around transient project swaps (export branding overlay) so the
+      // temporary timeline never lands in IndexedDB, and quota failures surface
+      // honestly instead of looping silently.
       useEditor.subscribe((state, prev) => {
-        if (state.project !== prev.project && !suppressSave) {
+        if (state.project !== prev.project && !suppressSave && !autosavePaused) {
           if (savingTimer) clearTimeout(savingTimer)
           set({ autosave: 'saving' })
           savingTimer = setTimeout(async () => {
@@ -489,8 +508,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
               await db.saveProject(get().project)
               await db.setKV('lastProjectId', get().project.id)
               set({ autosave: 'saved' })
-            } catch {
+            } catch (err) {
               set({ autosave: 'error' })
+              surfaceStorageError(err)
             }
           }, 650)
         }
@@ -550,8 +570,18 @@ export const useEditor = create<EditorStore>((set, get) => ({
       await db.saveProject(get().project)
       await db.setKV('lastProjectId', get().project.id)
       set({ autosave: 'saved' })
-    } catch {
+    } catch (err) {
       set({ autosave: 'error' })
+      surfaceStorageError(err)
+    }
+  },
+
+  /** Day 60 — suspend autosave around a transient project swap; unpausing flushes the real state */
+  pauseAutosave: (on) => {
+    autosavePaused = on
+    if (!on) {
+      if (savingTimer) clearTimeout(savingTimer)
+      void get().saveNow()
     }
   },
 

@@ -125,6 +125,8 @@ async function runJob(job: QueueJob) {
   before.setFps(settings.fps)
   const state = useEditor.getState()
   const branded = buildBrandedTimeline(state.project, state.media, settings.branding)
+  // Day 60 — the transient branded timeline must NEVER land in IndexedDB
+  if (branded) useEditor.getState().pauseAutosave(true)
   if (branded) useEditor.setState({ project: branded.project })
 
   try {
@@ -165,6 +167,8 @@ async function runJob(job: QueueJob) {
         duration: 8000,
       })
     }
+    // Day 60 — unpause autosave and flush the restored state to IndexedDB
+    if (branded) useEditor.getState().pauseAutosave(false)
     s.setCanvasSize(origCanvas.w, origCanvas.h)
     s.setFps(origCanvas.fps)
   }

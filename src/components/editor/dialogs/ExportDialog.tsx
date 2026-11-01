@@ -364,6 +364,8 @@ export function ExportDialog() {
     }
     const originalProject = useEditor.getState().project
     const branded = buildBrandedTimeline(originalProject, useEditor.getState().media, branding)
+    // Day 60 — the transient branded timeline must NEVER land in IndexedDB
+    if (branded) useEditor.getState().pauseAutosave(true)
     if (branded) useEditor.setState({ project: branded.project })
 
     store.setExportState({ phase: 'recording', progress: 0 })
@@ -405,6 +407,8 @@ export function ExportDialog() {
       if (branded) {
         useEditor.setState({ project: originalProject })
         useEditor.getState().setCurrentTime(0)
+        // Day 60 — unpause autosave and flush the restored state to IndexedDB
+        useEditor.getState().pauseAutosave(false)
       }
     }
   }

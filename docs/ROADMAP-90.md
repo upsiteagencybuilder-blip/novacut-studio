@@ -20,7 +20,7 @@
 | AI | Copilot, Script Writer, Captions (transcribe), Voiceover (tts), AI Image — all with pro busy-bars (elapsed, phase, Cancel) |
 | Cloud | Turso-backed project backup (health / backup / restore / upsert / delete) with SQLite dev fallback — Sector 15 done |
 | PWA | Direct install flow, service worker, offline-first shell |
-| Tool catalog | **284 live / 293 planned (SOON)** — honesty rule: flip only with real feature + deep link + E2E proof |
+| Tool catalog | **287 live / 293 planned (SOON)** — honesty rule: flip only with real feature + deep link + E2E proof |
 | Known backlog | audio-extract voice FX, favorites/recents for video effects, per-effect custom controls (pitch/mix), beat-sync markers, share viewer page |
 
 **Biggest SOON backlogs**: color 49 · vfx 52 · timeline 51 · delivery 34 · filters 29 · sound 26.

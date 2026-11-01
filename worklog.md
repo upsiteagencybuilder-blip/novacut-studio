@@ -2102,3 +2102,24 @@ Stage Summary:
 - Day 59 shipped: a genuinely introspectable offline mode — the SW precaches shell assets on every host, reports its inventory to the UI, and the app provably reloads and edits fully offline with local-first persistence.
 - Files: public/sw.js, hooks/usePWA.ts, components/editor/pwa/PWAStatus.tsx, components/editor/TopBar.tsx, lib/tools/sections/panels.ts.
 - Next: Day 60 — IndexedDB autosave hardening + storage manager (quota, cleanup).
+
+---
+Task ID: Day-60
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category G Day 60 — IndexedDB autosave hardening + storage manager (quota, cleanup).
+
+Work Log:
+- NEW lib/editor/storage-manager.ts — getStorageReport (navigator.storage.estimate usage/quota + persisted flag; real IndexedDB scans: asset meta sizes summed, per-project version counts, orphan = asset referenced by NO stored project clip AND not in the active session's media — session media is ALWAYS protected), deleteOrphanAssets, clearAllVersions (every project), clearSWCaches, factoryReset (IDB + localStorage + sessionStorage + caches → reload), formatBytesLocal.
+- NEW dialogs/StorageDialog.tsx — StoragePanel (embedded as a THIRD TAB "Storage" in the Projects dialog: quota bar with amber>65%/rose>85% bands, stat rows for media/projects/versions/orphans, inline-confirm cleanup actions, shield-note "every number is measured live") + standalone StorageDialog mounted in EditorShell; DialogName extended with 'storage'.
+- Autosave hardening (store.ts): NEW pauseAutosave(on) — the debounced subscription skips while a transient project overlay is live, and unpausing flushes via saveNow; quota errors surface ONE honest toast ("Local storage is FULL — saving stopped. Free space in Projects → Storage.") instead of looping silently; saveNow also reports. ExportDialog handleStart + export-queue runJob now pause autosave around the branded swap (Day 55's disclosed autosave-debris window is CLOSED — the transient 8-clip timeline can never land in IndexedDB).
+- Catalog: +2 panel-storage-manager, panel-local-persistence (live, open-projects); roadmap count line refreshed to the node-counted 287/293.
+- E2E receipts (desktop 1280×800 + mobile 390×844):
+  • Report: "14.0 MB used of 10.01 GB" + banded bar; Media blobs 6 · 1.1 MB; Projects 1; Versions 0; Orphans 0 · 0 B with the "none found" badge (session media protected — the two injected test PNGs are in active media, correctly NOT flagged).
+  • Cleanup: "Clear offline shell caches" → inline confirm → toast "Cleared 1 shell cache — they rebuild on the next online session" (badge had shown 26 runtime-cached files); factory reset prompt opens and CANCELS with the session intact (6 clips).
+  • AUTOSAVE HARDENING (the key receipt): branded export with intro+outro armed — MID-RECORDING the store carried 8 clips while the IndexedDB projects row still held EXACTLY 6 with autosave 'idle' (pre-Day-60 this window persisted the transient timeline); AFTER done — store 6, DB 6, autosave 'saved' (unpause flushed). Watermark-only export correctly performs NO swap at all (buildBrandedTimeline → null).
+  • Mobile 390×844: Storage tab renders fully (quota bar, stats, all four cleanup blocks); fresh-session zero console errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 60 shipped: a real storage manager (live quota + honest per-store counts + guarded cleanup paths) and genuinely hardened autosave — transient export overlays are provably excluded from persistence, quota failures speak up once, and the flush-on-restore keeps IndexedDB byte-true.
+- Files: lib/editor/storage-manager.ts (new), dialogs/StorageDialog.tsx (new), store.ts, dialogs/ExportDialog.tsx, lib/editor/export-queue.ts, dialogs/ProjectsDialog.tsx, EditorShell.tsx, types.ts, lib/tools/sections/panels.ts, docs/ROADMAP-90.md.
+- Next: Day 61 — virtualized timeline (smooth at 100+ clips).

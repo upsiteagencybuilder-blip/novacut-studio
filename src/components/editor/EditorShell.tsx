@@ -33,6 +33,7 @@ import { AccountDialog } from '@/components/editor/dialogs/AccountDialog'
 import { MixerDialog } from '@/components/editor/dialogs/MixerDialog'
 import { VersionsDialog } from '@/components/editor/dialogs/VersionsDialog'
 import { ThemeStudioDialog } from '@/components/editor/dialogs/ThemeStudioDialog'
+import { StorageDialog } from '@/components/editor/dialogs/StorageDialog'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
 import { startCloudAutosave } from '@/lib/cloud/autosave'
@@ -626,6 +627,7 @@ export function EditorShell() {
       <MixerDialog />
       <VersionsDialog />
       <ThemeStudioDialog />
+      <StorageDialog />
       <OnboardingOverlay />
       </div>
     </SessionProvider>
