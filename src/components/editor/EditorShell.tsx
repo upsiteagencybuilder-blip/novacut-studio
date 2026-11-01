@@ -42,6 +42,7 @@ import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
 import { startCloudAutosave } from '@/lib/cloud/autosave'
 import { CrashRecoveryWatcher } from '@/components/editor/ErrorBoundary'
 import { installTelemetry } from '@/lib/telemetry'
+import { runOverrideLayer } from '@/lib/editor/shortcuts'
 import { ContextualTips } from '@/lib/tips'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
@@ -62,6 +63,8 @@ function useDesktop(): boolean {
 function useKeyboardShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Day 71 — custom bindings resolve first (never shadow shipped defaults)
+      if (runOverrideLayer(e)) return
       const s = useEditor.getState()
       const target = e.target as HTMLElement | null
       if (

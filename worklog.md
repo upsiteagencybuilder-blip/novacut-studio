@@ -2390,3 +2390,28 @@ Stage Summary:
 - Day 70 shipped: the i18n spine is real — cookie-driven locale, provider, message catalogs, `<html lang>` sync, one fully translated surface, and a switcher that tells the truth about coverage.
 - Files: next.config.ts, src/i18n/request.ts (new), messages/en.json + bn.json (new), src/app/layout.tsx, panels/OnboardingOverlay.tsx, TopBar.tsx.
 - Next: Day 71 — custom keyboard-shortcut editor.
+
+---
+## Day 71 — Custom keyboard-shortcut editor
+**Date:** 2025-12-XX · **Category:** H (Templates, Onboarding & Growth)
+
+### Task ID: Day-71
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category H Day 71 — rebind the editor's shortcuts without ever shadowing a shipped default by accident.
+
+**Work Log:**
+- NEW lib/editor/shortcuts.ts: `ACTIONS` registry (12 customizable actions with canonical default combos), `comboFromEvent` normalizer (mod/alt/shift + key, space/esc/arrows), `prettyCombo` renderer, localStorage override store (`novacut.shortcuts`, get/set/reset), `bindingFor/actionForCombo/conflictsFor` resolvers, and `EXECUTORS` — real executors whose behavior mirrors the built-in branches exactly. `runOverrideLayer` runs BEFORE the untouched original handler and ONLY consumes combos that differ from every shipped default — stock behavior can never be shadowed by accident.
+- EditorShell `useKeyboardShortcuts`: one line added at the top of onKey — custom bindings resolve first; the entire original handler stays as-is beneath.
+- ShortcutsDialog: the 12 customizable actions now lead the list, each row with its CURRENT binding (custom rows carry an amber "custom" chip), a hover "rebind" pencil → inline "Press keys…" capture (Esc cancels), hard conflict rejection ("Already used by "Play / Pause" — pick another combo"), and a Reset-all that re-renders the rows (version-keyed). Fixed bindings keep their section below; custom bindings are disclosed as device-local.
+
+**E2E receipts (desktop 1280×800 + mobile 390×844):**
+- Rebind: Play/Pause → P (capture UI → stored `{"toggle-play":"p"}`) → P toggles playback for real (isPlaying true → false), Space no longer plays while custom binding is live.
+- Conflict: attempting Undo → P rejected with the exact conflict toast; undo binding untouched.
+- Reset all → storage cleared, "custom" badge gone, row shows Space again, and Space plays/pauses for real after closing the dialog.
+- Mobile: 12 rows + 12 rebind buttons render in the dialog.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 71 shipped: a real shortcut editor — capture, conflict detection, persistence, reset — layered safely above the untouched default handler.
+- Files: lib/editor/shortcuts.ts (new), components/editor/EditorShell.tsx, dialogs/ShortcutsDialog.tsx.
+- Next: Day 72 — Command palette (⌘K): every live tool reachable by keyboard.
