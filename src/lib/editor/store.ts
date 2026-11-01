@@ -629,7 +629,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
         peakLevel: asset.peakLevel,
         createdAt: asset.createdAt,
       },
-      asset.rawBlob
+      asset.rawBlob as Blob
     ).catch((e) => console.error('asset save failed', e))
   },
 
@@ -993,10 +993,14 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const source = s.media.find((m) => m.id === target.mediaId)
     if (!source) return 'no-video'
     try {
+      // Day 62 — rehydrate an evicted asset before decoding
+      const { ensureAssetReady } = await import('./memory-manager')
+      const ready = await ensureAssetReady(source.id)
+      if (!ready?.rawBlob) return 'no-video'
       // decode the embedded audio track straight from the source blob
       const { decodeSource } = await import('../effects/voice')
       const { encodeWav16BitStereo } = await import('../effects/audio-render')
-      const buffer = await decodeSource(source.rawBlob)
+      const buffer = await decodeSource(ready.rawBlob)
       if (!buffer.length) return 'no-audio'
       // slice exactly the clip's trimmed source window (respects speed)
       const sr = buffer.sampleRate

@@ -53,6 +53,12 @@ export function useEngineBridge(canvasRef: React.RefObject<HTMLCanvasElement | n
     // renders at t=0, e.g. a black canvas when clips fade in)
     engine.seekTo(useEditor.getState().currentTime)
 
+    // Day 62 — memory budget: when a draw hits an evicted asset, reload its
+    // blob from IndexedDB in the background; the store swap re-renders
+    engine.onMissingAsset = (id) => {
+      void import('@/lib/editor/memory-manager').then(({ rehydrateMediaAsset }) => rehydrateMediaAsset(id)).catch(() => undefined)
+    }
+
     const unsubscribe = useEditor.subscribe((state, prev) => {
       // play / pause
       if (state.isPlaying !== prev.isPlaying) {

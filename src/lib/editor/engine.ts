@@ -198,6 +198,14 @@ class PreviewEngine {
   /* adaptive render quality */
   private renderScale = 1
   private renderQuality: RenderQuality = 'high'
+  /** Day 62 — automatic preview de-scaling while playback struggles (manual setRenderScale turns it off) */
+  private autoScale = true
+  /** Day 62 — rolling window of measured draw times (ms) during playback */
+  private drawWindow: number[] = []
+  /** Day 62 — evicted assets we already asked the host to rehydrate (dedupe) */
+  private missingRequested = new Set<string>()
+  /** Day 62 — host hook: called when a draw needs an evicted asset */
+  onMissingAsset: ((id: string) => void) | null = null
   /** forced scale while exporting (always full project resolution) */
   private exportScaleOverride: number | null = null
   /** timecode burn-in overlay, armed only between beginExport/endExport */
@@ -248,6 +256,72 @@ class PreviewEngine {
 
   getRenderQuality(): RenderQuality {
     return this.renderQuality
+  }
+
+  /** Day 62 — live preview scale for UI badges (0.5..2) */
+  getRenderScale(): number {
+    return this.renderScale
+  }
+
+  /** Day 62 — toggle automatic de-scaling (back on when a manual user wants it) */
+  setAutoScale(on: boolean) {
+    this.autoScale = on
+    if (on) this.drawWindow = []
+  }
+
+  /** Day 62 — measured avg draw time (ms) over the rolling playback window */
+  getDrawPressure(): number {
+    if (!this.drawWindow.length) return 0
+    return this.drawWindow.reduce((a, b) => a + b, 0) / this.drawWindow.length
+  }
+
+  private noteDrawMs(ms: number) {
+    this.drawWindow.push(ms)
+    if (this.drawWindow.length > 45) this.drawWindow.shift()
+    // sustained heavy draws + auto mode + headroom left → drop one tier (75%)
+    if (!this.autoScale || this.exportScaleOverride !== null) return
+    if (this.drawWindow.length >= 30) {
+      const avg = this.drawWindow.reduce((a, b) => a + b, 0) / this.drawWindow.length
+      if (avg > 34 && this.renderScale > 0.51) {
+        this.renderScale = clamp(Math.round(this.renderScale * 0.75 * 100) / 100, 0.5, 2)
+        this.renderQuality = this.renderScale <= 1.001 ? 'low' : this.renderScale <= 1.501 ? 'medium' : 'high'
+        this.drawWindow = []
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('nc-preview-autoscale', { detail: { scale: this.renderScale } }))
+        }
+      }
+    }
+  }
+
+  /** Day 62 — evicted media must not keep dead <video>/<audio>/<img> elements */
+  dropMediaPools(mediaId: string) {
+    for (const [clipId, entry] of this.videos) {
+      if (entry.mediaId === mediaId) {
+        entry.el.pause()
+        entry.el.src = ''
+        this.videos.delete(clipId)
+      }
+    }
+    for (const [clipId, entry] of this.audios) {
+      if (entry.mediaId === mediaId) {
+        entry.el.pause()
+        entry.el.src = ''
+        this.audios.delete(clipId)
+      }
+    }
+    this.images.delete(mediaId)
+    this.invalidate()
+  }
+
+  /** Day 62 — a draw hit an evicted asset: ask the host to rehydrate once */
+  private requestMissingAsset(id: string) {
+    if (this.missingRequested.has(id)) return
+    this.missingRequested.add(id)
+    try {
+      this.onMissingAsset?.(id)
+    } catch {
+      /* host not wired */
+    }
   }
 
   /* -------------------------------------------------- lifecycle */
@@ -344,7 +418,10 @@ class PreviewEngine {
         return
       }
       this.cb?.onTimeUpdate(this.time)
+      // Day 62 — measure the draw itself (excludes rAF idle) for auto-scaling
+      const drawT0 = performance.now()
       this.renderFrame()
+      this.noteDrawMs(performance.now() - drawT0)
       this.raf = requestAnimationFrame(tick)
     }
     this.raf = requestAnimationFrame(tick)
@@ -796,8 +873,9 @@ class PreviewEngine {
 
   private getOrCreateVideo(clip: Clip, mediaId: string, url: string): HTMLVideoElement | null {
     const existing = this.videos.get(clip.id)
-    if (existing && existing.mediaId === mediaId) return existing.el as HTMLVideoElement
-    if (existing) {
+    if (existing && existing.mediaId === mediaId) {
+      // Day 62 — a rehydrated asset has a NEW objectURL: rebuild on mismatch
+      if (existing.el.src === url || existing.el.src.endsWith(url)) return existing.el as HTMLVideoElement
       existing.el.pause()
       existing.el.src = ''
       this.videos.delete(clip.id)
@@ -822,8 +900,9 @@ class PreviewEngine {
 
   private getOrCreateAudio(clip: Clip, mediaId: string, url: string): HTMLAudioElement | null {
     const existing = this.audios.get(clip.id)
-    if (existing && existing.mediaId === mediaId) return existing.el as HTMLAudioElement
-    if (existing) {
+    if (existing && existing.mediaId === mediaId) {
+      // Day 62 — rebuild when the objectURL changed (rehydration)
+      if (existing.el.src === url || existing.el.src.endsWith(url)) return existing.el as HTMLAudioElement
       existing.el.pause()
       existing.el.src = ''
       this.audios.delete(clip.id)
@@ -845,7 +924,11 @@ class PreviewEngine {
 
   private getImage(mediaId: string, url: string): HTMLImageElement | null {
     const existing = this.images.get(mediaId)
-    if (existing) return existing
+    if (existing) {
+      // Day 62 — a rehydrated asset re-creates the image element
+      if (existing.src === url || existing.src.endsWith(url)) return existing
+      this.images.delete(mediaId)
+    }
     const img = new Image()
     img.src = url
     img.onload = () => {
@@ -1445,7 +1528,12 @@ class PreviewEngine {
       for (const clip of clips) {
         if (!clip.mediaId) continue
         const asset = mediaMap.get(clip.mediaId)
+        // Day 62 — evicted asset: request rehydration, stay silent this frame
         if (!asset) continue
+        if (!asset.rawBlob) {
+          this.requestMissingAsset(asset.id)
+          continue
+        }
         const entry = this.audios.get(clip.id)
         const el = entry && entry.mediaId === clip.mediaId ? entry.el : this.getOrCreateAudio(clip, clip.mediaId, asset.objectUrl)
         if (el) {
@@ -1698,7 +1786,10 @@ class PreviewEngine {
     const snap = this.snapshotFn!
     if (clip.kind === 'video' && clip.mediaId) {
       const asset = mediaMap.get(clip.mediaId)
-      if (asset) {
+      // Day 62 — evicted asset: request rehydration and skip this frame
+      if (asset && !asset.rawBlob) {
+        this.requestMissingAsset(asset.id)
+      } else if (asset) {
         const track = project.tracks.find((tr) => tr.id === clip.trackId)
         const entry = this.videos.get(clip.id)
         const el = entry && entry.mediaId === clip.mediaId ? (entry.el as HTMLVideoElement) : this.getOrCreateVideo(clip, clip.mediaId, asset.objectUrl)
@@ -1835,7 +1926,11 @@ class PreviewEngine {
       this.drawSticker(ctx, clip, tLocal, q, W, H, tx, ty)
     } else if (clip.kind === 'image' && clip.mediaId) {
       const asset = mediaMap.get(clip.mediaId)
-      const img = asset ? this.getImage(asset.id, asset.objectUrl) : null
+      // Day 62 — evicted asset: request rehydration, draw nothing this frame
+      if (asset && !asset.rawBlob) {
+        this.requestMissingAsset(asset.id)
+      }
+      const img = asset && asset.rawBlob ? this.getImage(asset.id, asset.objectUrl) : null
       if (img && img.naturalWidth > 0) {
         const s = tscale * motionScale * overlayZoom
         ctx.scale(s, s)

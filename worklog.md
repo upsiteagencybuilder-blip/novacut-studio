@@ -2146,3 +2146,31 @@ Stage Summary:
 - Day 61 shipped: the timeline is now truly virtualized horizontally — clip DOM is bounded by the viewport (±360px) no matter how long the project grows; ruler ticks share the same window.
 - Files: src/components/editor/timeline/Timeline.tsx.
 - Next: Day 62 — memory budget (media eviction, preview resolution scaling).
+
+---
+## Day 62 — Memory budget: media eviction + preview resolution scaling
+**Date:** 2025-12-XX · **Category:** G (PWA, Performance & Reliability)
+
+### Task ID: Day-62
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category G Day 62 — bound the editor's RAM footprint (evictable media blobs) and make preview resolution honestly adaptive.
+
+**Work Log:**
+- NEW lib/editor/memory-manager.ts: `getMediaBudgetBytes/setMediaBudgetBytes` (localStorage `novacut.mediaBudget`, default 750 MB, choices 256/512/750/1500 MB/Off), `getMediaReport` (measured held bytes vs budget, evictable = not protected), `evictMediaAssets` (revoke objectURL + drop rawBlob, keep meta + thumbnail, drop engine pools), `rehydrateMediaAsset` (reload blob from IndexedDB, new objectURL, store swap), `ensureAssetReady`, `evictOverBudget` (biggest-first, playhead ±4s + selection protected).
+- types.ts: `MediaAssetRuntime.rawBlob` is now optional + `evicted?: boolean` (honest model — RAM is reclaimable). All rawBlob consumers hardened: store extractAudioFromVideo, TimelineToolbar + PropertiesPanel beat detection, EffectsPanel voice rendering all rehydrate via `ensureAssetReady` before decoding.
+- engine.ts: `onMissingAsset` host hook (dedupe per asset) — draw paths for video/image/audio skip the frame and request rehydration when the asset is evicted; `dropMediaPools(mediaId)`; pool entries rebuild when the objectURL changes (rehydration swaps URLs); play() tick measures real draw ms (`noteDrawMs`, 45-frame window) → sustained avg >34 ms with auto mode on de-scales one tier (×0.75, floor 0.5) + `nc-preview-autoscale` event; manual `setRenderScale` disables auto; exports still ALWAYS full resolution (exportScaleOverride).
+- useEngineBridge wires `onMissingAsset → rehydrateMediaAsset`.
+- StorageDialog StoragePanel: NEW "Media memory (RAM)" block — live held-bytes bar + budget select + "Evict now" with the honest nothing-to-evict toast.
+- PreviewPane: live `[data-nc-preview-scale]` badge ("NN%", title discloses auto vs locked; click cycles 100→75→50→100) + one honest toast when auto-scaling kicks in ("Preview scaled to NN% for smooth playback").
+
+**E2E receipts (desktop 1280×800):**
+- EVICT→AUTO-REHYDRATE round-trip: evicted `sunrise.jpg` (revoke + rawBlob=null + evicted) while a timeline clip uses it → within 1.5 s the engine draw path rehydrated it from IndexedDB: `evicted=false, blob=120218`, zero console errors. Playback of evicted media requests rehydration instead of crashing.
+- Badge: renders "100%" (auto); manual cycle 100→75→50 with "·auto off" marker; autoscale event path → badge 75% + toast fires.
+- Storage panel: "Media memory (RAM) — 1.1 MB held across 4 assets", budget select (750 MB default) works, "Evict now" under budget → honest toast "Nothing to evict — already under budget (or everything is protected)".
+- Fresh reload: 4 assets intact, console clean.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 62 shipped: RAM is now a managed, disclosed resource — media blobs evict under a configurable budget with automatic transparent rehydration, and preview resolution degrades honestly (visible badge + toast) under sustained draw pressure while exports stay full-res.
+- Files: lib/editor/memory-manager.ts (new), types.ts, engine.ts, store.ts, hooks/useEngineBridge.ts, dialogs/StorageDialog.tsx, preview/PreviewPane.tsx, timeline/TimelineToolbar.tsx, preview/PropertiesPanel.tsx, panels/EffectsPanel.tsx, lib/editor/demo.ts.
+- Next: Day 63 — startup budget + code splitting audit.

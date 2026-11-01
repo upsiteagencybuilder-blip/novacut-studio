@@ -1135,7 +1135,14 @@ export function EffectsPanel() {
         // timeline duration · speed = source seconds), so the processed swap
         // keeps the timeline edit intact instead of restoring the full take.
         // For video blobs decodeAudioData extracts the embedded audio track.
-        const rendered = await renderVoiceToWav(sourceAsset.rawBlob, effect, {
+        // Day 62 — rehydrate an evicted asset before decoding
+        const { ensureAssetReady } = await import('@/lib/editor/memory-manager')
+        const readySource = await ensureAssetReady(sourceAsset.id)
+        if (!readySource?.rawBlob) {
+          toast.error('Media blob is not loaded — try again in a moment')
+          return
+        }
+        const rendered = await renderVoiceToWav(readySource.rawBlob, effect, {
           offset: clip.trimStart,
           duration: clip.duration * clip.speed,
           ...(overrides ?? {}),

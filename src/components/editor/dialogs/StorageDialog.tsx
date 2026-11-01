@@ -12,6 +12,7 @@ import {
   HardDrive,
   History,
   Loader2,
+  MemoryStick,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -19,6 +20,15 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
+import {
+  MEDIA_BUDGET_CHOICES,
+  MEDIA_BUDGET_DEFAULT,
+  evictOverBudget,
+  getMediaBudgetBytes,
+  getMediaReport,
+  setMediaBudgetBytes,
+  type MediaMemoryReport,
+} from '@/lib/editor/memory-manager'
 import {
   clearAllVersions,
   clearSWCaches,
@@ -49,6 +59,14 @@ export function StoragePanel() {
   const [busy, setBusy] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<'orphans' | 'versions' | 'sw' | 'reset' | null>(null)
   const media = useEditor((s) => s.media)
+  // Day 62 — RAM memory budget state
+  const [memBudget, setMemBudget] = useState<number>(MEDIA_BUDGET_DEFAULT)
+  const [memReport, setMemReport] = useState<MediaMemoryReport | null>(null)
+
+  useEffect(() => {
+    setMemBudget(getMediaBudgetBytes())
+    setMemReport(getMediaReport(media))
+  }, [media])
 
   const refresh = useCallback(async () => {
     setBusy('refresh')
@@ -158,6 +176,87 @@ export function StoragePanel() {
             value={`${report?.orphanIds.length ?? '—'} · ${formatBytesLocal(report?.orphanBytes ?? 0)}`}
           />
         </div>
+      </div>
+
+      {/* Day 62 — RAM memory budget: held media blobs vs the configured cap */}
+      <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel) p-3" data-nc-memory-panel>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <MemoryStick className="h-4 w-4 shrink-0 text-violet-400" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold">Media memory (RAM)</p>
+              <p className="text-[10px] text-muted-foreground">
+                {memReport
+                  ? `${formatBytesLocal(memReport.heldBytes)} held across ${memReport.heldCount} asset${memReport.heldCount === 1 ? '' : 's'}${memReport.evictedCount ? ` · ${memReport.evictedCount} evicted (auto-reload on demand)` : ''}`
+                  : 'measuring…'}
+              </p>
+            </div>
+          </div>
+          <select
+            aria-label="Media memory budget"
+            value={String(memBudget)}
+            onChange={(e) => {
+              const b = Number(e.target.value)
+              setMediaBudgetBytes(b)
+              setMemBudget(b)
+              toast.success(`Budget set — ${b === Number.MAX_SAFE_INTEGER ? 'eviction off' : formatBytesLocal(b)}`)
+              setMemReport(getMediaReport(useEditor.getState().media))
+            }}
+            className="h-7 shrink-0 rounded-md border border-(--nc-line) bg-(--nc-panel-strong) px-1.5 text-[10px] text-foreground"
+          >
+            {MEDIA_BUDGET_CHOICES.map((c) => (
+              <option key={c.label} value={String(c.bytes)}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        {memReport && memReport.budgetBytes > 0 && (
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-(--nc-panel-strong)">
+            <div
+              className={
+                'h-full rounded-full transition-all ' +
+                (memReport.heldBytes > memReport.budgetBytes
+                  ? 'bg-rose-500'
+                  : memReport.heldBytes > memReport.budgetBytes * 0.85
+                    ? 'bg-amber-500'
+                    : 'bg-violet-400')
+              }
+              style={{ width: `${Math.max(2, Math.min(100, Math.round((memReport.heldBytes / memReport.budgetBytes) * 100)))}%` }}
+            />
+          </div>
+        )}
+        {memReport && (
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <p className="min-w-0 text-[9px] text-muted-foreground/70">
+              Playhead ±4s and selected clips are protected — evicted media reloads automatically from local storage.
+            </p>
+            <Button
+              size="sm"
+              variant="ghost"
+              data-nc-evict-btn
+              disabled={memReport.evictableCount === 0 || busy !== null}
+              onClick={async () => {
+                setBusy('evict')
+                try {
+                  const freed = await evictOverBudget()
+                  if (freed > 0) {
+                    toast.success(`Freed ${formatBytesLocal(freed)} of RAM — evicted media reloads on demand`)
+                    setMemReport(getMediaReport(useEditor.getState().media))
+                  } else {
+                    toast('Nothing to evict — already under budget (or everything is protected)')
+                  }
+                } finally {
+                  setBusy(null)
+                }
+              }}
+              className="h-7 shrink-0 px-2 text-[10px] text-foreground"
+            >
+              {busy === 'evict' ? <Loader2 className="h-3 w-3 animate-spin" /> : <MemoryStick className="h-3 w-3" />}
+              Evict now
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* cleanup actions */}

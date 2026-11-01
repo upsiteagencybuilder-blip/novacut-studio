@@ -1,10 +1,11 @@
 'use client'
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ChevronLeft,
   ChevronRight,
   Columns2,
+  Gauge,
   Maximize,
   Pause,
   Play,
@@ -65,6 +66,46 @@ export function PreviewPane() {
   const [compare, setCompare] = useState(false)
   const [split, setSplit] = useState(0.5)
   const splitDragRef = useRef(false)
+
+  // ---- Day 62 memory budget: preview resolution badge + honest auto-scale toast ----
+  const [previewScale, setPreviewScale] = useState(1)
+  const [previewAuto, setPreviewAuto] = useState(true)
+  useEffect(() => {
+    const engine = getEngine()
+    engine.setAutoScale(true)
+    setPreviewScale(engine.getRenderScale())
+    setPreviewAuto(true)
+    const onAuto = (e: Event) => {
+      const scale = (e as CustomEvent<{ scale: number }>).detail?.scale ?? engine.getRenderScale()
+      setPreviewScale(scale)
+      toast(`Preview scaled to ${Math.round(scale * 100)}% for smooth playback`, {
+        description: 'Set Preview quality manually to override (auto-scaling turns off).',
+      })
+    }
+    window.addEventListener('nc-preview-autoscale', onAuto)
+    return () => window.removeEventListener('nc-preview-autoscale', onAuto)
+  }, [])
+  const applyPreviewScale = (s: number) => {
+    getEngine().setRenderScale(s)
+    getEngine().setAutoScale(false)
+    setPreviewScale(s)
+    setPreviewAuto(false)
+    toast.success(`Preview quality locked at ${Math.round(s * 100)}%`)
+  }
+  const resetAutoScale = () => {
+    getEngine().setRenderScale(1)
+    getEngine().setAutoScale(true)
+    setPreviewScale(1)
+    setPreviewAuto(true)
+  }
+  /** Day 62 — click the badge to cycle manual quality: 100% → 75% → 50% → 100% */
+  const cyclePreviewScale = () => {
+    const order = [1, 0.75, 0.5]
+    const idx = order.findIndex((v) => Math.abs(v - previewScale) < 0.01)
+    const next = order[(idx + 1) % order.length]
+    if (next === 1) resetAutoScale()
+    else applyPreviewScale(next)
+  }
   const toggleCompare = () => {
     const next = !compare
     setCompare(next)
@@ -229,6 +270,36 @@ export function PreviewPane() {
             onDoubleClick={handleStageDoubleClick}
           >
             <canvas ref={canvasRef} className="block h-full w-full" />
+
+            {/* Day 62 — live preview resolution badge (never lies about the scale) */}
+            <div
+              data-nc-preview-scale
+              role="button"
+              tabIndex={0}
+              onClick={cyclePreviewScale}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') cyclePreviewScale()
+              }}
+              className="absolute bottom-1.5 left-1.5 z-10 flex cursor-pointer items-center gap-1 rounded-full border border-(--nc-line) bg-black/55 px-1.5 py-0.5 font-mono text-[9px] text-white/70 backdrop-blur-sm transition-colors hover:text-white"
+              title={
+                previewAuto
+                  ? `Preview renders at ${Math.round(previewScale * 100)}% resolution (auto: drops further if playback struggles; exports are ALWAYS full resolution) — click to change`
+                  : `Preview locked at ${Math.round(previewScale * 100)}% — click to cycle quality`
+              }
+            >
+              <Gauge className="size-2.5" />
+              {Math.round(previewScale * 100)}%
+              {!previewAuto && (
+                <button
+                  type="button"
+                  aria-label="Restore full preview resolution and auto-scaling"
+                  onClick={resetAutoScale}
+                  className="ml-0.5 text-amber-300 hover:text-amber-200"
+                >
+                  ·auto off
+                </button>
+              )}
+            </div>
 
             {bounds && (
               <div

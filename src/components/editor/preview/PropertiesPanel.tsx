@@ -3542,7 +3542,14 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
       }
       setBeatDetecting(true)
       try {
-        const res = await detectBeats(asset.rawBlob)
+        // Day 62 — rehydrate an evicted asset before decoding
+        const { ensureAssetReady } = await import('@/lib/editor/memory-manager')
+        const ready = await ensureAssetReady(asset.id)
+        if (!ready?.rawBlob) {
+          toast.error('Media blob is not loaded — try again in a moment')
+          return
+        }
+        const res = await detectBeats(ready.rawBlob)
         if (!res.times.length) {
           toast('No clear beats found in this clip')
           return

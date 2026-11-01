@@ -51,8 +51,15 @@ export interface LutData {
 /** Runtime asset = persisted asset + blob URL in memory (never persisted) */
 export interface MediaAssetRuntime extends MediaAsset {
   objectUrl: string
-  /** original blob reference so the store can persist it (never persisted in JSON) */
-  rawBlob: Blob
+  /**
+   * Original blob reference so the store can persist it (never persisted in
+   * JSON). Day 62 — OPTIONAL: the memory budget may EVICT it (see
+   * `evicted`) to free RAM; `memory-manager.rehydrateMediaAsset` reloads it
+   * from IndexedDB on demand.
+   */
+  rawBlob?: Blob
+  /** Day 62 — true once the blob/objectURL were released to stay under budget */
+  evicted?: boolean
 }
 
 export interface Transform {

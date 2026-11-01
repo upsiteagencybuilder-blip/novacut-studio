@@ -150,7 +150,7 @@ export async function buildDemoProject(existingMedia: MediaAssetRuntime[]): Prom
             peaks: asset.peaks,
             createdAt: asset.createdAt,
           },
-          asset.rawBlob
+          asset.rawBlob as Blob
         )
       }
     } catch {
@@ -184,7 +184,7 @@ export async function buildDemoProject(existingMedia: MediaAssetRuntime[]): Prom
             peaks: asset.peaks,
             createdAt: asset.createdAt,
           },
-          asset.rawBlob
+          asset.rawBlob as Blob
         )
       }
     } catch {
