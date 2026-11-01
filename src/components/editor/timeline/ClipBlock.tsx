@@ -544,6 +544,15 @@ export function ClipBlock({
               ? 'border-yellow-500/30 bg-yellow-950/40'
               : 'border-(--nc-line) bg-(--nc-scrim)'
 
+/** Day 68 — template placeholder clips announce themselves in the label row */
+function templatePlaceholderOf(clip: Clip): string | null {
+  if (clip.kind !== 'text') return null
+  const c = clip.textStyle?.content ?? ''
+  if (c.startsWith('\u25B6 ') || c.startsWith('▶ ')) return c.slice(2)
+  if (c.startsWith('\u{1F5BC} ') || c.startsWith('\uD83D\uDFBC ') || c.startsWith('🖼 ')) return c.slice(2)
+  return null
+}
+
   return (
     <div
       data-drag="move"
@@ -629,11 +638,15 @@ export function ClipBlock({
               ⧉ {clip.nested?.children.length ?? 0}
             </span>
           </div>
-        ) : clip.kind === 'text' ? (
-          <div className="flex items-center gap-1 px-1.5 pt-1">
+        ) : clip.kind === 'text' && templatePlaceholderOf(clip) ? (
+          <div className="flex items-center gap-1 px-1.5 pt-1" data-nc-placeholder={templatePlaceholderOf(clip)!}>
             <Type className="size-3 shrink-0 text-(--nc-texttrack)" />
-            <span className="truncate text-[10px] font-medium text-(--nc-clip-ink)">
-              {clip.textStyle?.content || clip.name}
+            <span className="truncate text-[10px] font-medium text-(--nc-clip-ink)">{clip.name}</span>
+            <span
+              className="ml-auto shrink-0 rounded-full bg-fuchsia-400/20 px-1.5 text-[9px] font-semibold leading-[14px] text-fuchsia-200"
+              title="Template placeholder — drop media here, then use Replace media (clip menu) to swap it in place"
+            >
+              placeholder
             </span>
           </div>
         ) : clip.kind === 'sticker' ? (

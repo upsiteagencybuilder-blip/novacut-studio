@@ -2321,3 +2321,24 @@ Stage Summary:
 - Day 68 shipped: template → timeline in one click, with placeholders that say what they are and an undo that always gives your old edit back.
 - Files: lib/editor/store.ts, dialogs/ProjectsDialog.tsx.
 - Next: Day 69 — Onboarding tour v2 (contextual feature tips).
+
+---
+## Day 68b — placeholder UX hardening (timeline badge + replace guidance)
+**Date:** 2025-12-XX · **Category:** H (Templates, Onboarding & Growth)
+
+### Task ID: Day-68b
+**Agent:** main (orchestrator)
+**Task:** Day 68 follow-through — make template placeholders unmistakable ON the timeline and teach the swap path.
+
+**Work Log:**
+- ClipBlock: template placeholder clips (text content "▶ " / "🖼 " prefixed by applyTemplate) now show an amber-fuchsia "placeholder" badge in the label row (`data-nc-placeholder`), with a tooltip teaching the swap path: drop media, then Replace media keeps the slot (position + duration). Body of applyTemplate shipped earlier this session (see Day 68 entry) — this commit completes the honest placeholder loop end-to-end.
+
+**E2E receipts (desktop 1280×800):**
+- Applied template state: placeholder clip renders the badge on the timeline ("Hook footage (best shot first) · placeholder").
+- Mobile 390×844: scaffold survives reload via IndexedDB autosave; demo restored cleanly after (6 clips, 1280×720).
+- eslint + tsc clean.
+
+**Stage Summary:**
+- The template flow is now honest at every surface: gallery discloses structure → apply builds real placeholders → timeline labels them → preview shows them → undo restores.
+- Files: components/editor/timeline/ClipBlock.tsx.
+- Next: Day 69 — Onboarding tour v2 (contextual feature tips).
