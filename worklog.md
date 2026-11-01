@@ -2415,3 +2415,29 @@ Stage Summary:
 - Day 71 shipped: a real shortcut editor — capture, conflict detection, persistence, reset — layered safely above the untouched default handler.
 - Files: lib/editor/shortcuts.ts (new), components/editor/EditorShell.tsx, dialogs/ShortcutsDialog.tsx.
 - Next: Day 72 — Command palette (⌘K): every live tool reachable by keyboard.
+
+---
+## Day 72 — Command palette (⌘K): every live tool reachable by keyboard
+**Date:** 2025-12-XX · **Category:** H (Templates, Onboarding & Growth)
+
+### Task ID: Day-72
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category H Day 72 — a keyboard-first launcher over the app's REAL features.
+
+**Work Log:**
+- NEW lib/editor/command-palette.ts: `buildCommands()` assembles **27 live commands** — 10 dialogs (export/projects/history/versions/mixer/shortcuts/storage/theme/account/feedback), 7 tool panels (media→pro), 4 tool modes (select/blade/ripple/roll), 5 canvas presets, plus the templates deep-link. NOTHING planned is listed — the palette only reaches features that actually run, and the footer says so.
+- NEW components/editor/CommandPalette.tsx: keyboard-first overlay (⌘K/Ctrl+K) — focused input, live filter, ↑/↓ + Enter, hover-synced selection, Esc closes, "No command matches" empty state, command count footer. Remount-on-open keeps state clean without effects (lint-clean).
+- ⌘K handover: `Ctrl+K` now opens the palette (roadmap-specified); the split alias yields and **S keeps splitting** — SHORTCUTS table updated honestly ('Ctrl + K — Command palette').
+
+**E2E receipts (desktop 1280×800 + mobile 390×844):**
+- Ctrl+K → palette opens with **27 commands**, input auto-focused.
+- Filter "mixer" → 1 hit → Enter → **Audio mixer dialog opens**, palette closes.
+- Filter "blade" → Enter → `toolMode === 'razor'` (real tool switch).
+- Empty state: "zzz-none" → honest "the palette only lists features that actually run".
+- Mobile: Ctrl+K opens the same 27-command palette.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 72 shipped: the whole studio is now keyboard-reachable from one honest launcher.
+- Files: lib/editor/command-palette.ts (new), components/editor/CommandPalette.tsx (new), EditorShell.tsx, lib/editor/types.ts, lib/editor/constants.ts.
+- Next: Day 73 — Accessibility pass (ARIA, focus rings, contrast).

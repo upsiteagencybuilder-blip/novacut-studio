@@ -43,6 +43,7 @@ import { startCloudAutosave } from '@/lib/cloud/autosave'
 import { CrashRecoveryWatcher } from '@/components/editor/ErrorBoundary'
 import { installTelemetry } from '@/lib/telemetry'
 import { runOverrideLayer } from '@/lib/editor/shortcuts'
+import { CommandPalette } from '@/components/editor/CommandPalette'
 import { ContextualTips } from '@/lib/tips'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
@@ -154,11 +155,9 @@ function useKeyboardShortcuts() {
         return
       }
       if (mod && key === 'k') {
-        // Premiere-style split alias (S also splits)
+        // Day 72 — ⌘K opens the command palette (split keeps its S binding)
         e.preventDefault()
-        const before = s.project.clips.length
-        s.splitAtPlayhead()
-        if (useEditor.getState().project.clips.length > before) toast.success('Clip split ✂️')
+        s.openDialog('palette')
         return
       }
       if (mod && key === 'd') {
@@ -650,6 +649,7 @@ export function EditorShell() {
       <OnboardingOverlay />
       <CrashRecoveryWatcher />
       <ContextualTips />
+      <CommandPalette />
       </div>
     </SessionProvider>
   )
