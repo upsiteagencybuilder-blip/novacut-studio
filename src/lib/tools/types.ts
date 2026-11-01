@@ -31,6 +31,7 @@ export type ToolAction =
   | 'open-theme'
   | 'open-projects'
   | 'open-versions'
+  | 'open-history'
   | 'open-shortcuts'
   | 'open-properties-filters'
   | 'open-properties-grade'

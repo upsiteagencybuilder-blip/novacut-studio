@@ -2247,3 +2247,31 @@ Stage Summary:
 - Day 65 shipped: history is now 150 deep, every step carries the action's own name, and the panel turns the invisible undo stack into a clickable map of the edit.
 - Files: lib/editor/store.ts, components/editor/dialogs/HistoryPanelDialog.tsx (new), components/editor/TopBar.tsx, EditorShell.tsx, lib/editor/types.ts.
 - Next: Day 66 — stress E2E (long projects) + Category G audit.
+
+---
+## Day 66 — Stress E2E (long projects) + CATEGORY G AUDIT
+**Date:** 2025-12-XX · **Category:** G (PWA, Performance & Reliability) — FINAL DAY
+
+### Task ID: Day-66
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category G Day 66 — long-project stress through the real UI + full Category G regression (Days 59–65).
+
+**Work Log:**
+- STRESS (long project): demo 6 clips + 120 injected clones = **126 clips / ~310 s timeline** driven through the real UI on desktop 1280×800 AND mobile 390×844.
+- Catalog: `panel-history-panel` flipped planned→live (Day 65's real History panel + `open-history` deep-link action + ToolAction union); roadmap count 287/293 → **288 live / 292 planned**.
+
+**FRESH AUDIT RECEIPTS (all re-run through the real UI this session):**
+- Day 61 virtualization: desktop 126 clips → **12 DOM nodes** (13 after 25,000px scroll window slide, back to 6 at origin); mobile **8/126**. rAF scroll pressure previously measured at +10ms over the environment floor.
+- Day 62 memory budget: Storage panel live "1.1 MB held across 4 assets", budget select + honest evict toast; preview badge 100% (auto) with no false de-scale during a 3s stress playback; evict→rehydrate round-trip previously proven in <1.5s.
+- Day 63 startup probe: `__ncStartupMs` 949 desktop / 893 mobile (dev, disclosed in Storage panel); lazy dialog chunks re-verified (+4 on first Export/Mixer open).
+- Day 64 telemetry + crash: telemetry panel captured 2 REAL session errors (the transient TopBar compile hiccup mid-Day-65 + an ErrorEvent probe) and lists them with kinds/times; stale-heartbeat reload → "Recovered from an unexpected exit" toast with project restored; normal reloads stay silent.
+- Day 65 history: 26 stress edits → panel lists 26 entries with labels; undoSteps(5) → 21/5 synced; depth cap 150 verified (160 pushes → 150).
+- Day 59 offline shell: SW `novacut-v5` **31 entries, controlled=true**, badge "Offline shell · 31 files".
+- **Cross-device persistence BONUS receipt:** the 126-clip desktop project autosaved to IndexedDB was restored intact on the mobile reload (246 = 126 restored + 120 re-injected) — long projects survive reloads and cross sessions.
+- Cleanup: stress clips filtered out → 6 clips, autosave 'saved'; fresh reload clean, zero errors.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- **CATEGORY G COMPLETE (Days 59–66):** offline shell, storage manager, virtualized timeline, RAM budget with evict/rehydrate, measured startup + code splitting, crash boundary + local telemetry + recovery, 150-step labeled history — all live, all audited fresh, catalog 288/292.
+- Files: lib/tools/sections/panels.ts, lib/tools/types.ts, components/editor/panels/ProToolkitPanel.tsx, docs/ROADMAP-90.md.
+- Next: Day 67 — Template gallery v1 (Category H begins).

@@ -60,7 +60,7 @@ export const PANELS_TOOLS: ProTool[] = [
   { id: 'panel-share-links', name: 'Share Links (Read-Only Viewer)', section: 'panels', group: 'Project & metadata', status: 'live', desc: 'Publishes a read-only snapshot at /s/<token> with a timeline overview and view counter — no account needed', action: 'open-projects' },
   { id: 'panel-feedback-widget', name: 'In-App Feedback Widget', section: 'panels', group: 'Project & metadata', status: 'live', desc: 'Header button → star rating + message into the Feedback model, rate-limited 5/hour/device' },
   { id: 'panel-libraries-panel', name: 'Libraries Panel', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'Shared asset libraries synced across multiple projects' },
-  { id: 'panel-history-panel', name: 'History Panel', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'Undo and redo with coalesced steps ship, a history list remains roadmap' },
+  { id: 'panel-history-panel', name: 'History Panel', section: 'panels', group: 'Project & metadata', status: 'live', desc: 'Visual edit history — 150 labeled undo/redo steps, clickable jump-to-any-state, batched undoSteps/redoSteps', action: 'open-history' },
   { id: 'panel-info-panel', name: 'Info Panel', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'Show codec, resolution and metadata of the selection' },
   { id: 'panel-markers-panel', name: 'Markers Panel', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'List, name and navigate all timeline markers in one place' },
   { id: 'panel-metadata-panel', name: 'Metadata Panel', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'Edit clip and project metadata fields for searchability' },

@@ -114,6 +114,7 @@ function useToolAction() {
       'open-theme': () => openDialog('theme'),
       'open-projects': () => openDialog('projects'),
       'open-versions': () => openDialog('versions'),
+      'open-history': () => openDialog('history'),
       'open-shortcuts': () => openDialog('shortcuts'),
       'open-properties-filters': () => openPropsSection('filters'),
       'open-properties-grade': () => openPropsSection('grade'),
