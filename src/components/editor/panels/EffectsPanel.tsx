@@ -1373,7 +1373,7 @@ export function EffectsPanel() {
                   onValueChange={(v) => updateClip(clip.id, { motionIntensity: v[0] ?? 0.35 }, 'motion-intensity')}
                   aria-label="Motion intensity"
                 />
-                <p className="text-[10px] leading-snug text-muted-foreground/60">
+                <p className="text-[10px] leading-snug text-muted-foreground/75">
                   How strong the move reads — subtle for documentary drift, strong for punchy social clips.
                 </p>
               </div>
@@ -1503,7 +1503,7 @@ export function EffectsPanel() {
                 {chip.emoji}
               </span>
               {chip.label}
-              <span className={active ? 'text-white/80' : 'text-muted-foreground/60'}>{chip.count}</span>
+              <span className={active ? 'text-white/80' : 'text-muted-foreground/75'}>{chip.count}</span>
             </button>
           )
         })}

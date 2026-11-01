@@ -81,7 +81,7 @@ function MasterMeter() {
           />
         ))}
       </div>
-      <div className="mt-0.5 flex justify-between font-mono text-[8px] leading-none text-muted-foreground/60">
+      <div className="mt-0.5 flex justify-between font-mono text-[8px] leading-none text-muted-foreground/75">
         <span>-∞</span>
         <span className="ml-[10%]">-40</span>
         <span className="ml-[8%]">-20</span>
@@ -159,7 +159,7 @@ function MasterLufs() {
       >
         —
       </span>
-      <span className="text-[9px] text-muted-foreground/60">LUFS · M</span>
+      <span className="text-[9px] text-muted-foreground/75">LUFS · M</span>
     </div>
   )
 }
@@ -319,7 +319,7 @@ function TrackFaderRow({ track }: { track: Track }) {
 
       {/* live track output */}
       <div className="mt-2 flex items-center gap-2">
-        <span className="w-10 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/60">Level</span>
+        <span className="w-10 shrink-0 text-[9px] uppercase tracking-wider text-muted-foreground/75">Level</span>
         <TrackMeter trackId={track.id} />
       </div>
     </div>
@@ -352,7 +352,7 @@ function TrackEq({ track, updateTrack }: { track: Track; updateTrack: (id: strin
         <span
           className={cn(
             'rounded border px-1 py-px text-[8px] normal-case tracking-normal',
-            any ? 'border-emerald-400/40 text-emerald-300' : 'border-(--nc-line) text-muted-foreground/60'
+            any ? 'border-emerald-400/40 text-emerald-300' : 'border-(--nc-line) text-muted-foreground/75'
           )}
           data-nc-track-eq-state
         >

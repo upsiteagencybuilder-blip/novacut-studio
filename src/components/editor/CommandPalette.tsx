@@ -80,7 +80,7 @@ function CommandPaletteInner() {
             }}
             placeholder="Type a command — dialogs, panels, tools, canvas…"
             aria-label="Command palette search"
-            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
+            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/75"
             data-nc-palette-input
           />
           <kbd className="shrink-0 rounded border border-(--nc-line) bg-(--nc-panel-strong) px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">

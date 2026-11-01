@@ -155,7 +155,7 @@ export function HistoryPanelDialog() {
               className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] text-foreground/80 transition hover:bg-(--nc-panel-strong) hover:text-foreground"
             >
               <span className="min-w-0 flex-1 truncate">{prettyLabel(h.label)}</span>
-              <span className="shrink-0 text-[9px] text-muted-foreground/60">{relTime(h.at)}</span>
+              <span className="shrink-0 text-[9px] text-muted-foreground/75">{relTime(h.at)}</span>
               <span className="shrink-0 rounded bg-(--nc-panel-strong) px-1 text-[9px] text-muted-foreground">−{h.steps}</span>
             </button>
           ))}

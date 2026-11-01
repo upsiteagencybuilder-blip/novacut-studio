@@ -180,7 +180,7 @@ export function StickerPanel() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Search ${TABS.find((t) => t.id === tab)?.label.toLowerCase()}…`}
           aria-label="Search stickers"
-          className="w-full bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/60"
+          className="w-full bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/75"
         />
       </label>
 
@@ -202,7 +202,7 @@ export function StickerPanel() {
           )}
         >
           ⭐ Favorites
-          <span className={cn('ml-1 tabular-nums', favOnly ? 'text-white/80' : 'text-muted-foreground/60')}>
+          <span className={cn('ml-1 tabular-nums', favOnly ? 'text-white/80' : 'text-muted-foreground/75')}>
             {favorites.length}
           </span>
         </button>
@@ -222,7 +222,7 @@ export function StickerPanel() {
           )}
         >
           🕐 Recent
-          <span className={cn('ml-1 tabular-nums', recentOnly ? 'text-white/80' : 'text-muted-foreground/60')}>
+          <span className={cn('ml-1 tabular-nums', recentOnly ? 'text-white/80' : 'text-muted-foreground/75')}>
             {recent.length}
           </span>
         </button>

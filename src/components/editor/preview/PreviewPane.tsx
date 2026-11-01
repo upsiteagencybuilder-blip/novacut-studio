@@ -269,7 +269,7 @@ export function PreviewPane() {
             style={{ width: fit.w || undefined, height: fit.h || undefined }}
             onDoubleClick={handleStageDoubleClick}
           >
-            <canvas ref={canvasRef} className="block h-full w-full" />
+            <canvas ref={canvasRef} role="img" aria-label="Program preview — live composite of the timeline at the playhead" className="block h-full w-full" />
 
             {/* Day 62 — live preview resolution badge (never lies about the scale) */}
             <div

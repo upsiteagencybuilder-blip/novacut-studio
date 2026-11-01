@@ -2441,3 +2441,28 @@ Stage Summary:
 - Day 72 shipped: the whole studio is now keyboard-reachable from one honest launcher.
 - Files: lib/editor/command-palette.ts (new), components/editor/CommandPalette.tsx (new), EditorShell.tsx, lib/editor/types.ts, lib/editor/constants.ts.
 - Next: Day 73 — Accessibility pass (ARIA, focus rings, contrast).
+
+---
+## Day 73 — Accessibility pass (ARIA, focus rings, contrast)
+**Date:** 2025-12-XX · **Category:** H (Templates, Onboarding & Growth)
+
+### Task ID: Day-73
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category H Day 73 — keyboard visibility, landmarks, and honest contrast.
+
+**Work Log:**
+- GLOBAL FOCUS RING: `:focus-visible` gets a permanent 2px accent outline + offset (never suppressed), plus a `.nc-skip-link` pattern (offscreen at −48px, slides in on focus, jumps to `#nc-main`).
+- LANDMARKS & ARIA: EditorShell gains a "Skip to editor" skip link and `<main id="nc-main" aria-label="NovaCut editor">` on BOTH layouts (desktop + mobile); the timeline is `role="region" aria-label="Timeline — multi-track clip editor"`; the preview canvas is `role="img" aria-label="Program preview — live composite of the timeline at the playhead"`. (Radix dialogs already bring role/aria-modal/focus-trap; the palette and all icon buttons carried labels from earlier days.)
+- CONTRAST: all persistent reading-surface text promoted — `muted-foreground/40→/65`, `/50·55→/70`, `/60→/75` across **12 editor files** (storage/memory/telemetry hints, onboarding notes, tooltips). Verified: no `.text-muted-foreground/60` remains in the DOM.
+
+**E2E receipts (desktop 1280×800 + mobile 390×844):**
+- Skip link: offscreen by default (top −48px, fixed) → first Tab focuses it → Enter jumps to `#nc-main`.
+- Focus ring: focused button computed `outline-width: 3px` (2px + offset) — visible, never removed.
+- Landmarks: skip link + main + canvas aria + timeline region all present on desktop AND mobile.
+- Contrast promotions live in DOM (legacy /60 class absent).
+- eslint + tsc clean. (One dev-server restart was needed — Turbopack held a stale CSS cache; receipts above are from the fresh compile.)
+
+**Stage Summary:**
+- Day 73 shipped: keyboard users can see where they are and reach the editor in one Tab; screen readers get real landmarks; low-contrast text got honest promotion.
+- Files: globals.css, EditorShell.tsx, timeline/Timeline.tsx, preview/PreviewPane.tsx + 9 contrast-only files.
+- Next: Day 74 — Docs/README polish + Category H audit.

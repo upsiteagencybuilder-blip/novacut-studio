@@ -561,6 +561,12 @@ export function EditorShell() {
 
   return (
     <SessionProvider>
+      <a
+        href="#nc-main"
+        className="nc-skip-link rounded-lg bg-(--nc-panel) px-3 py-1.5 text-xs font-semibold text-foreground shadow-lg"
+      >
+        Skip to editor
+      </a>
       <div className="relative flex h-screen flex-col overflow-hidden bg-background text-foreground">
         {/* animated backdrop */}
         <div className="nc-aurora" aria-hidden />
@@ -571,7 +577,7 @@ export function EditorShell() {
 
       {isDesktop ? (
         <>
-          <main className="relative z-10 flex min-h-0 flex-1">
+          <main id="nc-main" aria-label="NovaCut editor" className="relative z-10 flex min-h-0 flex-1">
             <aside className="h-full w-[318px] shrink-0 overflow-hidden border-r border-(--nc-line) bg-(--nc-panel-soft)">
               <LeftPanel />
             </aside>
@@ -599,7 +605,7 @@ export function EditorShell() {
         </>
       ) : (
         <>
-          <main className="relative z-10 flex min-h-0 flex-1 flex-col">
+          <main id="nc-main" aria-label="NovaCut editor" className="relative z-10 flex min-h-0 flex-1 flex-col">
             <section className="min-h-0 flex-1">
               <PreviewPane />
             </section>

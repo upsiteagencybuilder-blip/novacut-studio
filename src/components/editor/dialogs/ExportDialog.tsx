@@ -695,7 +695,7 @@ export function ExportDialog() {
                         onClick={() => handleToggleDefault(b)}
                         className={cn(
                           'rounded-lg p-1.5 transition-colors',
-                          isDefault ? 'text-amber-300' : 'text-muted-foreground/50 hover:text-amber-300'
+                          isDefault ? 'text-amber-300' : 'text-muted-foreground/70 hover:text-amber-300'
                         )}
                       >
                         <Star className={cn('h-3.5 w-3.5', isDefault && 'fill-amber-300')} />
@@ -706,7 +706,7 @@ export function ExportDialog() {
                           aria-label={`Delete bundle ${b.name}`}
                           title="Delete bundle"
                           onClick={() => handleDeleteBundle(b)}
-                          className="mr-1.5 rounded-lg p-1.5 text-muted-foreground/50 transition-colors hover:text-red-400"
+                          className="mr-1.5 rounded-lg p-1.5 text-muted-foreground/70 transition-colors hover:text-red-400"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -1422,7 +1422,7 @@ export function ExportDialog() {
                         </SelectContent>
                       </Select>
                     ) : (
-                      <span className="flex-1 text-[10px] text-muted-foreground/60">off</span>
+                      <span className="flex-1 text-[10px] text-muted-foreground/75">off</span>
                     )}
                   </div>
                 ))}
@@ -1503,7 +1503,7 @@ export function ExportDialog() {
                             type="button"
                             aria-label={job.status === 'rendering' ? `Cancel ${job.label}` : `Remove ${job.label}`}
                             onClick={() => handleQueueAction(job)}
-                            className="shrink-0 rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-rose-400"
+                            className="shrink-0 rounded p-0.5 text-muted-foreground/75 transition-colors hover:text-rose-400"
                           >
                             {job.status === 'rendering' ? <Ban className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
                           </button>

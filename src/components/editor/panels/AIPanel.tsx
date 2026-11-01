@@ -755,7 +755,7 @@ function CopilotCard() {
           placeholder="e.g. add a title + crossfade…"
           maxLength={600}
           disabled={busy}
-          className="h-9 flex-1 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+          className="h-9 flex-1 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/75"
           aria-label="Describe the edit for the AI copilot"
         />
         <Button
@@ -912,7 +912,7 @@ function BgmDirectorCard() {
           maxLength={300}
           disabled={bgmBusy}
           data-nc-bgm-input
-          className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+          className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/75"
           aria-label="Describe the background music mood"
         />
         <div className="flex flex-wrap gap-1">
@@ -1075,7 +1075,7 @@ function OpsCard() {
               </tbody>
             </table>
           </div>
-          <p className="text-[9px] leading-snug text-muted-foreground/60">
+          <p className="text-[9px] leading-snug text-muted-foreground/75">
             Session-scoped (since server start). Tokens ≈ chars/4; cost is a directional estimate ($0.6/M in · $2.2/M
             out) — not a bill. TTS/image/transcribe track latency and payload size only.
           </p>
@@ -1196,7 +1196,7 @@ function AssetSearchCard() {
           maxLength={200}
           disabled={assetBusy}
           data-nc-asset-input
-          className="h-9 flex-1 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+          className="h-9 flex-1 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/75"
           aria-label="Describe the asset you want"
         />
         <Button
@@ -1266,7 +1266,7 @@ function AssetSearchCard() {
               )
             })}
           </div>
-          <p className="text-[9px] text-muted-foreground/60">
+          <p className="text-[9px] text-muted-foreground/75">
             One tap lands the asset at the playhead — drag it on the timeline to reposition.
           </p>
         </div>
@@ -1379,7 +1379,7 @@ function StoryboardCard() {
           rows={2}
           maxLength={300}
           data-nc-sb-topic
-          className="resize-none border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+          className="resize-none border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/75"
           aria-label="Storyboard topic"
         />
       </div>
@@ -1431,7 +1431,7 @@ function StoryboardCard() {
               <span className="truncate text-muted-foreground">{s.description}</span>
             </div>
           ))}
-          <p className="pt-0.5 text-[9px] text-muted-foreground/60">
+          <p className="pt-0.5 text-[9px] text-muted-foreground/75">
             Slates are placeholder text clips — replace each with your real footage, one undo clears all.
           </p>
         </div>
@@ -1663,7 +1663,7 @@ function ThumbnailsCard() {
                 ))}
               </div>
             )}
-            <p className="text-[9px] leading-snug text-muted-foreground/60">
+            <p className="text-[9px] leading-snug text-muted-foreground/75">
               Scores detail 50% + exposure 30% + contrast 20% — every number stays visible.
             </p>
           </>
@@ -1845,7 +1845,7 @@ function ScriptWriterCard() {
         onChange={(e) => setTopic(e.target.value)}
         placeholder="Topic — e.g. monsoon tea stall vibes, Dhaka street food"
         maxLength={200}
-        className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+        className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/75"
         aria-label="Script topic"
       />
       <div className="grid grid-cols-2 gap-2">
@@ -2855,7 +2855,7 @@ export function AIPanel() {
                       data-nc-silence-padding
                       className="mt-1.5"
                     />
-                    <p className="mt-1 text-[9px] text-muted-foreground/60">
+                    <p className="mt-1 text-[9px] text-muted-foreground/75">
                       Silence kept on each side of a cut — higher = more natural rhythm, lower = tighter jump cuts.
                     </p>
                   </div>
@@ -2934,7 +2934,7 @@ export function AIPanel() {
               value={imagePrompt}
               onChange={(e) => setImagePrompt(e.target.value)}
               placeholder="e.g. neon city skyline at dusk, cinematic"
-              className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+              className="h-9 border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/75"
               maxLength={300}
             />
             <div className="space-y-1.5">
@@ -3018,7 +3018,7 @@ export function AIPanel() {
                 onChange={(e) => setVoiceText(e.target.value.slice(0, 1000))}
                 placeholder="Write what the narrator should say…"
                 rows={3}
-                className="resize-none border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/60"
+                className="resize-none border-(--nc-line) bg-(--nc-scrim) text-xs placeholder:text-muted-foreground/75"
               />
             </div>
             {/* Day 33 — narration language picks the recommended engine */}

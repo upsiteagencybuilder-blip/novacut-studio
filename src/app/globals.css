@@ -1,6 +1,27 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Day 73 — accessibility: a single, always-visible keyboard focus ring.
+   Never removed on interactive elements; offset keeps it clear of borders. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--nc-accent, #d946ef);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* skip link for keyboard users — appears on first Tab, jumps to the editor */
+  .nc-skip-link {
+    position: fixed;
+    top: -48px;
+    left: 12px;
+    z-index: 200;
+    transition: top 120ms ease;
+  }
+  .nc-skip-link:focus-visible {
+    top: 10px;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /*

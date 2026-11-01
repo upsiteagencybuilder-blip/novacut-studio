@@ -139,7 +139,7 @@ export function TextPanel() {
                 )}
               >
                 {f.label}
-                <span className={cn('ml-1 tabular-nums', active ? 'text-white/80' : 'text-muted-foreground/60')}>
+                <span className={cn('ml-1 tabular-nums', active ? 'text-white/80' : 'text-muted-foreground/75')}>
                   {f.count}
                 </span>
               </button>

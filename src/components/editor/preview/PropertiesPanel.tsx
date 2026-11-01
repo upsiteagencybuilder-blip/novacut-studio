@@ -1012,7 +1012,7 @@ function CollapsibleSection({
         </div>
         <CollapsibleContent>
           <div className="space-y-3 px-3 pb-3">
-            {hint && <p className="text-[10px] leading-snug text-muted-foreground/60">{hint}</p>}
+            {hint && <p className="text-[10px] leading-snug text-muted-foreground/75">{hint}</p>}
             {children}
           </div>
         </CollapsibleContent>
@@ -1397,7 +1397,7 @@ function SpeedRampSection({ clip }: { clip: Clip }) {
         ))}
       </div>
 
-      <p className="text-[9px] leading-snug text-muted-foreground/60">
+      <p className="text-[9px] leading-snug text-muted-foreground/75">
         Drag points to shape velocity · double-click the graph to add a point · multipliers self-balance so the clip
         keeps its length and source span (fast parts borrow from slow parts)
       </p>
@@ -1586,7 +1586,7 @@ function BlendSection({ clip }: { clip: Clip }) {
           </div>
         ))}
       </div>
-      <p className="text-[10px] leading-snug text-muted-foreground/60">
+      <p className="text-[10px] leading-snug text-muted-foreground/75">
         How this clip composites over the layers beneath it — swatches are live mix-blend-mode previews. Tap Normal to reset.
       </p>
     </CollapsibleSection>
@@ -1645,7 +1645,7 @@ function ChromaSection({ clip }: { clip: Clip }) {
           {ck.enabled ? 'Re-detect background' : 'Remove background (auto)'}
         </button>
       )}
-      <p className="text-[10px] leading-snug text-muted-foreground/60">
+      <p className="text-[10px] leading-snug text-muted-foreground/75">
         Detects the dominant border color of the current frame and keys it —
         chroma-based, works best on solid backdrops. Every control below stays
         editable.
@@ -1716,7 +1716,7 @@ function ChromaSection({ clip }: { clip: Clip }) {
             onChange={(v) => patch({ spill: v })}
             format={fmtPct}
           />
-          <p className="text-[10px] leading-snug text-muted-foreground/60">
+          <p className="text-[10px] leading-snug text-muted-foreground/75">
             Edge hardens or softens the matte boundary; Spill pulls the screen-color cast out of hair and edges.
           </p>
         </>
@@ -1964,7 +1964,7 @@ function CurvesSection({ clip }: { clip: Clip }) {
         ))}
       </svg>
 
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground/60">
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground/75">
         <span>
           {points.length < 2
             ? 'Tap the graph to place two points'
@@ -2202,7 +2202,7 @@ function LutSection({ clip }: { clip: Clip }) {
         />
       )}
       {clip.lutId && (
-        <p className="text-[10px] leading-snug text-muted-foreground/60">
+        <p className="text-[10px] leading-snug text-muted-foreground/75">
           Active: {isBuiltin ? BUILTIN_LUTS.find((l) => `builtin:${l.id}` === clip.lutId)?.name : importedName}
         </p>
       )}
@@ -2369,7 +2369,7 @@ function ScopesSection() {
         data-nc-scope-canvas={mode}
         className="w-full rounded-lg border border-(--nc-line)"
       />
-      <p className="text-[10px] leading-snug text-muted-foreground/60">
+      <p className="text-[10px] leading-snug text-muted-foreground/75">
         {mode === 'waveform'
           ? 'Luma waveform — horizontal axis mirrors the frame, vertical is brightness (0 IRE bottom, 100 top).'
           : 'Red · green · blue histogram of the composite frame — updates with the playhead.'}
@@ -2457,7 +2457,7 @@ function Eq10Band({ eq10, onChange }: { eq10?: number[]; onChange: (gains: numbe
               aria-label={`${f} hertz band`}
               data-nc-eq10-band={i}
             />
-            <span className="text-[8px] leading-none text-muted-foreground/60">
+            <span className="text-[8px] leading-none text-muted-foreground/75">
               {f >= 1000 ? `${f / 1000}k` : f}
             </span>
           </div>
@@ -2547,7 +2547,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
       onReset={clip.audioFx ? () => updateClip(clip.id, { audioFx: null }, true) : undefined}
     >
       {!hasFx && (
-        <p className="text-[10px] leading-snug text-muted-foreground/60">
+        <p className="text-[10px] leading-snug text-muted-foreground/75">
           Pan, EQ, filters, compressor, reverb, echo, modulation and formant for this clip&apos;s sound — heard in preview and baked into exports.
         </p>
       )}
@@ -2595,7 +2595,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
             )
           })}
         </div>
-        <p className="text-[9px] leading-snug text-muted-foreground/60">
+        <p className="text-[9px] leading-snug text-muted-foreground/75">
           One tap replaces this clip&apos;s voice chain (one undo). Tap the active look again to clear it.
         </p>
       </div>
@@ -2657,7 +2657,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
           onChange={(v) => patch({ formant: v }, 'formant')}
           format={fmtSt}
         />
-        <p className="text-[9px] leading-snug text-muted-foreground/60">
+        <p className="text-[9px] leading-snug text-muted-foreground/75">
           {clip.kind === 'video'
             ? 'Extract the soundtrack to edit it as its own clip, or shape this video’s live sound below. Formant moves the vocal-tract resonances — timbre changes while pitch &amp; tempo stay put.'
             : 'Formant moves the vocal-tract resonances — timbre changes while pitch &amp; tempo stay put. Tempo retimes with duration compensation.'}
@@ -2720,7 +2720,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
       {/* compressor */}
       <div className="flex items-center gap-2">
         <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Comp</span>
-        <span className="flex-1 text-[10px] text-muted-foreground/60">even out loud/quiet parts</span>
+        <span className="flex-1 text-[10px] text-muted-foreground/75">even out loud/quiet parts</span>
         <Switch checked={!!fx.compressor} onCheckedChange={(on) => patch({ compressor: on }, true)} aria-label="Compressor" />
       </div>
       {fx.compressor && (
@@ -2743,7 +2743,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
         </div>
         <div className="flex items-center gap-2">
           <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Gate</span>
-          <span className="flex-1 text-[10px] text-muted-foreground/60">mute hiss &amp; room tone between words</span>
+          <span className="flex-1 text-[10px] text-muted-foreground/75">mute hiss &amp; room tone between words</span>
           <Switch
             checked={!!fx.gate}
             onCheckedChange={(on) => patch({ gate: on }, true)}
@@ -2782,7 +2782,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
           onChange={(v) => patch({ denoise: v }, 'denoise')}
           format={(v) => (v < 0.005 ? 'Off' : fmtPct(v))}
         />
-        <p className="text-[9px] leading-snug text-muted-foreground/60">
+        <p className="text-[9px] leading-snug text-muted-foreground/75">
           Gate is an envelope follower; de-noise auto-learns the noise floor and subtracts it
           spectrally. Both run live and in exports.
         </p>
@@ -2809,7 +2809,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
             onChange={(v) => patch({ pitchMix: v }, 'pitch-mix')}
             format={fmtPct}
           />
-          <p className="text-[9px] leading-snug text-muted-foreground/60">
+          <p className="text-[9px] leading-snug text-muted-foreground/75">
             Granular shift — tempo stays put. Blend below 100% for parallel-harmony layers.
           </p>
         </>
@@ -2873,7 +2873,7 @@ function AudioFxSection({ clip }: { clip: Clip }) {
           <SliderRow label="Repeat" min={0} max={0.85} step={0.05} value={fx.delayFeedback ?? 0.3} onChange={(v) => patch({ delayFeedback: v })} format={fmtPct} />
           <div className="flex items-center gap-2" data-nc-pingpong-row>
             <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Ping-Pong</span>
-            <span className="flex-1 text-[10px] text-muted-foreground/60">repeats alternate L/R</span>
+            <span className="flex-1 text-[10px] text-muted-foreground/75">repeats alternate L/R</span>
             <Switch
               checked={!!fx.delayPingPong}
               onCheckedChange={(on) => patch({ delayPingPong: on }, true)}
@@ -2960,7 +2960,7 @@ function MaskSection({ clip }: { clip: Clip }) {
         onClick={() => toggleKf(prop, label)}
         className={cn(
           'shrink-0 rounded p-0.5 transition-colors',
-          kf ? 'text-amber-400' : any ? 'text-muted-foreground/70 hover:text-foreground' : 'text-muted-foreground/40 hover:text-foreground',
+          kf ? 'text-amber-400' : any ? 'text-muted-foreground/70 hover:text-foreground' : 'text-muted-foreground/65 hover:text-foreground',
         )}
       >
         <Diamond className={cn('size-3', kf && 'fill-current')} />
@@ -2985,7 +2985,7 @@ function MaskSection({ clip }: { clip: Clip }) {
             </button>
           ))}
         </div>
-        <p className="text-[10px] leading-snug text-muted-foreground/60">
+        <p className="text-[10px] leading-snug text-muted-foreground/75">
           Reveal only part of this clip through a rect or ellipse — keyframable position and scale.
         </p>
       </Section>
@@ -3072,7 +3072,7 @@ function MaskSection({ clip }: { clip: Clip }) {
         <span className="flex-1 text-[10px] text-muted-foreground/70">show outside the shape</span>
         <Switch checked={!!mask.invert} onCheckedChange={(on) => patch({ invert: on }, true)} />
       </div>
-      <p className="text-[10px] leading-snug text-muted-foreground/60">
+      <p className="text-[10px] leading-snug text-muted-foreground/75">
         Keyframed Mask X/Y/Scale tracks appear in Animation → curve editor too.
       </p>
     </CollapsibleSection>
@@ -3114,7 +3114,7 @@ function CropSection({ clip }: { clip: Clip }) {
 
   return (
     <Section title="Crop" icon={Crop} onReset={hasCrop ? () => updateClip(clip.id, { crop: null }, true) : undefined}>
-      <p className="text-[10px] leading-snug text-muted-foreground/60">
+      <p className="text-[10px] leading-snug text-muted-foreground/75">
         Trim frame edges without moving the picture. Presets crop to a centered aspect ratio.
       </p>
       <SliderRow
@@ -3274,7 +3274,7 @@ function AutoReframeBlock({ clip, srcRatio }: { clip: Clip; srcRatio: number }) 
           {receipt}
         </p>
       )}
-      <p className="text-[9.5px] leading-snug text-muted-foreground/60">
+      <p className="text-[9.5px] leading-snug text-muted-foreground/75">
         Samples 5 frames across the clip and centers the crop on the edge-energy subject — fully editable sliders
         above.
       </p>
@@ -3357,7 +3357,7 @@ function NestedClipPanel({ clip }: { clip: Clip }) {
         </Button>
       </div>
 
-      <p className="text-[10px] leading-snug text-muted-foreground/60">
+      <p className="text-[10px] leading-snug text-muted-foreground/75">
         A compound is one timeline block that plays its {children.length} clip{children.length === 1 ? '' : 's'} ({span.toFixed(2)}s of content).
         Transform, filters and FX are applied inside — open the compound to edit them.
       </p>
@@ -3506,7 +3506,7 @@ function NormalizeBlock({ clip }: { clip: Clip }) {
           data-nc-normalize-switch
         />
       </div>
-      <p className="text-[10px] leading-snug text-muted-foreground/60" data-nc-normalize-readout>
+      <p className="text-[10px] leading-snug text-muted-foreground/75" data-nc-normalize-readout>
         {analyzed
           ? `True peak ${peakDb} dBFS → ${gainDb > 0.05 ? `+${gainDb.toFixed(1)} dB` : gainDb < -0.05 ? `${gainDb.toFixed(1)} dB` : '0.0 dB'} gain targets −1 dBFS (capped +12 dB) in preview and exports.`
           : 'Peak analysis unavailable for this asset (older import) — re-import the file to enable.'}
@@ -3618,7 +3618,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
         onClick={() => toggleKeyframe(prop)}
         className={cn(
           'shrink-0 rounded p-0.5 transition-colors',
-          kf ? 'text-amber-400' : anyKeys ? 'text-muted-foreground/70 hover:text-foreground' : 'text-muted-foreground/40 hover:text-foreground',
+          kf ? 'text-amber-400' : anyKeys ? 'text-muted-foreground/70 hover:text-foreground' : 'text-muted-foreground/65 hover:text-foreground',
         )}
       >
         <Diamond className={cn('size-3', kf && 'fill-current')} />
@@ -3775,7 +3775,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
           </div>
 
           {/* keyframe legend — the diamonds next to X/Y/Scale/Rotate/Opacity */}
-          <p className="flex items-center gap-1 text-[10px] leading-snug text-muted-foreground/60">
+          <p className="flex items-center gap-1 text-[10px] leading-snug text-muted-foreground/75">
             <Diamond className="size-2.5 fill-current text-amber-400" />
             tap a diamond to key that property at the playhead — values animate between keys (Animation section below)
           </p>
@@ -3875,7 +3875,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
                   aria-label="Reverse playback"
                 />
               </div>
-              <p className="text-[10px] leading-snug text-muted-foreground/60">
+              <p className="text-[10px] leading-snug text-muted-foreground/75">
                 Plays backwards frame-by-frame; audio is muted while reversed.
               </p>
             </div>
@@ -3966,7 +3966,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
                   onCheckedChange={(on) => updateClip(clip.id, { autoDuck: on }, true)}
                 />
               </div>
-              <p className="text-[10px] leading-snug text-muted-foreground/60">
+              <p className="text-[10px] leading-snug text-muted-foreground/75">
                 Music lowers while the video audio is louder than the threshold — not just while it overlaps.
               </p>
               {(clip.autoDuck ?? false) && (
@@ -4299,7 +4299,7 @@ function CanvasSizeInputs({
           Apply
         </Button>
       </div>
-      <p className="text-[10px] text-muted-foreground/60">
+      <p className="text-[10px] text-muted-foreground/75">
         256–3840 px · rounded to even numbers (recommended).
       </p>
     </div>

@@ -91,7 +91,7 @@ export function FeedbackDialog() {
               onClick={() => setRating(rating === n ? null : n)}
               className={cn(
                 'rounded-md p-1 transition hover:scale-110',
-                rating !== null && n <= rating ? 'text-amber-300' : 'text-muted-foreground/50',
+                rating !== null && n <= rating ? 'text-amber-300' : 'text-muted-foreground/70',
               )}
             >
               <Star className={cn('size-4', rating !== null && n <= rating && 'fill-amber-300')} />

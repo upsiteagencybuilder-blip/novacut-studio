@@ -289,7 +289,7 @@ export function KeyframeCurveEditor({ clip, fps }: { clip: Clip; fps: number }) 
         })}
       </svg>
 
-      <p className="text-[9px] leading-snug text-muted-foreground/60">
+      <p className="text-[9px] leading-snug text-muted-foreground/75">
         Drag keys to retime and re-value · double-click the graph to add a key · pick an easing for the selected key
         {selectedKf ? '' : ' (none selected → applies to all keys)'}
       </p>

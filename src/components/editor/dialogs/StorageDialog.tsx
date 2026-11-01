@@ -309,7 +309,7 @@ export function StoragePanel() {
             {errors.slice(0, 8).map((e, i) => (
               <li key={`${e.at}-${i}`} className="rounded-lg border border-(--nc-line) bg-(--nc-panel-strong) px-2 py-1.5">
                 <p className="truncate font-mono text-[10px] text-foreground/80">{e.message}</p>
-                <p className="text-[9px] text-muted-foreground/60">
+                <p className="text-[9px] text-muted-foreground/75">
                   {e.kind} · {new Date(e.at).toLocaleTimeString()}
                 </p>
               </li>
