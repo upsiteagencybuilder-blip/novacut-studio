@@ -22,10 +22,11 @@ import {
   FileCheck2,
   FilePlus2,
   Film,
-  FolderOpen,
   FolderInput,
+  FolderOpen,
   HardDrive,
   History,
+  LayoutTemplate,
   Link2,
   Loader2,
   MoreVertical,
@@ -38,6 +39,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
+import { BUILTIN_TEMPLATES, templateDuration, type EditTemplate } from '@/lib/templates'
 import * as db from '@/lib/editor/db'
 import { StoragePanel } from '@/components/editor/dialogs/StorageDialog'
 import {
@@ -104,7 +106,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import type { Project } from '@/lib/editor/types'
 
-type Tab = 'device' | 'cloud' | 'storage'
+type Tab = 'device' | 'cloud' | 'storage' | 'templates'
 
 function byUpdatedAtDesc(a: Project, b: Project): number {
   return b.updatedAt - a.updatedAt
@@ -1174,6 +1176,124 @@ function DeviceTab() {
 
 /* ================= dialog ================= */
 
+/**
+ * Day 67 — template gallery: ready-made edit structures with honest
+ * structure previews (slots, overlays, duration, canvas). Applying builds a
+ * real timeline scaffold (Day 68 — wired through store.applyTemplate).
+ */
+function TemplatesTab() {
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const applying = useEditor((s) => s.applyTemplate)
+  const openDialog = useEditor((s) => s.openDialog)
+  const [filter, setFilter] = useState<'All' | EditTemplate['category']>('All')
+  const cats = ['All', 'Social', 'Vlog', 'Promo', 'Cinematic', 'Tutorial'] as const
+  const list = filter === 'All' ? BUILTIN_TEMPLATES : BUILTIN_TEMPLATES.filter((t) => t.category === filter)
+
+  return (
+    <div className="space-y-2" data-nc-templates-tab>
+      <div className="flex flex-wrap gap-1">
+        {cats.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setFilter(c)}
+            aria-pressed={filter === c}
+            className={cn(
+              'rounded-full border px-2 py-0.5 text-[10px] font-medium transition',
+              filter === c
+                ? 'border-(--nc-accent) bg-(--nc-accent-soft) text-foreground'
+                : 'border-(--nc-line) text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
+      <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-1" data-nc-template-list>
+        {list.map((t) => {
+          const dur = templateDuration(t)
+          const isOpen = expanded === t.id
+          return (
+            <div key={t.id} className="rounded-xl border border-(--nc-line) bg-(--nc-panel) p-2.5" data-nc-template-card={t.id}>
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
+                  style={{ background: `linear-gradient(135deg, ${t.accent}, ${t.accent}99)` }}
+                >
+                  <LayoutTemplate className="size-4" />
+                </span>
+                <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setExpanded(isOpen ? null : t.id)}>
+                  <p className="truncate text-xs font-semibold">
+                    {t.name}
+                    <Badge variant="outline" className="ml-1.5 border-(--nc-line) px-1 py-0 text-[8px] text-muted-foreground">
+                      {t.category}
+                    </Badge>
+                  </p>
+                  <p className="line-clamp-1 text-[10px] text-muted-foreground">{t.description}</p>
+                </button>
+                <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{dur.toFixed(0)}s</span>
+              </div>
+
+              {isOpen && (
+                <div className="mt-2 space-y-2 rounded-lg border border-(--nc-line) bg-(--nc-panel-strong) p-2" data-nc-template-detail>
+                  <p className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Structure — {t.canvas.width}×{t.canvas.height} · {t.fps} fps · {t.slots.length} slots · {(t.overlays?.length ?? 0)} overlays
+                  </p>
+                  <ol className="space-y-1">
+                    {t.slots.map((slot, i) => (
+                      <li key={i} className="flex items-center gap-1.5 text-[10px]">
+                        <span
+                          className={cn(
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded text-[8px] font-bold text-white',
+                            slot.kind === 'music' ? 'bg-emerald-500' : slot.kind === 'image' ? 'bg-sky-500' : 'bg-violet-500',
+                          )}
+                        >
+                          {slot.kind === 'music' ? '♪' : slot.kind === 'image' ? 'IMG' : i + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-foreground/80">{slot.name}</span>
+                        <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{slot.duration}s</span>
+                      </li>
+                    ))}
+                  </ol>
+                  {t.overlays && t.overlays.length > 0 && (
+                    <div className="space-y-1 border-t border-(--nc-line) pt-1.5">
+                      {t.overlays.map((o, i) => (
+                        <p key={i} className="text-[10px] text-amber-300/90">
+                          “{o.text}” · {o.start}s→{(o.start + o.duration).toFixed(1)}s
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  <Button
+                    size="sm"
+                    data-nc-template-apply={t.id}
+                    className="h-7 w-full px-2 text-[11px]"
+                    onClick={() => {
+                      const ok = applying(t)
+                      if (ok) {
+                        toast.success(`Template applied — ${t.slots.length} slots on the timeline. Drop your media into the placeholders.`)
+                        openDialog(null)
+                      } else {
+                        toast.error('Could not apply the template on this project')
+                      }
+                    }}
+                  >
+                    Use this template
+                  </Button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-[9px] text-muted-foreground/70">
+        Templates build placeholder clips — nothing pretends to be your footage. Every slot is a real clip you trim, move and swap.
+      </p>
+    </div>
+  )
+}
+
 export function ProjectsDialog() {
   const open = useEditor((s) => s.activeDialog === 'projects')
   const openDialog = useEditor((s) => s.openDialog)
@@ -1198,7 +1318,20 @@ export function ProjectsDialog() {
  */
 function ProjectsBody() {
   const openDialog = useEditor((s) => s.openDialog)
-  const [tab, setTab] = useState<Tab>('device')
+  // Day 67 — deep-link: 'open-templates' actions leave a pending tab flag
+  // that is consumed ONCE here on mount (race-free vs the lazy dialog load)
+  const [tab, setTab] = useState<Tab>(() => {
+    try {
+      const pending = sessionStorage.getItem('nc.projectsTab') as Tab | null
+      if (pending === 'templates' || pending === 'storage' || pending === 'cloud' || pending === 'device') {
+        sessionStorage.removeItem('nc.projectsTab')
+        return pending
+      }
+    } catch {
+      /* private mode — default tab */
+    }
+    return 'device'
+  })
 
   const handleRestored = useCallback(() => {
     openDialog(null)
@@ -1216,12 +1349,13 @@ function ProjectsBody() {
         </DialogDescription>
       </DialogHeader>
 
-      <div role="tablist" aria-label="Project locations" className="grid grid-cols-3 gap-1.5 rounded-xl border border-(--nc-line) bg-(--nc-panel) p-1.5">
+      <div role="tablist" aria-label="Project locations" className="grid grid-cols-4 gap-1.5 rounded-xl border border-(--nc-line) bg-(--nc-panel) p-1.5">
         {(
           [
-            { id: 'device', label: 'On this device' },
-            { id: 'cloud', label: 'Cloud backup' },
+            { id: 'device', label: 'Projects' },
+            { id: 'cloud', label: 'Cloud' },
             { id: 'storage', label: 'Storage' },
+            { id: 'templates', label: 'Templates' },
           ] as const
         ).map((t) => {
           const active = tab === t.id
@@ -1246,7 +1380,7 @@ function ProjectsBody() {
         })}
       </div>
 
-      {tab === 'device' ? <DeviceTab /> : tab === 'cloud' ? <CloudTab onRestored={handleRestored} /> : <StoragePanel />}
+      {tab === 'device' ? <DeviceTab /> : tab === 'cloud' ? <CloudTab onRestored={handleRestored} /> : tab === 'storage' ? <StoragePanel /> : <TemplatesTab />}
     </>
   )
 }

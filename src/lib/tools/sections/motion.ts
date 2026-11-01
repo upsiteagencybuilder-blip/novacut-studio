@@ -52,7 +52,7 @@ export const MOTION_TOOLS: ProTool[] = [
   { id: 'motion-roll-title-toggle', name: 'Roll Title Toggle', section: 'motion', group: 'Titles & templates', status: 'live', desc: 'Roll animation scrolls a title vertically like end credits' },
   { id: 'motion-crawl-title-toggle', name: 'Crawl Title Toggle', section: 'motion', group: 'Titles & templates', status: 'live', desc: 'Crawl animation scrolls a title horizontally like a news ticker' },
   { id: 'motion-mogrt-templates', name: 'Essential Graphics Templates (.mogrt)', section: 'motion', group: 'Titles & templates', status: 'planned', desc: 'Import Premiere motion graphics template packages' },
-  { id: 'motion-opener-library', name: 'Opener Library', section: 'motion', group: 'Titles & templates', status: 'planned', desc: 'Ready-made openers and intro stingers library' },
+  { id: 'motion-opener-library', name: 'Opener Library', section: 'motion', group: 'Titles & templates', status: 'live', desc: 'Eight built-in edit-structure templates (TikTok Hook, YouTube Intro, Trailer…) with one-tap timeline scaffold', action: 'open-templates' },
   { id: 'motion-titles-library', name: 'Titles Library', section: 'motion', group: 'Titles & templates', status: 'live', desc: 'Title presets like Big Title and Neon Glow add styled clips', action: 'open-text' },
   { id: 'motion-lower-thirds-library', name: 'Lower Thirds Library', section: 'motion', group: 'Titles & templates', status: 'live', desc: 'Lower Third and Lower Third Bar presets ship in the text panel' },
   { id: 'motion-subtitles-library', name: 'Subtitles Library', section: 'motion', group: 'Titles & templates', status: 'live', desc: 'Caption preset styles subtitle text, auto captions fill content' },

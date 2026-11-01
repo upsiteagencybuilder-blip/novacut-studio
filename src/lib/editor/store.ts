@@ -5,6 +5,7 @@
  * Single source of truth for project, media, playback & UI state.
  * All components read/write through this store.
  */
+import type { EditTemplate } from '../templates'
 import { create } from 'zustand'
 import { toast } from 'sonner'
 import type {
@@ -128,6 +129,8 @@ interface EditorStore {
   /** `at` (seconds) drops the clip at that timeline time (e.g. the playhead); default appends at the track end */
   addClipFromMediaId: (mediaId: string, at?: number) => void
   addTextClip: (preset?: TextPreset, at?: { x: number; y: number }) => void
+  /** Day 68 — rebuild the timeline from a built-in template scaffold (undoable in ONE step) */
+  applyTemplate: (t: EditTemplate) => boolean
   addStickerClip: (req: StickerRequest) => void
   /** Day 11 — insert an adjustment layer (invisible FX carrier) at the playhead on the top overlay track */
   addAdjustmentLayer: () => boolean
@@ -716,6 +719,110 @@ export const useEditor = create<EditorStore>((set, get) => ({
       : preset
     const clip = createTextClip(s.project, merged, undefined, round2(s.currentTime))
     s.addClip(clip)
+  },
+
+  /**
+   * Day 68 — apply a built-in template: rebuilds the timeline as a scaffold
+   * of REAL clips. Media slots become text placeholder clips rendered ON the
+   * preview ("drop media here" is literally what you see — honest by
+   * design), overlays become editable text clips, the music slot becomes a
+   * silent audio clip waiting for a source. Canvas size + fps follow the
+   * template. One undo step restores the previous edit entirely.
+   */
+  applyTemplate: (t) => {
+    const s = get()
+    if (s.project.clips.some((c) => c.kind === 'nested' && c.nested?.open)) return false
+    s.pushHistory('template-apply')
+
+    // resolve tracks: first video track hosts slots; first overlay hosts overlays; first audio hosts music
+    let tracks = [...s.project.tracks]
+    const videoTrack = tracks.find((tr) => tr.kind === 'video') ?? tracks[0]
+    let overlayTrack = tracks.find((tr) => tr.kind === 'overlay')
+    if (!overlayTrack) {
+      overlayTrack = { id: uid('track_'), name: 'Overlay', kind: 'overlay', muted: false, locked: false, hidden: false }
+      tracks = [overlayTrack, ...tracks]
+    }
+    const audioTrack = tracks.find((tr) => tr.kind === 'audio')
+
+    const clips: Clip[] = []
+    let cursor = 0
+
+    // media slots — honest text placeholders ON the video track
+    for (const slot of t.slots) {
+      if (slot.kind === 'music') continue
+      const clip = createTextClip(s.project, undefined, videoTrack.id, round2(cursor))
+      clips.push({
+        ...clip,
+        name: slot.name,
+        duration: slot.duration,
+        start: round2(cursor),
+        color: t.accent,
+        textStyle: {
+          ...clip.textStyle!,
+          content: slot.kind === 'image' ? '%IMG% '.replace('%IMG%', '🖼') + slot.name : '%PLAY% '.replace('%PLAY%', '▶') + slot.name,
+          fontSize: Math.max(18, Math.round(t.canvas.height * 0.035)),
+          align: 'center',
+        },
+      })
+      cursor += slot.duration
+    }
+
+    // overlays — real editable text clips
+    for (const o of t.overlays ?? []) {
+      const clip = createTextClip(s.project, undefined, overlayTrack.id, round2(o.start))
+      clips.push({
+        ...clip,
+        name: o.text.slice(0, 24),
+        duration: o.duration,
+        start: round2(o.start),
+        textStyle: { ...clip.textStyle!, content: o.text, fontSize: Math.max(22, Math.round(t.canvas.height * 0.06)) },
+      })
+    }
+
+    // music slot — silent audio clip awaiting a source
+    const music = t.slots.find((slot) => slot.kind === 'music')
+    if (music && audioTrack) {
+      clips.push({
+        id: uid('clip_'),
+        trackId: audioTrack.id,
+        kind: 'audio',
+        name: music.name,
+        start: 0,
+        duration: music.duration,
+        trimStart: 0,
+        sourceDuration: 3600,
+        speed: 1,
+        volume: 0.8,
+        muted: false,
+        fadeIn: 0.5,
+        fadeOut: 1,
+        transform: { ...DEFAULT_TRANSFORM },
+        filters: { ...DEFAULT_FILTERS },
+        motion: 'none',
+        motionIntensity: 0.35,
+        color: '#10b981',
+      })
+    }
+
+    suppressSave = true
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        tracks,
+        clips,
+        canvasWidth: t.canvas.width,
+        canvasHeight: t.canvas.height,
+        fps: t.fps,
+      }),
+      currentTime: 0,
+      selectedClipIds: [],
+      past: [...st.past.slice(-HISTORY_LIMIT + 1), cloneProject(st.project)],
+      historyPast: [...st.historyPast.slice(-HISTORY_LIMIT + 1), { label: 'template-apply', at: Date.now() }],
+      future: [],
+      historyFuture: [],
+    }))
+    setTimeout(() => (suppressSave = false), 0)
+    return true
   },
 
   addStickerClip: (req) => {

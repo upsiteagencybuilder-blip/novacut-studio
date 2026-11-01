@@ -115,6 +115,16 @@ function useToolAction() {
       'open-projects': () => openDialog('projects'),
       'open-versions': () => openDialog('versions'),
       'open-history': () => openDialog('history'),
+      'open-templates': () => {
+        // the dialog mounts AFTER this click — hand the tab over via a
+        // pending flag the body reads on mount (race-free)
+        try {
+          sessionStorage.setItem('nc.projectsTab', 'templates')
+        } catch {
+          /* private mode — dialog still opens on the default tab */
+        }
+        openDialog('projects')
+      },
       'open-shortcuts': () => openDialog('shortcuts'),
       'open-properties-filters': () => openPropsSection('filters'),
       'open-properties-grade': () => openPropsSection('grade'),

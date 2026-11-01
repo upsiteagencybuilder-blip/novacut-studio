@@ -2275,3 +2275,49 @@ Stage Summary:
 - **CATEGORY G COMPLETE (Days 59–66):** offline shell, storage manager, virtualized timeline, RAM budget with evict/rehydrate, measured startup + code splitting, crash boundary + local telemetry + recovery, 150-step labeled history — all live, all audited fresh, catalog 288/292.
 - Files: lib/tools/sections/panels.ts, lib/tools/types.ts, components/editor/panels/ProToolkitPanel.tsx, docs/ROADMAP-90.md.
 - Next: Day 67 — Template gallery v1 (Category H begins).
+
+---
+## Day 67 — Template gallery v1 (ready-made edit structures)
+**Date:** 2025-12-XX · **Category:** H (Templates, Onboarding & Growth)
+
+### Task ID: Day-67
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category H Day 67 — a browsable gallery of ready-made edit structures.
+
+**Work Log:**
+- NEW lib/templates.ts: 8 built-in templates as pure data — TikTok Hook (9:16, hook→3 cuts→CTA), YouTube Intro, Product Promo, Travel Vlog, Podcast Clip, Cinematic Trailer (24 fps), Tutorial Steps, Photo Slideshow. Each: category, canvas, fps, ordered slots (video/image/music with honest names like "Hook footage (best shot first)"), text overlays with timings, accent color. `templateDuration/getTemplate` helpers.
+- ProjectsDialog: FOURTH tab "Templates" (tab list compacted to Projects/Cloud/Storage/Templates) — category filter chips (All/Social/Vlog/Promo/Cinematic/Tutorial), template cards (accent tile + name + category badge + description + duration), expandable structure detail (canvas·fps·slot count·overlay count, numbered slot list with kind chips, overlay timing lines) and a "Use this template" button (wired to Day 68's apply). Honest footnote: templates build placeholder clips, nothing pretends to be footage.
+
+**E2E receipts (desktop 1280×800 + mobile 390×844):**
+- Gallery: 8 cards render; filters switch the list; TikTok Hook detail discloses "1080×1920 · 30 fps · 5 slots · 2 overlays" with the full slot ladder.
+- Mobile: all 8 cards render in the Templates tab.
+- Catalog flip: `motion-opener-library` planned→live (the built-in opener/template library is real) with a race-free `open-templates` deep link (sessionStorage pending flag consumed once on dialog mount — verified: flag → Templates tab active + 8 cards + flag consumed). Catalog **289 live / 291 planned**.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 67 shipped: a real template catalog — eight honest, structured edit blueprints browsable and deep-linkable.
+- Files: lib/templates.ts (new), dialogs/ProjectsDialog.tsx, lib/tools/sections/motion.ts, lib/tools/types.ts, panels/ProToolkitPanel.tsx, docs/ROADMAP-90.md.
+
+---
+## Day 68 — Template apply → timeline scaffold with media placeholders
+**Date:** 2025-12-XX · **Category:** H (Templates, Onboarding & Growth)
+
+### Task ID: Day-68
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category H Day 68 — one click turns a template into a real, editable timeline.
+
+**Work Log:**
+- store.applyTemplate(t) (one undo step): rebuilds the timeline as a scaffold of REAL clips — media slots become text placeholder clips on the video track whose PREVIEW literally shows "▶ Hook footage (best shot first)" (honest by design: the placeholder tells you what to drop there), overlays become fully editable text clips on an overlay track (created if absent), the music slot becomes a silent audio clip awaiting a source, canvas size + fps follow the template, playhead resets, history records 'template-apply'.
+- Guard: refuses inside an open compound session.
+
+**E2E receipts (desktop 1280×800):**
+- Apply TikTok Hook: 7 clips (5 video placeholders + 2 overlay texts), canvas 1080×1920, fps 30, first clip name/duration exact.
+- Placeholder honesty: seek 0.5s → canvas pixel scan finds **59,519 bright pixels** — the placeholder/overlay text genuinely renders on the preview (never a fake silent black).
+- One-step undo restores the previous edit completely (6 clips + 1280×720 canvas); redo re-applies (7 clips) — historyFuture label 'template-apply'.
+- Dialog closes after apply with a success toast; zero console errors.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 68 shipped: template → timeline in one click, with placeholders that say what they are and an undo that always gives your old edit back.
+- Files: lib/editor/store.ts, dialogs/ProjectsDialog.tsx.
+- Next: Day 69 — Onboarding tour v2 (contextual feature tips).
