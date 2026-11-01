@@ -2059,3 +2059,25 @@ Stage Summary:
 - Day 57 shipped: platform-honest sharing — real OS-sheet file handoff where supported, truthful disabled states where not, real text/image clipboard paths (sidecars!), and a disclosed summary fallback for blob types the clipboard can't hold.
 - Files: lib/editor/share.ts (new), dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
 - Next: Day 58 — Delivery SOON batch flip (36 backlog) + Category F audit.
+
+---
+Task ID: Day-58
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category F Day 58 — Delivery SOON batch flip (36 backlog) + CATEGORY F AUDIT.
+
+Work Log:
+- Honest flip batch: delivery-aac planned→live (MP4 exports record a real AAC mp4a.40.2 track at the selected 96–256 kbps — behavior verified repeatedly through probed MP4 exports; standalone .aac stays roadmap). delivery-media-encoder-queue was already flipped on Day 56. Every OTHER planned delivery entry (ProRes/DNxHD/CineForm/MXF/AVI/MOV, CBR/VBR rate control, interlacing, metadata embedding, social direct upload, DVD authoring…) stays SOON — F shipped its features as NEW live entries rather than flipping stubs, and the honesty rule outranks the batch size.
+- Catalog count: 284 live / 293 planned (delivery backlog 36→34); ROADMAP-90 line 23 + backlog line updated from the node-counted source of truth.
+- CATEGORY F AUDIT — receipts re-run through the real UI on the live app (desktop 1280×800):
+  • D51: TikTok bundle apply → toast "Bundle applied — TikTok (1080×1920 · 30 fps · 9 Mbps · MP4)" + canvas 1080×1920; 5 stock bundles listed.
+  • D52: 540p·24 rung click → canvas 960×540@24 + fuchsia active detection; the four probed exports (720p30/1080p60/4K30/4K60) stand from Day 52.
+  • D53: PNG zip RE-EXPORTED through the dialog → 94 frames @ 960×540 · 88.5 MB · 22.7s; blob probed: PK magic true, central directory = 94 entries. (GIF full encode NOT re-run — 83s software-reality encode; Day 53's GIF89a + 480×270 decode receipts stand, disclosed here.)
+  • D54: VTT sidecar Copy (E2E caption injected) → clipboard spy caught "WEBVTT\n\n1\n…" real WebVTT content; caption removed, 6 clips restored. Burn A/B (5953 vs 0 magenta px) stands from Day 54.
+  • D55: branding kit persisted across full reload — watermark checked + wm-magenta.png selected; intro/outro state as left.
+  • D56: queue job "audit-q" → queued→fuchsia(rendering)→emerald(done · 1.3 MB); canvas restored after.
+  • D57: fresh direct export (2.0 MB MP4) → done phase shows "Share video" truthfully DISABLED (headless has no navigator.share) + honest explainer; Copy summary spy: "audit-q.mp4 · 2.0 MB · 960×540 · 24fps — made locally with NovaCut Studio".
+- Cleanup: queue cleared, canvas restored 1280×720@30, clips 6; mobile 390×844 renders all five export cards (frames/audio/branding/queue/sidecar); FRESH SESSION zero console errors + zero page errors; app 200; dev.log compiles green; eslint + tsc clean.
+
+Stage Summary:
+- CATEGORY F (Export & Delivery, Days 51–58) COMPLETE: preset bundles, quality ladder with probed 4K/60 exports, GIF + PNG-sequence offline exports, burn-toggle + three sidecar formats with a root-caused 0-byte fix, branding kit (watermark + transient intro/outro), a real export queue (background drain, cancel, snapshot isolation), platform-honest share/clipboard helpers — every entry backed by UI-driven receipts, catalog +13 live since Day 51 (10 new + 2 flips + 1 desc-verified).
+- Next: Category G — PWA, Performance & Reliability (Days 59–66), starting Day 59 — full offline mode (service worker caching).
