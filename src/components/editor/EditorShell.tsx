@@ -42,6 +42,7 @@ import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
 import { startCloudAutosave } from '@/lib/cloud/autosave'
 import { CrashRecoveryWatcher } from '@/components/editor/ErrorBoundary'
 import { installTelemetry } from '@/lib/telemetry'
+import { ContextualTips } from '@/lib/tips'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 function useDesktop(): boolean {
@@ -645,6 +646,7 @@ export function EditorShell() {
       </Suspense>
       <OnboardingOverlay />
       <CrashRecoveryWatcher />
+      <ContextualTips />
       </div>
     </SessionProvider>
   )

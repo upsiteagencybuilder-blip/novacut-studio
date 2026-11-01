@@ -2342,3 +2342,27 @@ Stage Summary:
 - The template flow is now honest at every surface: gallery discloses structure → apply builds real placeholders → timeline labels them → preview shows them → undo restores.
 - Files: components/editor/timeline/ClipBlock.tsx.
 - Next: Day 69 — Onboarding tour v2 (contextual feature tips).
+
+---
+## Day 69 — Onboarding tour v2 (contextual feature tips)
+**Date:** 2025-12-XX · **Category:** H (Templates, Onboarding & Growth)
+
+### Task ID: Day-69
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category H Day 69 — contextual tips that fire exactly when a feature becomes relevant, once ever.
+
+**Work Log:**
+- NEW lib/tips.tsx: 5 measured contextual tips — virtualized-timeline (clips ≥ 40), history-depth (≥ 12 labeled steps), template-placeholders (a ▶ placeholder clip exists), memory-budget (held media > 400 MB), export-queue (phase 'recording'). Each: fires at most ONCE EVER (localStorage `novacut.tip.<id>` flag, `tipsSeen()/resetTips()` helpers for tests/users), only when `ready && !activeDialog` (never over an open dialog), throttled 1.5s between tips, 1.2s measured-condition poll, private-mode safe (session-only via in-memory set), and through the standard honest toast system.
+- EditorShell mounts `<ContextualTips />` beside the crash watcher.
+
+**E2E receipts (desktop 1280×800):**
+- history-depth: 14 pushes → toast "Your last 12 edits are one click away / Edit history keeps 150 labeled steps…" + flag set.
+- ONCE-ONLY: 5 more pushes → tip suppressed (no duplicate).
+- template-placeholders: flag cleared + template applied → toast "This timeline is a template scaffold / The ▶ clips are placeholders…" fires on the real condition.
+- Cleanup: undo → 6 demo clips; mobile 390×844 ready with flags intact; zero console errors.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 69 shipped: onboarding v2 — the editor now teaches at the moment of relevance, once, in measured conditions.
+- Files: lib/tips.tsx (new), components/editor/EditorShell.tsx.
+- Next: Day 70 — i18n scaffold (bn/en) via next-intl.
