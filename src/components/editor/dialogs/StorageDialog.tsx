@@ -14,6 +14,7 @@ import {
   Loader2,
   MemoryStick,
   RefreshCw,
+  ScrollText,
   ShieldCheck,
   Trash2,
   TriangleAlert,
@@ -21,6 +22,7 @@ import {
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
 import { getKV } from '@/lib/editor/db'
+import { clearTelemetry, getRecentErrors, type TelemetryEntry } from '@/lib/telemetry'
 import {
   MEDIA_BUDGET_CHOICES,
   MEDIA_BUDGET_DEFAULT,
@@ -65,6 +67,8 @@ export function StoragePanel() {
   const [memReport, setMemReport] = useState<MediaMemoryReport | null>(null)
   // Day 63 — measured startup time (written by the store on hydration)
   const [startupMs, setStartupMs] = useState<number | null>(null)
+  // Day 64 — local telemetry log (never networked)
+  const [errors, setErrors] = useState<TelemetryEntry[]>([])
 
   useEffect(() => {
     setMemBudget(getMediaBudgetBytes())
@@ -72,6 +76,7 @@ export function StoragePanel() {
     void getKV<{ ms: number; at: number }>('lastStartupMs')
       .then((v) => setStartupMs(v?.ms ?? null))
       .catch(() => undefined)
+    setErrors(getRecentErrors())
   }, [media])
 
   const refresh = useCallback(async () => {
@@ -267,6 +272,49 @@ export function StoragePanel() {
               Evict now
             </Button>
           </div>
+        )}
+      </div>
+
+      {/* Day 64 — local telemetry: the app's own error log, kept on-device */}
+      <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel) p-3" data-nc-telemetry-panel>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <ScrollText className="h-4 w-4 shrink-0 text-sky-400" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold">Local telemetry</p>
+              <p className="text-[10px] text-muted-foreground">
+                {errors.length ? `${errors.length} recent error${errors.length === 1 ? '' : 's'} · stored on this device only` : 'No errors recorded — clean session'}
+              </p>
+            </div>
+          </div>
+          {errors.length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              data-nc-telemetry-clear
+              className="h-7 shrink-0 px-2 text-[10px] text-foreground"
+              onClick={() => {
+                clearTelemetry()
+                setErrors([])
+                toast.success('Telemetry log cleared')
+              }}
+            >
+              <Trash2 className="h-3 w-3" />
+              Clear
+            </Button>
+          )}
+        </div>
+        {errors.length > 0 && (
+          <ul className="mt-2 max-h-36 space-y-1.5 overflow-y-auto" data-nc-telemetry-list>
+            {errors.slice(0, 8).map((e, i) => (
+              <li key={`${e.at}-${i}`} className="rounded-lg border border-(--nc-line) bg-(--nc-panel-strong) px-2 py-1.5">
+                <p className="truncate font-mono text-[10px] text-foreground/80">{e.message}</p>
+                <p className="text-[9px] text-muted-foreground/60">
+                  {e.kind} · {new Date(e.at).toLocaleTimeString()}
+                </p>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 

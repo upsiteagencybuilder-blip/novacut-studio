@@ -2198,3 +2198,28 @@ Stage Summary:
 - Day 63 shipped: startup is now measured and disclosed (not guessed), and the dialog layer no longer weighs down the first load — 5,123 lines of dialog code moved to on-demand chunks. Also fixed a latent syntax breakage that had been hidden by the dev-server compile cache since Day 60.
 - Files: EditorShell.tsx, store.ts, dialogs/StorageDialog.tsx.
 - Next: Day 64 — error boundaries + local telemetry + crash-recovery dialog.
+
+---
+## Day 64 — Error boundaries + local telemetry + crash-recovery dialog
+**Date:** 2025-12-XX · **Category:** G (PWA, Performance & Reliability)
+
+### Task ID: Day-64
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category G Day 64 — a render crash can never white-page the editor, every error is logged locally (never networked), and an unclean exit is honestly detected next boot.
+
+**Work Log:**
+- NEW lib/telemetry.ts (local-first, honest): `recordError` ring buffer (50 entries, persisted `novacut.telemetry` localStorage, 1.5s dedupe), `getRecentErrors/clearTelemetry/subscribeTelemetry`, heartbeat crash detection (`markSessionLive` = 5s sessionStorage heartbeat; `hadUncleanExit` = stale >15s at boot — a NORMAL reload always has a fresh beat and never false-positives), `installTelemetry` (window error + unhandledrejection + console.error funnel; idempotent).
+- NEW components/editor/ErrorBoundary.tsx: class `ErrorBoundary` wrapping the WHOLE editor in page.tsx — crash screen discloses the message, offers "Reload & keep my project" (default; local autosave holds everything) and a confirm-gated "Reset local data"; note that the error is logged on-device only. `CrashRecoveryWatcher` mounts in EditorShell: stale heartbeat → one honest "Recovered from an unexpected exit" toast, then re-arms the beat.
+- StoragePanel: NEW "Local telemetry" block — count or clean-session line, last 8 entries (message/kind/time), Clear button. Zero network, zero hidden reporting.
+
+**E2E receipts (desktop 1280×800):**
+- Telemetry: injected `ErrorEvent('error')` + `Promise.reject` → `novacut.telemetry` gained `window-error` + `unhandled-rejection` entries; Storage panel listed 3 entries with kinds/times; Clear → "No errors recorded — clean session".
+- Crash recovery POSITIVE: heartbeat faked 30s stale → reload → toast "Recovered from an unexpected exit — your project was restored from the local autosave", store restored 6 clips.
+- Crash recovery NEGATIVE: normal reload → zero toasts (fresh heartbeat, no false positive), 6 clips.
+- Mobile 390×844: ready, no crash screen visible, clips restored.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 64 shipped: the editor now fails loudly but never fatally — a boundary catches render crashes with a recovery-focused screen, every error lands in an on-device log the user can read and clear, and the next boot tells the truth about a previous crash while autosave quietly restored the work.
+- Files: lib/telemetry.ts (new), components/editor/ErrorBoundary.tsx (new), app/page.tsx, EditorShell.tsx, dialogs/StorageDialog.tsx.
+- Next: Day 65 — undo/redo depth + visual History panel.

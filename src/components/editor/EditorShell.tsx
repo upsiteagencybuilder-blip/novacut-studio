@@ -39,6 +39,8 @@ import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
 import { startCloudAutosave } from '@/lib/cloud/autosave'
+import { CrashRecoveryWatcher } from '@/components/editor/ErrorBoundary'
+import { installTelemetry } from '@/lib/telemetry'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 function useDesktop(): boolean {
@@ -504,6 +506,11 @@ export function EditorShell() {
     void init()
   }, [init])
 
+  // Day 64 — local telemetry listeners (idempotent, never networked)
+  useEffect(() => {
+    installTelemetry()
+  }, [])
+
   // Day 44 — cloud auto-save engine (self-gating: only fires when the user
   // enabled it; the editor stays local-first regardless)
   useEffect(() => {
@@ -635,6 +642,7 @@ export function EditorShell() {
         {dialog === 'storage' && <StorageDialog />}
       </Suspense>
       <OnboardingOverlay />
+      <CrashRecoveryWatcher />
       </div>
     </SessionProvider>
   )

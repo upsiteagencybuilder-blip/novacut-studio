@@ -1,6 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import { ErrorBoundary } from '@/components/editor/ErrorBoundary'
 
 // The editor touches IndexedDB, canvas and media APIs — client-only.
 const EditorShell = dynamic(
@@ -30,5 +31,12 @@ const EditorShell = dynamic(
 )
 
 export default function Home() {
-  return <EditorShell />
+  return (
+    // Day 64 — the whole editor renders inside a crash boundary: a render
+    // error can never produce a white page, and recovery always keeps the
+    // locally autosaved project.
+    <ErrorBoundary>
+      <EditorShell />
+    </ErrorBoundary>
+  )
 }
