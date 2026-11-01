@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
+import { getKV } from '@/lib/editor/db'
 import {
   MEDIA_BUDGET_CHOICES,
   MEDIA_BUDGET_DEFAULT,
@@ -62,10 +63,15 @@ export function StoragePanel() {
   // Day 62 — RAM memory budget state
   const [memBudget, setMemBudget] = useState<number>(MEDIA_BUDGET_DEFAULT)
   const [memReport, setMemReport] = useState<MediaMemoryReport | null>(null)
+  // Day 63 — measured startup time (written by the store on hydration)
+  const [startupMs, setStartupMs] = useState<number | null>(null)
 
   useEffect(() => {
     setMemBudget(getMediaBudgetBytes())
     setMemReport(getMediaReport(media))
+    void getKV<{ ms: number; at: number }>('lastStartupMs')
+      .then((v) => setStartupMs(v?.ms ?? null))
+      .catch(() => undefined)
   }, [media])
 
   const refresh = useCallback(async () => {
@@ -169,6 +175,11 @@ export function StoragePanel() {
         )}
         <div className="mt-2 space-y-1.5">
           <StatRow label="Media blobs (IndexedDB)" value={`${report?.mediaCount ?? '—'} · ${formatBytesLocal(report?.mediaBytes ?? 0)}`} />
+          <StatRow
+            label="Last startup (measured, this device)"
+            value={startupMs != null ? `${startupMs} ms` : '—'}
+            hint="navigation → editor hydrated"
+          />
           <StatRow label="Projects (IndexedDB)" value={String(report?.projectCount ?? '—')} />
           <StatRow label="Version snapshots" value={String(report?.versionCount ?? '—')} />
           <StatRow

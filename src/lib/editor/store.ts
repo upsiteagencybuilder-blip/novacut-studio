@@ -484,6 +484,23 @@ export const useEditor = create<EditorStore>((set, get) => ({
       const land = landingTime(project)
       set({ media, project, ready: true, currentTime: land })
       setTimeout(() => (suppressSave = false), 0)
+      // Day 63 — startup budget probe: measure from navigation start to the
+      // moment the editor is fully hydrated (project + media restored).
+      // The number is honest: measured on THIS device, kept for the Storage
+      // panel and exposed on window for tests.
+      if (typeof window !== 'undefined' && performance.mark) {
+        try {
+          performance.mark('novacut:ready')
+          const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+          const t0 = nav?.startTime ?? 0
+          const mark = performance.getEntriesByName('novacut:ready')[0]
+          const startupMs = mark ? Math.round(mark.startTime - t0) : Math.round(performance.now())
+          ;(window as unknown as { __ncStartupMs?: number }).__ncStartupMs = startupMs
+          void db.setKV('lastStartupMs', { ms: startupMs, at: Date.now() }).catch(() => undefined)
+        } catch {
+          /* performance API unavailable — skip */
+        }
+      }
       // manifest app-shortcut actions (?action=new|demo|export)
       if (typeof window !== 'undefined') {
         const action = new URLSearchParams(window.location.search).get('action')

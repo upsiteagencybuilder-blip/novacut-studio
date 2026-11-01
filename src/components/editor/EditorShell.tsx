@@ -5,7 +5,7 @@
  * Desktop: 3-column studio layout + timeline.
  * Mobile: preview-first with bottom sheet panels.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Briefcase,
@@ -24,16 +24,18 @@ import { LeftPanel } from '@/components/editor/panels/LeftPanel'
 import { PreviewPane } from '@/components/editor/preview/PreviewPane'
 import { PropertiesPanel } from '@/components/editor/preview/PropertiesPanel'
 import { Timeline } from '@/components/editor/timeline/Timeline'
-import { ExportDialog } from '@/components/editor/dialogs/ExportDialog'
-import { ProjectsDialog } from '@/components/editor/dialogs/ProjectsDialog'
+// Day 63 — code splitting: every dialog is a lazy chunk, pulled only when it
+// first OPENS (conditional render below) — the startup bundle stays lean.
+const ExportDialog = lazy(() => import('@/components/editor/dialogs/ExportDialog').then((m) => ({ default: m.ExportDialog })))
+const ProjectsDialog = lazy(() => import('@/components/editor/dialogs/ProjectsDialog').then((m) => ({ default: m.ProjectsDialog })))
+const ShortcutsDialog = lazy(() => import('@/components/editor/dialogs/ShortcutsDialog').then((m) => ({ default: m.ShortcutsDialog })))
+const FeedbackDialog = lazy(() => import('@/components/editor/dialogs/FeedbackDialog').then((m) => ({ default: m.FeedbackDialog })))
+const AccountDialog = lazy(() => import('@/components/editor/dialogs/AccountDialog').then((m) => ({ default: m.AccountDialog })))
+const MixerDialog = lazy(() => import('@/components/editor/dialogs/MixerDialog').then((m) => ({ default: m.MixerDialog })))
+const VersionsDialog = lazy(() => import('@/components/editor/dialogs/VersionsDialog').then((m) => ({ default: m.VersionsDialog })))
+const ThemeStudioDialog = lazy(() => import('@/components/editor/dialogs/ThemeStudioDialog').then((m) => ({ default: m.ThemeStudioDialog })))
+const StorageDialog = lazy(() => import('@/components/editor/dialogs/StorageDialog').then((m) => ({ default: m.StorageDialog })))
 import { SessionProvider } from 'next-auth/react'
-import { ShortcutsDialog } from '@/components/editor/dialogs/ShortcutsDialog'
-import { FeedbackDialog } from '@/components/editor/dialogs/FeedbackDialog'
-import { AccountDialog } from '@/components/editor/dialogs/AccountDialog'
-import { MixerDialog } from '@/components/editor/dialogs/MixerDialog'
-import { VersionsDialog } from '@/components/editor/dialogs/VersionsDialog'
-import { ThemeStudioDialog } from '@/components/editor/dialogs/ThemeStudioDialog'
-import { StorageDialog } from '@/components/editor/dialogs/StorageDialog'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
 import { startCloudAutosave } from '@/lib/cloud/autosave'
@@ -490,6 +492,8 @@ export function EditorShell() {
   const ready = useEditor((s) => s.ready)
   const init = useEditor((s) => s.init)
   const panelTab = useEditor((s) => s.panelTab)
+  // Day 63 — lazy dialogs render only while their dialog key is active
+  const dialog = useEditor((s) => s.activeDialog)
   const isDesktop = useDesktop()
   const keyboard = useKeyboardShortcuts()
   const timeline = useTimelineHeight()
@@ -619,15 +623,17 @@ export function EditorShell() {
       )}
 
       {/* global dialogs */}
-      <ExportDialog />
-      <ProjectsDialog />
-      <ShortcutsDialog />
-      <FeedbackDialog />
-      <AccountDialog />
-      <MixerDialog />
-      <VersionsDialog />
-      <ThemeStudioDialog />
-      <StorageDialog />
+      <Suspense fallback={null}>
+        {dialog === 'export' && <ExportDialog />}
+        {dialog === 'projects' && <ProjectsDialog />}
+        {dialog === 'shortcuts' && <ShortcutsDialog />}
+        {dialog === 'feedback' && <FeedbackDialog />}
+        {dialog === 'account' && <AccountDialog />}
+        {dialog === 'mixer' && <MixerDialog />}
+        {dialog === 'versions' && <VersionsDialog />}
+        {dialog === 'theme' && <ThemeStudioDialog />}
+        {dialog === 'storage' && <StorageDialog />}
+      </Suspense>
       <OnboardingOverlay />
       </div>
     </SessionProvider>

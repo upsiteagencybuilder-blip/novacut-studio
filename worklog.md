@@ -2174,3 +2174,27 @@ Stage Summary:
 - Day 62 shipped: RAM is now a managed, disclosed resource — media blobs evict under a configurable budget with automatic transparent rehydration, and preview resolution degrades honestly (visible badge + toast) under sustained draw pressure while exports stay full-res.
 - Files: lib/editor/memory-manager.ts (new), types.ts, engine.ts, store.ts, hooks/useEngineBridge.ts, dialogs/StorageDialog.tsx, preview/PreviewPane.tsx, timeline/TimelineToolbar.tsx, preview/PropertiesPanel.tsx, panels/EffectsPanel.tsx, lib/editor/demo.ts.
 - Next: Day 63 — startup budget + code splitting audit.
+
+---
+## Day 63 — Startup budget + code splitting audit
+**Date:** 2025-12-XX · **Category:** G (PWA, Performance & Reliability)
+
+### Task ID: Day-63
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category G Day 63 — measure and budget startup, split heavy dialogs out of the initial bundle.
+
+**Work Log:**
+- STARTUP BUDGET PROBE: store.init() marks `performance.mark('novacut:ready')` at full hydration (project + media restored), measures navigation→ready ms, exposes `window.__ncStartupMs` and persists it (`lastStartupMs` KV). StoragePanel discloses it as "Last startup (measured, this device) · hint: navigation → editor hydrated".
+- CODE SPLITTING: all NINE dialogs (ExportDialog, ProjectsDialog, ShortcutsDialog, FeedbackDialog, AccountDialog, MixerDialog, VersionsDialog, ThemeStudioDialog, StorageDialog — 5,123 lines combined) are now `React.lazy` chunks conditionally rendered inside one `<Suspense>` — a dialog's code is fetched only the FIRST time it opens; closed dialogs contribute zero to the startup graph. EditorShell subscribes `activeDialog` to drive the conditional mount.
+- **HONEST FIX (pre-existing bug found):** EditorShell.tsx line 498 shipped a broken declaration `const obileSheet, setMobileSheet] = ...` (missing `[m`) — present since the Day-60 commit; the running dev server had been serving an older compilation from its cache, masking it. Fixed to `const [mobileSheet, setMobileSheet]`; the file now truly compiles (lint + tsc + fresh reload clean).
+
+**E2E receipts (desktop 1280×800 + mobile 390×844):**
+- Startup probe: `__ncStartupMs = 949` desktop / `893` mobile (dev-mode, headless — production build will differ, the number is per-device and disclosed in the Storage panel).
+- Lazy chunks: opening the Mixer fetched **+4 new `_next` chunks** (36→40) with the dialog rendering correctly; Export dialog likewise **+4 chunks**, dialog open, close clean; store intact after (6 clips).
+- Fresh reload mobile: ready=true, media restored, no console errors.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 63 shipped: startup is now measured and disclosed (not guessed), and the dialog layer no longer weighs down the first load — 5,123 lines of dialog code moved to on-demand chunks. Also fixed a latent syntax breakage that had been hidden by the dev-server compile cache since Day 60.
+- Files: EditorShell.tsx, store.ts, dialogs/StorageDialog.tsx.
+- Next: Day 64 — error boundaries + local telemetry + crash-recovery dialog.
