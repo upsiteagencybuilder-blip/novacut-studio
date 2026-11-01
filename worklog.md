@@ -2466,3 +2466,31 @@ Stage Summary:
 - Day 73 shipped: keyboard users can see where they are and reach the editor in one Tab; screen readers get real landmarks; low-contrast text got honest promotion.
 - Files: globals.css, EditorShell.tsx, timeline/Timeline.tsx, preview/PreviewPane.tsx + 9 contrast-only files.
 - Next: Day 74 — Docs/README polish + Category H audit.
+
+---
+## Day 74 — Docs/README polish + CATEGORY H AUDIT
+**Date:** 2025-12-XX · **Category:** H (Templates, Onboarding & Growth) — FINAL DAY
+
+### Task ID: Day-74
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category H Day 74 — a real README that matches the product + full Category H regression.
+
+**Work Log:**
+- NEW README.md (the repo previously only had README-DEPLOY.md): honest feature matrix across editing core / visuals & audio / AI / export / platform (PWA) / productivity / optional cloud — each line naming the shipped behavior (virtualized timeline, 150-step history, memory budget, crash recovery, template scaffolds, ⌘K palette, i18n scaffold…). The **honesty rule** is stated in the README itself: 289 live / 291 planned, measured-live numbers, no fake entries. Stack, dev commands and a source map included.
+
+**FRESH CATEGORY H AUDIT (all re-run through the real UI this session):**
+- Day 67 templates: Projects → Templates deep link lands on the tab with **8 cards**.
+- Day 68 apply: audit template → 3 clips @ 1920×1080 → **one-step undo restores 6 clips @ 1280×720**.
+- Day 65/67 history panel: opens with labeled entries (1 after the audit apply/undo cycle).
+- Day 69 tips: two measured flags present (`template-placeholders`, `history-depth`) — proving the tips fired on real conditions during this session's work.
+- Day 70 i18n: `novacut.locale=bn` → `<html lang="bn">`; Bengali onboarding door is flag-gated (onboarded users don't see it — correct).
+- Day 71 shortcuts: 12 customizable rows + Reset-all in the dialog.
+- Day 72 palette: Ctrl+K → **27 commands** under the bn locale too.
+- Day 73 a11y: skip link + `#nc-main` landmark present.
+- Startup probe: 1008ms this session (dev, headless).
+- eslint + tsc clean.
+
+**Stage Summary:**
+- **CATEGORY H COMPLETE (Days 67–74):** templates, onboarding v2, i18n scaffold, shortcut editor, ⌘K palette, accessibility, and documentation that tells the truth. Catalog stands at **289 live / 291 planned**.
+- Files: README.md (new).
+- Next: Day 75–78 — Category I batch 1: Color + filters honesty flips (~42+29 planned entries).
