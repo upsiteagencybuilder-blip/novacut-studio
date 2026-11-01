@@ -2038,3 +2038,24 @@ Stage Summary:
 - Day 56 shipped: a real export queue — snapshot-based jobs, sequential background draining that outlives the dialog, per-job cancel/remove/download, auto-download, engine double-booking guards, and per-job canvas/branding isolation with guaranteed restore.
 - Files: lib/editor/export-queue.ts (new), dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
 - Next: Day 57 — Web Share API + clipboard share helpers.
+
+---
+Task ID: Day-57
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category F Day 57 — Web Share API + clipboard share helpers.
+
+Work Log:
+- NEW lib/editor/share.ts — honest capability model: canShareFiles/canShareThisMime probe navigator.canShare with a REAL File of the target mime (per-type, not a blanket check); shareBlobAsFile fetches a result blob URL → File → navigator.share({files}); shareText; copyText (async clipboard + legacy execCommand fallback); copyImageBlob (ClipboardItem image/png, the only universally supported clipboard image type); shareSummaryText; toastShareOutcome maps shared/cancelled/unsupported/error to one truthful toast each.
+- ExportDialog wiring: DONE phase gains "Share video" (disabled with an honest explainer when the device's share sheet can't take video files — typical on desktop — and hands the REAL file to the OS sheet where it can, i.e. phones) + "Copy summary" (name · size · canvas · fps — with a disclosed reason: video blobs can't live on the clipboard); audio + frame result rows gain Share icon buttons (per-mime probed, disabled truthfully); sidecar card gains "Copy" — the .srt/.vtt/.ass caption text is REAL clipboard text, genuinely useful.
+- FOUND+FIXED own bug pre-E2E: an unescaped apostrophe inside a single-quoted toast string broke parsing transiently (caught by HMR; lint/tsc clean after fix — the stale console entry is from the pre-fix compile).
+- Catalog: +2 delivery-web-share-api, delivery-clipboard-share (live, open-export) with capability-probe semantics in the descriptions.
+- E2E receipts (desktop 1280×800, real 4.1 MB export first):
+  • Capability honesty: headless has NO navigator.share → "Share video" disabled + note visible (clipboard available) — exactly the documented desktop behavior; phones take the file path (code path shared, probed at runtime).
+  • Clipboard CONTENT proof via writeText spy: "Copy summary" put exactly "share-e2e.webm · 4.0 MB · 1280×720 · 30fps — made locally with NovaCut Studio" onto the clipboard call.
+  • Sidecar CONTENT proof: injected an E2E caption clip (full DEFAULT_TEXT_STYLE shape) → sidecar Copy enabled → spy captured the real SRT ("1\n00:00:01,000 --> 00:00:03,000\nE2E SHARE CAP"); injected clip removed afterwards (6 clips restored).
+  • Mobile 390×844 renders the dialog with the new controls; eslint + tsc clean; dev.log compiles green, app 200.
+
+Stage Summary:
+- Day 57 shipped: platform-honest sharing — real OS-sheet file handoff where supported, truthful disabled states where not, real text/image clipboard paths (sidecars!), and a disclosed summary fallback for blob types the clipboard can't hold.
+- Files: lib/editor/share.ts (new), dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
+- Next: Day 58 — Delivery SOON batch flip (36 backlog) + Category F audit.

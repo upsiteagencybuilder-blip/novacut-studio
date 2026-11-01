@@ -16,6 +16,7 @@ import {
   Captions,
   CheckCircle2,
   ChevronDown,
+  Copy,
   Download,
   FileImage,
   Gauge,
@@ -27,6 +28,7 @@ import {
   Plus,
   Save,
   Settings2,
+  Share2,
   Stamp,
   Star,
   TriangleAlert,
@@ -81,6 +83,7 @@ import {
   type QueueJobStatus,
 } from '@/lib/editor/export-queue'
 import { cn } from '@/lib/utils'
+import { canShareFiles, canShareThisMime, copyText, shareBlobAsFile, shareSummaryText, toastShareOutcome } from '@/lib/editor/share'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -184,6 +187,9 @@ export function ExportDialog() {
   const qualityId = EXPORT_QUALITY_PRESETS.find((q) => q.bitrate === bitrate)?.id ?? 'custom'
   const selectedMime =
     supported.find((c) => c.format === format)?.mime ?? (format === 'mp4' ? 'video/mp4' : 'video/webm')
+  // Day 57: Web Share API capability (real per-mime probes)
+  const shareFilesSupported = useMemo(() => canShareFiles(), [])
+  const shareVideoMimeOk = useMemo(() => canShareThisMime(selectedMime), [selectedMime])
   const estimatedBytes = (bitrate * (duration + introDur + outroDur)) / 8
   const fpsOptions = useMemo(
     () => Array.from(new Set([24, 30, 60, fps])).sort((a, b) => a - b),
@@ -538,6 +544,37 @@ export function ExportDialog() {
       if (job.resultUrl) URL.revokeObjectURL(job.resultUrl)
       useExportQueue.getState().remove(job.id)
     }
+  }
+
+  // ---------------- Day 57: Web Share + clipboard helpers ----------------
+
+  const shareVideoName = `${safeFileName(fileName)}.${extensionForMime(lastMime)}`
+
+  const handleShareVideo = async () => {
+    if (!exportState.url) return
+    const outcome = await shareBlobAsFile(exportState.url, shareVideoName, lastMime, {
+      title: fileName || 'NovaCut export',
+      text: 'Made locally with NovaCut Studio — no watermark, no upload.',
+    })
+    toastShareOutcome(outcome, 'Video')
+  }
+
+  const handleCopyVideoSummary = async () => {
+    const ok = await copyText(shareSummaryText(shareVideoName, exportState.sizeBytes ?? 0, `${project.canvasWidth}×${project.canvasHeight} · ${fps}fps`))
+    if (ok) toast.success("Share summary copied — video files can't live on the clipboard, so this copies the details")
+    else toast.error('Clipboard write failed')
+  }
+
+  const handleShareResult = async (url: string, download: string, mime: string, what: string) => {
+    const outcome = await shareBlobAsFile(url, download, mime, { title: download })
+    toastShareOutcome(outcome, what)
+  }
+
+  const handleCopySidecar = async () => {
+    if (!sidecarContent) return
+    const ok = await copyText(sidecarContent)
+    if (ok) toast.success(`.${sidecarFormat} sidecar copied to clipboard`)
+    else toast.error('Clipboard write failed')
   }
 
   const handleClose = (o: boolean) => {
@@ -1050,14 +1087,26 @@ export function ExportDialog() {
               {frameResult && !frameBusy && (
                 <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-violet-500/10 px-2.5 py-1.5">
                   <span className="truncate font-mono text-[10px] text-violet-300">{frameResult.label}</span>
-                  <a
-                    href={frameResult.url}
-                    download={frameResult.download}
-                    className="flex shrink-0 items-center gap-1 text-[10px] font-semibold text-violet-300 underline-offset-2 hover:underline"
-                  >
-                    <Download className="h-3 w-3" />
-                    Download again
-                  </a>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Share ${frameResult.download}`}
+                      title="Share via the OS sheet (when the device accepts this file type)"
+                      disabled={!shareFilesSupported}
+                      onClick={() => void handleShareResult(frameResult.url, frameResult.download, frameResult.download.endsWith('.gif') ? 'image/gif' : 'application/zip', frameResult.download.endsWith('.gif') ? 'GIF' : 'PNG sequence')}
+                      className="rounded p-1 text-violet-300 transition-colors hover:text-violet-200 disabled:opacity-30"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                    </button>
+                    <a
+                      href={frameResult.url}
+                      download={frameResult.download}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-violet-300 underline-offset-2 hover:underline"
+                    >
+                      <Download className="h-3 w-3" />
+                      Download again
+                    </a>
+                  </span>
                 </div>
               )}
             </div>
@@ -1151,14 +1200,26 @@ export function ExportDialog() {
                   <span className="font-mono text-[10px] text-emerald-300">
                     {safeFileName(fileName)}.{audioResult.ext} · {formatBytes(audioResult.size)}
                   </span>
-                  <a
-                    href={audioResult.url}
-                    download={`${safeFileName(fileName)}.${audioResult.ext}`}
-                    className="flex items-center gap-1 text-[10px] font-semibold text-emerald-300 underline-offset-2 hover:underline"
-                  >
-                    <Download className="h-3 w-3" />
-                    Download again
-                  </a>
+                  <span className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Share audio ${safeFileName(fileName)}`}
+                      title="Share via the OS sheet (when the device accepts audio files)"
+                      disabled={!shareFilesSupported}
+                      onClick={() => void handleShareResult(audioResult.url, `${safeFileName(fileName)}.${audioResult.ext}`, audioResult.ext === 'wav' ? 'audio/wav' : 'audio/mpeg', 'Audio')}
+                      className="rounded p-1 text-emerald-300 transition-colors hover:text-emerald-200 disabled:opacity-30"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                    </button>
+                    <a
+                      href={audioResult.url}
+                      download={`${safeFileName(fileName)}.${audioResult.ext}`}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-emerald-300 underline-offset-2 hover:underline"
+                    >
+                      <Download className="h-3 w-3" />
+                      Download again
+                    </a>
+                  </span>
                 </div>
               )}
             </div>
@@ -1177,14 +1238,27 @@ export function ExportDialog() {
                     </p>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  disabled={!sidecarContent}
-                  onClick={handleSidecarDownload}
-                  className="h-8 shrink-0 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 text-xs font-semibold text-sky-300 hover:bg-sky-500/20"
-                >
-                  Download .{sidecarFormat}
-                </Button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label={`Copy ${sidecarFormat} to clipboard`}
+                    title="Copy the caption text to the clipboard"
+                    disabled={!sidecarContent}
+                    onClick={() => void handleCopySidecar()}
+                    className="flex h-8 items-center gap-1 rounded-lg border border-sky-400/40 bg-sky-500/10 px-2.5 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-500/20 disabled:opacity-30"
+                  >
+                    <Copy className="h-3 w-3" />
+                    Copy
+                  </button>
+                  <Button
+                    size="sm"
+                    disabled={!sidecarContent}
+                    onClick={handleSidecarDownload}
+                    className="h-8 shrink-0 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 text-xs font-semibold text-sky-300 hover:bg-sky-500/20"
+                  >
+                    Download .{sidecarFormat}
+                  </Button>
+                </div>
               </div>
 
               {/* Day 54 — burn toggle + sidecar format */}
@@ -1559,6 +1633,33 @@ export function ExportDialog() {
                 Download video
               </a>
             </Button>
+
+            {/* Day 57 — Web Share + clipboard */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                disabled={!exportState.url || !shareVideoMimeOk}
+                title={shareVideoMimeOk ? 'Open the OS share sheet with the video file' : "This device's share sheet can't take video files"}
+                onClick={() => void handleShareVideo()}
+                className="h-9 rounded-xl border-(--nc-line) text-xs hover:bg-(--nc-panel-strong)"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Share video
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void handleCopyVideoSummary()}
+                className="h-9 rounded-xl border-(--nc-line) text-xs hover:bg-(--nc-panel-strong)"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                Copy summary
+              </Button>
+            </div>
+            {!shareVideoMimeOk && (
+              <p className="text-[10px] text-muted-foreground">
+                The OS share sheet on this device can't take video files (typical on desktop) — download first, then attach anywhere. On phones the Share button hands the real file to the system sheet.
+              </p>
+            )}
 
             <Button
               variant="ghost"
