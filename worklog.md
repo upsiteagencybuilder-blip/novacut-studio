@@ -2123,3 +2123,26 @@ Stage Summary:
 - Day 60 shipped: a real storage manager (live quota + honest per-store counts + guarded cleanup paths) and genuinely hardened autosave — transient export overlays are provably excluded from persistence, quota failures speak up once, and the flush-on-restore keeps IndexedDB byte-true.
 - Files: lib/editor/storage-manager.ts (new), dialogs/StorageDialog.tsx (new), store.ts, dialogs/ExportDialog.tsx, lib/editor/export-queue.ts, dialogs/ProjectsDialog.tsx, EditorShell.tsx, types.ts, lib/tools/sections/panels.ts, docs/ROADMAP-90.md.
 - Next: Day 61 — virtualized timeline (smooth at 100+ clips).
+
+---
+## Day 61 — Virtualized timeline (smooth at 100+ clips)
+**Date:** 2025-12-XX · **Category:** G (PWA, Performance & Reliability)
+
+### Task ID: Day-61
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category G Day 61 — horizontal timeline virtualization so 100+ clip projects scroll smoothly.
+
+**Work Log:**
+- Timeline.tsx: NEW rAF-throttled scrollLeft tracking (`handleScroll` + cleanup) feeding a memoized `ViewWindow {t0,t1}` = viewport seconds + 360px overscan both sides. `TrackLane` now renders ONLY clips intersecting the window (`clipInWindow` O(n) filter — O(n) beats O(n) DOM mounts); `TransitionChips` boundary-x filtered to the window; `Ruler` ticks rewritten to start at `floor(t0/step)` (was: ticks for the FULL lane width = thousands of nodes on long projects) with a 1400-node hard cap; beat diamonds + marker pins window-filtered (was `t*zoom <= width` = everything).
+- Content width / scrollbar math untouched — pure DOM-count reduction, zero behavior change: marquee, drag, trim, snapping, compound sessions all operate on visible DOM as before (drag targets are always under the pointer = always in-window).
+
+**E2E receipts (desktop 1280×800 + mobile 390×844):**
+- Desktop: demo 6 clips → inject 126 clones (total 132, starts 10s→312s) → `document.querySelectorAll('[data-clip-id]').length` = **12** (was: 132). scrollLeft=20000 → window slides, first rendered clip becomes `stress-112` (13 nodes). rAF scroll animation (40 frames × 480px): avg 72.1ms vs **idle baseline 61.9ms in this headless software-renderer** → virtualization adds only ~+10ms/frame; the floor is the environment, not the timeline.
+- Recovery: `undo()` → clips back to exactly 6, DOM 6, scroll reset.
+- Mobile 390×844: same injection (132 total) → **DOM 7**, undo → 6, console-error probe **0**.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 61 shipped: the timeline is now truly virtualized horizontally — clip DOM is bounded by the viewport (±360px) no matter how long the project grows; ruler ticks share the same window.
+- Files: src/components/editor/timeline/Timeline.tsx.
+- Next: Day 62 — memory budget (media eviction, preview resolution scaling).

@@ -33,6 +33,23 @@ const RULER_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60]
 /** stable empty reference so Ruler's memo doesn't churn when beats are hidden */
 const EMPTY_BEATS: number[] = []
 
+/**
+ * Day 61 — horizontal virtualization window. Only clips/ticks intersecting
+ * this time range (plus overscan) exist in the DOM, so scrolling stays smooth
+ * at 100+ clips.
+ */
+interface ViewWindow {
+  t0: number
+  t1: number
+}
+
+/** overscan padding (px) on both sides of the viewport before a clip unmounts */
+const VIRTUAL_OVERSCAN_PX = 360
+
+function clipInWindow(c: Clip, w: ViewWindow): boolean {
+  return c.start < w.t1 && c.start + c.duration > w.t0
+}
+
 const HEADER_BTN =
   'flex size-5 shrink-0 items-center justify-center rounded text-foreground/40 transition-colors hover:bg-(--nc-panel-strong) hover:text-foreground/90 disabled:pointer-events-none disabled:opacity-40'
 
@@ -72,9 +89,28 @@ export function Timeline() {
   const [hoverTrackId, setHoverTrackId] = useState<string | null>(null)
   const [snapLineX, setSnapLineX] = useState<number | null>(null)
 
+  /* Day 61 — rAF-throttled scrollLeft tracking feeds the virtualization window */
+  const [scrollX, setScrollX] = useState(0)
+  const scrollRaf = useRef(0)
+  const handleScroll = useCallback(() => {
+    if (scrollRaf.current) return
+    scrollRaf.current = requestAnimationFrame(() => {
+      scrollRaf.current = 0
+      setScrollX(scrollRef.current?.scrollLeft ?? 0)
+    })
+  }, [])
+  useEffect(() => () => cancelAnimationFrame(scrollRaf.current), [])
+
   const duration = projectDuration(project)
   const laneWidth = Math.max(duration * zoom + 400, viewportW - HEADER_WIDTH)
   const contentWidth = HEADER_WIDTH + laneWidth
+
+  /* visible time window (+overscan) that bounds clip/tick DOM — the core of
+     the virtualized timeline: 100+ clips render only what's on screen */
+  const viewWindow = useMemo<ViewWindow>(() => {
+    const pad = VIRTUAL_OVERSCAN_PX / Math.max(zoom, 1)
+    return { t0: Math.max(0, scrollX / zoom - pad), t1: (scrollX + viewportW) / zoom + pad }
+  }, [scrollX, viewportW, zoom])
 
   /* measure the scroll viewport so lanes always fill it */
   useEffect(() => {
@@ -250,6 +286,7 @@ export function Timeline() {
           <div
             ref={scrollRef}
             id="nc-timeline-scroll"
+            onScroll={handleScroll}
             className={cn('absolute inset-0 overflow-auto', dragInfo && 'cursor-grabbing select-none', toolMode === 'razor' && 'cursor-crosshair')}
           >
             <div className="relative" style={{ width: contentWidth }}>
@@ -264,6 +301,7 @@ export function Timeline() {
                 <Ruler
                   zoom={zoom}
                   width={laneWidth}
+                  viewWindow={viewWindow}
                   onScrubDown={beginScrub}
                   beatMarkers={showBeatMarkers ? beatMarkers : EMPTY_BEATS}
                   markers={markers ?? []}
@@ -281,6 +319,7 @@ export function Timeline() {
                     <TrackLane
                       track={track}
                       clips={clips}
+                      viewWindow={viewWindow}
                       zoom={zoom}
                       fps={project.fps}
                       selectedIds={selectedIds}
@@ -540,6 +579,8 @@ function TrackHeader({ track, canRemove }: { track: Track; canRemove: boolean })
 interface TrackLaneProps {
   track: Track
   clips: Clip[]
+  /** Day 61 — virtualization window; clips outside it never reach the DOM */
+  viewWindow: ViewWindow
   zoom: number
   fps: number
   selectedIds: string[]
@@ -560,6 +601,7 @@ interface TrackLaneProps {
 function TrackLane({
   track,
   clips,
+  viewWindow,
   zoom,
   fps,
   selectedIds,
@@ -575,6 +617,12 @@ function TrackLane({
   onMarqueeMove,
   onMarqueeEnd,
 }: TrackLaneProps) {
+  /* Day 61 — virtualized slice: O(n) filter beats mounting every clip */
+  const visibleClips = useMemo(
+    () => clips.filter((c) => clipInWindow(c, viewWindow)),
+    [clips, viewWindow],
+  )
+
   return (
     <div
       ref={(el) => {
@@ -590,7 +638,8 @@ function TrackLane({
         isDropTarget && 'z-10 bg-fuchsia-400/5 ring-1 ring-inset ring-fuchsia-400/40',
       )}
     >
-      {clips.map((clip) => (
+      {/* Day 61 — only clips intersecting the scroll window mount (virtualized) */}
+      {visibleClips.map((clip) => (
         <ClipBlock
           key={clip.id}
           clip={clip}
@@ -607,7 +656,7 @@ function TrackLane({
       ))}
 
       {/* transition chips at armed clip boundaries (true crossfades / wipe masks) */}
-      <TransitionChips clips={clips} zoom={zoom} />
+      <TransitionChips clips={clips} zoom={zoom} viewWindow={viewWindow} />
 
       {/* locked tracks: subtle stripes under the (non-interactive) clips */}
       {track.locked && clips.length > 0 && (
@@ -634,7 +683,15 @@ function TrackLane({
  * and open the effects panel on the Transitions category; ✕ removes the
  * transition (clears fades/wipe/iris keys, one undo step).
  */
-function TransitionChips({ clips, zoom }: { clips: Clip[]; zoom: number }) {
+function TransitionChips({
+  clips,
+  zoom,
+  viewWindow,
+}: {
+  clips: Clip[]
+  zoom: number
+  viewWindow: ViewWindow
+}) {
   const pairs = useMemo(() => transitionPairsForTrack(clips), [clips])
   if (!pairs.length) return null
   return (
@@ -643,6 +700,8 @@ function TransitionChips({ clips, zoom }: { clips: Clip[]; zoom: number }) {
         const out = clips.find((c) => c.id === p.outgoingId)
         if (!out) return null
         const x = (out.start + out.duration) * zoom
+        // Day 61 — virtualized: chips outside the scroll window never mount
+        if (x < viewWindow.t0 * zoom - 24 || x > viewWindow.t1 * zoom + 24) return null
         return (
           <div
             key={`${p.outgoingId}-${p.incomingId}`}
@@ -692,12 +751,14 @@ function TransitionChips({ clips, zoom }: { clips: Clip[]; zoom: number }) {
 function Ruler({
   zoom,
   width,
+  viewWindow,
   onScrubDown,
   beatMarkers,
   markers,
 }: {
   zoom: number
   width: number
+  viewWindow: ViewWindow
   onScrubDown: (e: ReactPointerEvent<HTMLDivElement>) => void
   beatMarkers: number[]
   markers: TimelineMarker[]
@@ -707,29 +768,34 @@ function Ruler({
   const [labelDraft, setLabelDraft] = useState('')
   const dragRef = useRef<{ id: string; startX: number; origT: number; moved: boolean } | null>(null)
 
+  /* Day 61 — ticks are virtualized too: only the scroll window renders,
+     so a long project never mounts thousands of ruler ticks at once */
   const ticks = useMemo(() => {
     const out: { x: number; major: boolean; label: string }[] = []
     const majorGap = step * zoom
-    const count = Math.ceil(width / majorGap)
-    for (let i = 0; i <= count; i++) {
+    const first = Math.max(0, Math.floor(viewWindow.t0 / step))
+    const last = Math.ceil(viewWindow.t1 / step)
+    // hard cap — keeps DOM bounded even at pathological zoom levels
+    if ((last - first) * 5 > 1400) return out
+    for (let i = first; i <= last; i++) {
       const x = i * majorGap
       out.push({ x, major: true, label: formatShortTime(i * step) })
       for (let j = 1; j < 5; j++) {
         const mx = x + (majorGap / 5) * j
-        if (mx <= width) out.push({ x: mx, major: false, label: '' })
+        out.push({ x: mx, major: false, label: '' })
       }
     }
     return out
-  }, [step, zoom, width])
+  }, [step, zoom, viewWindow])
 
   const visibleBeats = useMemo(
-    () => beatMarkers.filter((t) => t * zoom <= width + 8),
-    [beatMarkers, zoom, width],
+    () => beatMarkers.filter((t) => t >= viewWindow.t0 && t <= viewWindow.t1),
+    [beatMarkers, viewWindow],
   )
 
   const visibleMarkers = useMemo(
-    () => markers.filter((m) => m.t * zoom <= width + 8),
-    [markers, zoom, width],
+    () => markers.filter((m) => m.t >= viewWindow.t0 && m.t <= viewWindow.t1),
+    [markers, viewWindow],
   )
 
   const editing = editingId ? markers.find((m) => m.id === editingId) : undefined
