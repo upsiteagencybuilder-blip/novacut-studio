@@ -5,6 +5,7 @@
  * The timeline plays through once while recording, then the blob is ready for download.
  */
 import { getEngine } from './engine'
+import type { WatermarkPosition } from './branding'
 import { encodeMp3, encodeWav, measureIntegratedLufs, renderProjectAudio } from './audio-mix'
 import type { MediaAssetRuntime, Project } from './types'
 
@@ -19,6 +20,8 @@ export interface ExportOptions {
   burnIn?: 'timecode'
   /** Day 54 — export WITHOUT caption clips painted into the picture (subtitles ship as sidecar instead) */
   skipCaptions?: boolean
+  /** Day 55 — branding watermark painted on every frame (export-only overlay) */
+  watermark?: { url: string; position: WatermarkPosition; scale: number; opacity: number } | null
   onProgress?: (progress: number) => void
 }
 
@@ -80,6 +83,7 @@ export async function startExport(opts: ExportOptions): Promise<ExportResult> {
     burnIn: opts.burnIn,
     skipCaptions: opts.skipCaptions,
     includeAudio: audioState === 'running',
+    watermark: opts.watermark ?? null,
   })
   if (!stream) throw new Error('Canvas is not ready for export')
   if (!stream.getVideoTracks().length) throw new Error('No video track available')

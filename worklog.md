@@ -1994,3 +1994,25 @@ Stage Summary:
 - Day 54 shipped: subtitle burn is now a choice (burn in or sidecar-out) across three real sidecar formats — and a silent 0-byte export failure mode was root-caused and replaced with a graceful, disclosed video-only path.
 - Files: engine.ts, exporter.ts, utils.ts, ExportDialog.tsx, delivery.ts.
 - Next: Day 55 — branding kit (logo watermark, intro/outro auto-attach).
+
+---
+Task ID: Day-55
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category F Day 55 — Branding kit (logo watermark + intro/outro auto-attach).
+
+Work Log:
+- NEW lib/editor/branding.ts — BrandingKit settings (watermark asset/corner tl·tr·bl·br/size 5–40%/opacity 10–100% + intro & outro asset ids) persisted in localStorage `novacut.branding.v1` with load/save/sanitize (deleted assets drop out on dialog open); buildBrandedTimeline builds the TRANSIENT export project — structuredClone, every clip+marker shifted by the intro length, intro clip at 0, outro at the new end (createClipFromMedia, image pieces fixed 2.5s, videos use source length); ensureImageLoaded preloads the watermark before recording.
+- Engine: export-only watermark overlay — beginExport gains opts.watermark {url, position, scale, opacity}; image decodes async then paints after renderVisual (corner geometry: 4% margin, height = scale×H, aspect kept, clamped 0.05–0.4), globalAlpha applied; cleared in endExport. NEVER drawn in the live preview (same contract as timecode burn-in). exporter.ts passes it through; ExportOptions typed.
+- ExportDialog: rose "Branding kit" card — watermark switch + asset select (images and videos; videos donate their POSTER frame as the watermark, disclosed) + corner select + size/opacity sliders; intro/outro switches + asset selects with per-piece duration labels; summary Estimated length now shows base + introDur + outroDur with a "with branding" tag when armed; honest note "attached for THIS export only — project restored untouched afterwards". handleStart: preload watermark (hard-error toast on failure), swap branded project in via setState, restore the original in `finally` + setCurrentTime(0) — no history entry, no residue.
+- FOUND+FIXED own-E2E bug: brandableAssets was a useMemo with [] deps — ExportDialog mounts at app load BEFORE media exists, so the asset dropdowns stayed empty forever; now subscribes via useEditor((s) => s.media). Card also got overflow-hidden (7px mobile bleed).
+- Catalog: +2 delivery-logo-watermark, delivery-intro-outro-attach (live, open-export).
+- E2E receipts (desktop 1280×800, demo + injected 128×128 magenta/cyan PNGs through the real upload input):
+  • Watermark PAINT-PROOF: real export decoded and probed — frame @t≈6s bottom-right quadrant has 2,497 magenta px, top-left 0 (corner-correct); watermark settings kit persisted across full reload.
+  • Intro/Outro SHIFT-PROOF: cyan intro fills 98.9% of frames in the ~0.6–2.2s window (first ~0.5s of any realtime capture is encoder warm-up — pre-existing artifact, not branding-specific), demo content then starts at ~2.6s instead of ~0.2s (+2.5s shift), outro cyan 98.9% at the tail. Estimated length line showed "00:12.24 with branding" before recording.
+  • RESTORE-PROOF: during recording the store carried 8 clips (6 + intro + outro); the moment it finished — 6 clips · 7.24s visual base, timeline layout byte-identical to pre-export.
+  • Mobile 390×844: full card renders (switches, selects, sliders, note); kit state re-applied from localStorage after reload; fresh-session zero console errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 55 shipped: a real branding kit — export-only logo watermark (corner/size/opacity, poster fallback for videos) and one-switch intro/outro auto-attach that transiently extends the timeline for a single export and provably restores the project afterwards.
+- Files: lib/editor/branding.ts (new), engine.ts, exporter.ts, dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
+- Next: Day 56 — export queue (multiple jobs, background, cancel).

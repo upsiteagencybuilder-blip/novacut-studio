@@ -204,6 +204,9 @@ class PreviewEngine {
   private exportBurnIn: 'timecode' | null = null
   /** Day 54 — while armed (export only), caption clips (isCaption) are NOT drawn into the picture */
   private exportSkipCaptions = false
+  /** Day 55 — branding watermark, armed only between beginExport/endExport (never drawn in the live preview) */
+  private exportWatermark: { position: 'tl' | 'tr' | 'bl' | 'br'; scale: number; opacity: number } | null = null
+  private watermarkImg: HTMLImageElement | null = null
   /** Day 54 — when false, beginExport hands out a VIDEO-ONLY stream (audio engine unavailable) */
   private exportIncludeAudio = true
 
@@ -398,12 +401,24 @@ class PreviewEngine {
   /* -------------------------------------------------- audio graph (export) */
 
   /** Route all element audio through WebAudio and return a capture stream for export */
-  beginExport(fps: number, opts?: { burnIn?: 'timecode'; skipCaptions?: boolean; includeAudio?: boolean }): MediaStream | null {
+  beginExport(fps: number, opts?: { burnIn?: 'timecode'; skipCaptions?: boolean; includeAudio?: boolean; watermark?: { url: string; position: 'tl' | 'tr' | 'bl' | 'br'; scale: number; opacity: number } | null }): MediaStream | null {
     if (!this.canvas) return null
     // Export always records at full project resolution — never the adaptive preview scale.
     this.exportScaleOverride = 1
     this.exportBurnIn = opts?.burnIn ?? null
     this.exportSkipCaptions = opts?.skipCaptions ?? false
+    // Day 55 — branding watermark (paints once the image decodes; the dialog
+    // preloads it beforehand so frame 1 already carries it)
+    this.exportWatermark = null
+    this.watermarkImg = null
+    if (opts?.watermark?.url) {
+      this.exportWatermark = { position: opts.watermark.position, scale: opts.watermark.scale, opacity: opts.watermark.opacity }
+      const img = new Image()
+      img.onload = () => {
+        this.watermarkImg = img
+      }
+      img.src = opts.watermark.url
+    }
     this.exportIncludeAudio = opts?.includeAudio ?? true
     const proj = this.snapshotFn?.().project
     if (proj) {
@@ -451,6 +466,8 @@ class PreviewEngine {
     // keep audioCtx alive (elements are permanently routed); nothing to tear down
     this.exportBurnIn = null
     this.exportSkipCaptions = false
+    this.exportWatermark = null
+    this.watermarkImg = null
     if (this.exportScaleOverride !== null) {
       this.exportScaleOverride = null
       this.invalidate()
@@ -1468,6 +1485,26 @@ class PreviewEngine {
           this.syncAudio(clip, t - clip.start, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, trackVolume * duck, bridged ? { skipFadeIn: false } : bridgedSuccessor ? { skipFadeOut: true } : undefined)
         }
       }
+    }
+
+    // Day 55 — branding watermark (export only — never drawn in the live preview)
+    if (this.exportWatermark && this.watermarkImg) {
+      const wm = this.exportWatermark
+      const img = this.watermarkImg
+      const wh = Math.max(16, H * clamp(wm.scale, 0.05, 0.4))
+      const ww = img.naturalWidth > 0 && img.naturalHeight > 0 ? (img.naturalWidth / img.naturalHeight) * wh : wh
+      const margin = Math.round(Math.min(W, H) * 0.04)
+      const right = wm.position === 'tr' || wm.position === 'br'
+      const bottom = wm.position === 'bl' || wm.position === 'br'
+      const wx = right ? W - margin - ww : margin
+      const wy = bottom ? H - margin - wh : margin
+      ctx.save()
+      ctx.setTransform(scale, 0, 0, scale, 0, 0)
+      ctx.globalAlpha = clamp(wm.opacity, 0.1, 1)
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.filter = 'none'
+      ctx.drawImage(img, wx, wy, ww, wh)
+      ctx.restore()
     }
 
     // timecode burn-in (export only — never drawn in the live preview)

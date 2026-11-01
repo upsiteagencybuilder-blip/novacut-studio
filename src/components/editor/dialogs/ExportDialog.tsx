@@ -24,6 +24,7 @@ import {
   PauseCircle,
   Save,
   Settings2,
+  Stamp,
   Star,
   TriangleAlert,
   Trash2,
@@ -55,6 +56,18 @@ import {
 } from '@/lib/editor/export-bundles'
 import { buildSrtFromCaptions, buildVttFromCaptions, buildAssFromCaptions, formatBytes, formatTimecode, projectDuration } from '@/lib/editor/utils'
 import { exportGif, exportPngSequence } from '@/lib/editor/frame-export'
+import {
+  brandAssetDuration,
+  buildBrandedTimeline,
+  DEFAULT_BRANDING,
+  ensureImageLoaded,
+  loadBrandingKit,
+  saveBrandingKit,
+  sanitizeBranding,
+  watermarkUrlForAsset,
+  type BrandingKit,
+  type WatermarkPosition,
+} from '@/lib/editor/branding'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -122,9 +135,26 @@ export function ExportDialog() {
   const [burnCaptions, setBurnCaptions] = useState(true)
   const [sidecarFormat, setSidecarFormat] = useState<'srt' | 'vtt' | 'ass'>('srt')
 
+  // Day 55: branding kit — watermark + intro/outro auto-attach
+  const [branding, setBrandingState] = useState<BrandingKit>(DEFAULT_BRANDING)
+  const setBranding = (patch: Partial<BrandingKit>) =>
+    setBrandingState((prev) => {
+      const next = { ...prev, ...patch }
+      saveBrandingKit(next)
+      return next
+    })
+
   const duration = projectDuration(project)
   const phase = exportState.phase
   const fps = project.fps
+  // Day 55 — brandable assets (images and videos; videos also donate their poster as watermark)
+  const mediaAssets = useEditor((s) => s.media)
+  const brandableAssets = useMemo(() => mediaAssets.filter((a) => a.kind === 'image' || a.kind === 'video'), [mediaAssets])
+  const introAsset = brandableAssets.find((a) => a.id === branding.introAssetId) ?? null
+  const outroAsset = brandableAssets.find((a) => a.id === branding.outroAssetId) ?? null
+  const introDur = branding.introEnabled && introAsset ? brandAssetDuration(introAsset) : 0
+  const outroDur = branding.outroEnabled && outroAsset ? brandAssetDuration(outroAsset) : 0
+  const brandAddsTime = introDur > 0 || outroDur > 0
 
   // browser-supported export containers (client-only API, safe fallback list)
   const supported = useMemo(() => supportedExportMimeTypes(), [])
@@ -136,7 +166,7 @@ export function ExportDialog() {
   const qualityId = EXPORT_QUALITY_PRESETS.find((q) => q.bitrate === bitrate)?.id ?? 'custom'
   const selectedMime =
     supported.find((c) => c.format === format)?.mime ?? (format === 'mp4' ? 'video/mp4' : 'video/webm')
-  const estimatedBytes = (bitrate * duration) / 8
+  const estimatedBytes = (bitrate * (duration + introDur + outroDur)) / 8
   const fpsOptions = useMemo(
     () => Array.from(new Set([24, 30, 60, fps])).sort((a, b) => a - b),
     [fps]
@@ -227,6 +257,8 @@ export function ExportDialog() {
     if (open) {
       useEditor.getState().pause()
       setFileName(useEditor.getState().project.name || 'novacut-export')
+      // Day 55: load the branding kit, dropping references to deleted assets
+      setBrandingState(sanitizeBranding(loadBrandingKit(), useEditor.getState().media))
       // Day 51: refresh bundle list; auto-apply the default bundle when one is set
       const all = loadAllBundles()
       setBundles(all)
@@ -287,6 +319,29 @@ export function ExportDialog() {
     // free any previous result blob before recording a new one
     if (store.exportState.url) URL.revokeObjectURL(store.exportState.url)
     store.pause()
+
+    // Day 55 — branding kit: preload the watermark image BEFORE recording so
+    // frame 1 already carries it, and swap in the transient intro/outro timeline
+    let watermarkOpts: { url: string; position: WatermarkPosition; scale: number; opacity: number } | null = null
+    if (branding.watermarkEnabled && branding.watermarkAssetId) {
+      const asset = useEditor.getState().media.find((a) => a.id === branding.watermarkAssetId)
+      if (asset) {
+        const url = watermarkUrlForAsset(asset)
+        try {
+          await ensureImageLoaded(url)
+          watermarkOpts = { url, position: branding.watermarkPosition, scale: branding.watermarkScale, opacity: branding.watermarkOpacity }
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Watermark image failed to load')
+          return
+        }
+      } else {
+        toast.warning('Watermark asset is missing — exporting without it')
+      }
+    }
+    const originalProject = useEditor.getState().project
+    const branded = buildBrandedTimeline(originalProject, useEditor.getState().media, branding)
+    if (branded) useEditor.setState({ project: branded.project })
+
     store.setExportState({ phase: 'recording', progress: 0 })
     try {
       const result = await startExport({
@@ -296,6 +351,7 @@ export function ExportDialog() {
         audioBitsPerSecond: audioKbps * 1000,
         burnIn: burnIn ? 'timecode' : undefined,
         skipCaptions: !burnCaptions,
+        watermark: watermarkOpts,
         onProgress: (p) => useEditor.getState().setExportState({ progress: p }),
       })
       setLastMime(result.mimeType)
@@ -319,6 +375,12 @@ export function ExportDialog() {
         useEditor
           .getState()
           .setExportState({ phase: 'error', error: e instanceof Error ? e.message : 'Export failed' })
+      }
+    } finally {
+      // Day 55 — restore the real project (the branded copy existed for THIS export only)
+      if (branded) {
+        useEditor.setState({ project: originalProject })
+        useEditor.getState().setCurrentTime(0)
       }
     }
   }
@@ -832,7 +894,10 @@ export function ExportDialog() {
             <div className="nc-glass space-y-1.5 rounded-xl px-3 py-2.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Estimated length</span>
-                <span className="font-mono tabular-nums">{formatTimecode(duration, fps)}</span>
+                <span className="font-mono tabular-nums">
+                  {formatTimecode(duration + introDur + outroDur, fps)}
+                  {brandAddsTime && <span className="ml-1 text-[9px] text-rose-300">with branding</span>}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Estimated size</span>
@@ -1102,6 +1167,140 @@ export function ExportDialog() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Day 55: branding kit — watermark + intro/outro auto-attach */}
+            <div className="overflow-hidden rounded-xl border border-(--nc-line) bg-(--nc-panel) p-3" data-nc-branding-card>
+              <div className="flex items-center gap-2">
+                <Stamp className="h-4 w-4 shrink-0 text-rose-400" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold">Branding kit</p>
+                  <p className="text-[10px] text-muted-foreground">Watermark + intro/outro — applied to this export only</p>
+                </div>
+              </div>
+
+              {/* watermark row */}
+              <div className="mt-2.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold">Logo watermark</p>
+                    <p className="text-[10px] text-muted-foreground">Painted on the exported picture — preview unaffected</p>
+                  </div>
+                  <Switch
+                    aria-label="Logo watermark"
+                    checked={branding.watermarkEnabled}
+                    onCheckedChange={(v) => setBranding({ watermarkEnabled: v })}
+                    className="shrink-0 data-[state=checked]:bg-rose-500"
+                  />
+                </div>
+                {branding.watermarkEnabled && (
+                  <div className="space-y-2 rounded-lg bg-(--nc-sheet) p-2">
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={branding.watermarkAssetId ?? ''}
+                        onValueChange={(v) => setBranding({ watermarkAssetId: v })}
+                      >
+                        <SelectTrigger aria-label="Watermark asset" className="h-7 min-w-0 flex-1 text-[11px]">
+                          <SelectValue placeholder="Pick an asset…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {brandableAssets.map((a) => (
+                            <SelectItem key={a.id} value={a.id} className="text-[11px]">
+                              {a.name}{a.kind === 'video' ? ' (poster)' : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={branding.watermarkPosition}
+                        onValueChange={(v) => setBranding({ watermarkPosition: v as WatermarkPosition })}
+                      >
+                        <SelectTrigger aria-label="Watermark corner" className="h-7 w-24 shrink-0 text-[11px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tl" className="text-[11px]">Top left</SelectItem>
+                          <SelectItem value="tr" className="text-[11px]">Top right</SelectItem>
+                          <SelectItem value="bl" className="text-[11px]">Bottom left</SelectItem>
+                          <SelectItem value="br" className="text-[11px]">Bottom right</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-10 shrink-0 text-[10px] text-muted-foreground">Size</span>
+                      <Slider
+                        aria-label="Watermark size"
+                        min={5}
+                        max={40}
+                        step={1}
+                        value={[Math.round(branding.watermarkScale * 100)]}
+                        onValueChange={(v) => setBranding({ watermarkScale: v[0] / 100 })}
+                        className="flex-1 [&_[data-slot=slider-thumb]]:border-rose-400"
+                      />
+                      <span className="w-8 shrink-0 text-right font-mono text-[10px] tabular-nums text-rose-300">
+                        {Math.round(branding.watermarkScale * 100)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-10 shrink-0 text-[10px] text-muted-foreground">Opacity</span>
+                      <Slider
+                        aria-label="Watermark opacity"
+                        min={10}
+                        max={100}
+                        step={5}
+                        value={[Math.round(branding.watermarkOpacity * 100)]}
+                        onValueChange={(v) => setBranding({ watermarkOpacity: v[0] / 100 })}
+                        className="flex-1 [&_[data-slot=slider-thumb]]:border-rose-400"
+                      />
+                      <span className="w-8 shrink-0 text-right font-mono text-[10px] tabular-nums text-rose-300">
+                        {Math.round(branding.watermarkOpacity * 100)}%
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/70">
+                      Video picks use their poster frame as the watermark image.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* intro / outro rows */}
+              <div className="mt-2 space-y-1.5">
+                {([
+                  { key: 'intro' as const, label: 'Intro — auto-attach first', asset: introAsset, id: branding.introAssetId, dur: introDur },
+                  { key: 'outro' as const, label: 'Outro — auto-attach last', asset: outroAsset, id: branding.outroAssetId, dur: outroDur },
+                ]).map((row) => (
+                  <div key={row.key} className="flex items-center gap-2">
+                    <Switch
+                      aria-label={row.label}
+                      checked={branding[`${row.key}Enabled`]}
+                      onCheckedChange={(v) => setBranding({ [`${row.key}Enabled`]: v } as Partial<BrandingKit>)}
+                      className="shrink-0 data-[state=checked]:bg-rose-500"
+                    />
+                    <span className="w-32 shrink-0 text-[11px] font-medium">{row.label}</span>
+                    {branding[`${row.key}Enabled`] ? (
+                      <Select value={row.id ?? ''} onValueChange={(v) => setBranding({ [`${row.key}AssetId`]: v } as Partial<BrandingKit>)}>
+                        <SelectTrigger aria-label={`${row.key} asset`} className="h-7 min-w-0 flex-1 text-[11px]">
+                          <SelectValue placeholder="Pick an asset…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {brandableAssets.map((a) => (
+                            <SelectItem key={a.id} value={a.id} className="text-[11px]">
+                              {a.name} · {a.kind === 'image' ? '2.5s' : `${a.duration.toFixed(1)}s`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="flex-1 text-[10px] text-muted-foreground/60">off</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {brandAddsTime && (
+                <p className="mt-1.5 text-[10px] text-rose-300/90">
+                  This export runs ~{formatTimecode(duration + introDur + outroDur, fps)} — the intro/outro are attached for THIS export only; your project timeline is restored untouched afterwards.
+                </p>
+              )}
             </div>
 
             <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
