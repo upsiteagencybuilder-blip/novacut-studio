@@ -274,6 +274,14 @@ interface EditorStore {
 
   /* ---------- history ---------- */
   pushHistory: (key?: string) => void
+  /** Day 65 — human-readable labels for the past stack (parallel to `past`) */
+  historyPast: { label: string; at: number }[]
+  /** Day 65 — labels for the redo stack (parallel to `future`) */
+  historyFuture: { label: string; at: number }[]
+  /** Day 65 — undo N steps at once (History panel jump-back) */
+  undoSteps: (n: number) => void
+  /** Day 65 — redo N steps at once (History panel jump-forward) */
+  redoSteps: (n: number) => void
   /** Day 31 — returns the current past-stack length; call BEFORE a multi-step group */
   beginHistoryGroup: () => number
   /**
@@ -287,7 +295,7 @@ interface EditorStore {
   redo: () => void
 }
 
-const HISTORY_LIMIT = 60
+export const HISTORY_LIMIT = 150
 let lastHistoryKey: string | null = null
 let lastHistoryTime = 0
 let savingTimer: ReturnType<typeof setTimeout> | null = null
@@ -455,7 +463,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
   exportState: { phase: 'idle', progress: 0 },
   autosave: 'idle',
   past: [],
+  historyPast: [],
   future: [],
+  historyFuture: [],
   hasClipboard: false,
   copiedAttributes: null,
   importing: false,
@@ -1974,7 +1984,12 @@ export const useEditor = create<EditorStore>((set, get) => ({
       // nothing pushed inside the group → nothing to collapse
       if (st.past.length <= base) return {}
       // keep pre-group entries + the FIRST in-group snapshot (pre-group state)
-      return { past: st.past.slice(0, base + 1), future: [] }
+      return {
+        past: st.past.slice(0, base + 1),
+        future: [],
+        historyPast: st.historyPast.slice(0, base + 1),
+        historyFuture: [],
+      }
     })
     lastHistoryKey = null
     lastHistoryTime = 0
@@ -1982,7 +1997,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
 
   pushHistory: (key) => {
     const s = get()
+    let label = 'edit'
     if (typeof key === 'string') {
+      label = key
       const now = Date.now()
       if (key === lastHistoryKey && now - lastHistoryTime < 900) {
         lastHistoryTime = now
@@ -1996,7 +2013,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
     }
     set((st) => ({
       past: [...st.past.slice(-HISTORY_LIMIT + 1), cloneProject(st.project)],
+      historyPast: [...st.historyPast.slice(-HISTORY_LIMIT + 1), { label, at: Date.now() }],
       future: [],
+      historyFuture: [],
     }))
   },
 
@@ -2006,7 +2025,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const prev = s.past[s.past.length - 1]
     set((st) => ({
       past: st.past.slice(0, -1),
+      historyPast: st.historyPast.slice(0, -1),
       future: [cloneProject(st.project), ...st.future.slice(0, HISTORY_LIMIT - 1)],
+      historyFuture: [{ label: st.historyPast[st.historyPast.length - 1]?.label ?? 'edit', at: Date.now() }, ...st.historyFuture.slice(0, HISTORY_LIMIT - 1)],
       project: prev,
       selectedClipIds: st.selectedClipIds.filter((id) => prev.clips.some((c) => c.id === id)),
     }))
@@ -2018,10 +2039,22 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const next = s.future[0]
     set((st) => ({
       future: st.future.slice(1),
+      historyFuture: st.historyFuture.slice(1),
       past: [...st.past.slice(-HISTORY_LIMIT + 1), cloneProject(st.project)],
+      historyPast: [...st.historyPast.slice(-HISTORY_LIMIT + 1), { label: st.historyFuture[0]?.label ?? 'edit', at: Date.now() }],
       project: next,
       selectedClipIds: st.selectedClipIds.filter((id) => next.clips.some((c) => c.id === id)),
     }))
+  },
+
+  undoSteps: (n) => {
+    const count = Math.max(0, Math.min(Math.floor(n), get().past.length))
+    for (let i = 0; i < count; i++) get().undo()
+  },
+
+  redoSteps: (n) => {
+    const count = Math.max(0, Math.min(Math.floor(n), get().future.length))
+    for (let i = 0; i < count; i++) get().redo()
   },
 }))
 

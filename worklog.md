@@ -2223,3 +2223,27 @@ Stage Summary:
 - Day 64 shipped: the editor now fails loudly but never fatally — a boundary catches render crashes with a recovery-focused screen, every error lands in an on-device log the user can read and clear, and the next boot tells the truth about a previous crash while autosave quietly restored the work.
 - Files: lib/telemetry.ts (new), components/editor/ErrorBoundary.tsx (new), app/page.tsx, EditorShell.tsx, dialogs/StorageDialog.tsx.
 - Next: Day 65 — undo/redo depth + visual History panel.
+
+---
+## Day 65 — Undo/redo depth + visual History panel
+**Date:** 2025-12-XX · **Category:** G (PWA, Performance & Reliability)
+
+### Task ID: Day-65
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category G Day 65 — deeper undo/redo with a real, readable History panel.
+
+**Work Log:**
+- Depth: HISTORY_LIMIT 60 → **150** (disclosed in the panel).
+- Labeled history: store gains `historyPast/historyFuture: {label, at}[]` kept in lockstep with past/future across pushHistory (dedupe window keeps the action's own key), undo, redo and endHistoryGroup collapse; `undoSteps(n)/redoSteps(n)` batch-jump.
+- NEW components/editor/dialogs/HistoryPanelDialog.tsx (lazy chunk, `history` DialogName): one readable timeline — redoable entries (dashed, "+N") on top, amber "Current state" divider, undo history below with pretty labels (kebab keys → human names via a 30+ entry map, fallback Title Case), relative times, "−N" jump distances; click any entry → batched undo/redo + toast; footer Undo/Redo buttons; description line discloses counts + depth. TopBar: NEW "Edit history" icon button (History icon, between Redo and Version history), aria-labelled, lazy-mounted dialog.
+
+**E2E receipts (desktop 1280×800 + mobile 390×844):**
+- Labels: seeded clip-move / volume-change / text-edit via store → panel shows 3 entries + Current; jump-back (first entry) → past 0, future 3, renamed clip restored ("mountains.jpg"); batch redoSteps(3) → past 3/future 0, rename re-applied.
+- Depth: 160 pushes → past capped at **150** with historyPast synced; undoSteps(5) → 145/5 with `historyPast.length === past.length && historyFuture.length === future.length` true.
+- Panel renders the capped stack (145 entries listed, "145 undoable · 5 re-doable · depth 150 steps"); full undoSteps(150) drains to 0.
+- Mobile: editor ready, history button present; eslint + tsc clean.
+
+**Stage Summary:**
+- Day 65 shipped: history is now 150 deep, every step carries the action's own name, and the panel turns the invisible undo stack into a clickable map of the edit.
+- Files: lib/editor/store.ts, components/editor/dialogs/HistoryPanelDialog.tsx (new), components/editor/TopBar.tsx, EditorShell.tsx, lib/editor/types.ts.
+- Next: Day 66 — stress E2E (long projects) + Category G audit.

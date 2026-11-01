@@ -6,6 +6,7 @@ import {
   CloudOff,
   Download,
   FolderOpen,
+  History,
   Keyboard,
   Loader2,
   MessageSquareHeart,
@@ -126,6 +127,17 @@ export function TopBar() {
           <Redo2 className="h-4 w-4" />
         </Button>
         <div className="mx-1 h-5 w-px bg-(--nc-panel-strong)" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          title="Edit history (undo/redo stack)"
+          aria-label="Edit history"
+          data-nc-history-btn
+          onClick={() => openDialog('history')}
+        >
+          <History className="h-4 w-4" />
+        </Button>
         <Button
           variant="ghost"
           size="icon"

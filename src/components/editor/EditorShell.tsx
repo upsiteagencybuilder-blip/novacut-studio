@@ -35,6 +35,7 @@ const MixerDialog = lazy(() => import('@/components/editor/dialogs/MixerDialog')
 const VersionsDialog = lazy(() => import('@/components/editor/dialogs/VersionsDialog').then((m) => ({ default: m.VersionsDialog })))
 const ThemeStudioDialog = lazy(() => import('@/components/editor/dialogs/ThemeStudioDialog').then((m) => ({ default: m.ThemeStudioDialog })))
 const StorageDialog = lazy(() => import('@/components/editor/dialogs/StorageDialog').then((m) => ({ default: m.StorageDialog })))
+const HistoryPanelDialog = lazy(() => import('@/components/editor/dialogs/HistoryPanelDialog').then((m) => ({ default: m.HistoryPanelDialog })))
 import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
@@ -640,6 +641,7 @@ export function EditorShell() {
         {dialog === 'versions' && <VersionsDialog />}
         {dialog === 'theme' && <ThemeStudioDialog />}
         {dialog === 'storage' && <StorageDialog />}
+        {dialog === 'history' && <HistoryPanelDialog />}
       </Suspense>
       <OnboardingOverlay />
       <CrashRecoveryWatcher />
