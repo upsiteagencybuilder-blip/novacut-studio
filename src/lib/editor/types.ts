@@ -181,6 +181,12 @@ export interface ChromaKey {
   enabled: boolean
   /** key color hex, default green */
   color: string
+  /**
+   * Day 79 — Luma Keyer: when present (0..1 range), pixels whose luma falls
+   * INSIDE [low, high] are keyed out, independently of the color key. This
+   * is how skies and smoke get dropped.
+   */
+  luma?: { low: number; high: number }
   /** 0..1 distance threshold */
   similarity: number
   /** 0..1 edge softness */

@@ -2526,3 +2526,25 @@ Stage Summary:
 - Days 75–78 shipped: the honesty batch flips only what is REAL — 8 new live effect presets + 2 true mappings, and the backlog shrinks to entries that are genuinely missing.
 - Files: lib/effects/types.ts, lib/effects/vision-render.ts, lib/effects/vision.ts, lib/tools/sections/filters.ts, lib/tools/sections/color.ts, docs/ROADMAP-90.md.
 - Next: Day 79–82 — VFX batch (51 planned; same honesty bar).
+
+---
+## Day 79–82 — Category I batch 2: VFX honesty batch
+**Date:** 2025-12-XX · **Category:** I (Tools-Wall Honesty Batches)
+
+### Task ID: Day-79
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Days 79–82 — the VFX backlog (51 planned) audited line by line. ONE entry could become real today (Luma Keyer — the chroma pixel pipeline already existed); the other 50 are genuinely missing big features (keyers, planar/camera trackers, 3D, expressions, stabilizers) and STAY planned. That restraint is the deliverable.
+
+**Work Log:**
+- NEW REAL LUMA KEYER: `ChromaKey.luma {low, high}` (types) + pixel path in applyPixelEffects (luma-band keying with soft feathered shoulders, composable with the color key) + PropertiesPanel → Green Screen gains a "Luma Keyer" block (Low/High sliders with sane clamping + a one-click turn-off).
+- `vfx-luma-keyer` flipped planned→live with deep link `open-properties-chroma`. Catalog: **296 live / 284 planned**.
+- HONEST PRESERVATION: Ultra/Delta Keyer, spill suppressor family, Roto Brush, planar/camera/Mocha trackers, blend modes beyond the canvas spec (dissolve, vivid/linear/pin light, subtract, divide…), solid/null/parenting, expressions, graph editor, motion blur, optical flow, stabilizers, rolling-shutter/lens repair, the whole 3D lighting stack — all remain `planned` because none of them exist.
+
+**E2E receipts (desktop 1280×800):**
+- Luma band [0.25, 0.6] on sunrise.jpg: canvas black samples **9505/17389** (keyed pixels hit the opaque canvas floor) vs **696/17389** with the key removed — the keyer genuinely cuts a brightness band.
+- Undo restores the untouched clip. eslint + tsc clean.
+
+**Stage Summary:**
+- Days 79–82 shipped: a real Luma Keyer and an audited, honest VFX backlog — the tool wall now says exactly what exists.
+- Files: lib/editor/types.ts, lib/editor/utils.ts, preview/PropertiesPanel.tsx, lib/tools/sections/vfx.ts, docs/ROADMAP-90.md.
+- Next: Day 83–85 — Timeline batch audit (48 planned).

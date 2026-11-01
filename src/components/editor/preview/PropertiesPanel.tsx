@@ -1716,6 +1716,48 @@ function ChromaSection({ clip }: { clip: Clip }) {
             onChange={(v) => patch({ spill: v })}
             format={fmtPct}
           />
+          {/* Day 79 — Luma Keyer: key out a brightness band (skies, smoke) */}
+          {(() => {
+            const luma = ck.luma ?? { low: 0.62, high: 0.95 }
+            return (
+              <div className="rounded-lg border border-(--nc-line) bg-(--nc-panel-strong) p-2" data-nc-luma-keyer>
+                <p className="mb-1 text-[10px] font-semibold text-foreground/85">Luma Keyer</p>
+                <p className="mb-1.5 text-[9px] text-muted-foreground/75">
+                  Keys out a brightness band — perfect for skies and smoke. Works alongside the color key.
+                </p>
+                <SliderRow
+                  label="Low"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={luma.low}
+                  onChange={(v) => patch({ luma: { ...luma, low: Math.min(v, luma.high - 0.02) } })}
+                  format={fmtPct}
+                />
+                <SliderRow
+                  label="High"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={luma.high}
+                  onChange={(v) => patch({ luma: { ...luma, high: Math.max(v, luma.low + 0.02) } })}
+                  format={fmtPct}
+                />
+                <button
+                  type="button"
+                  data-nc-luma-clear
+                  className="mt-1 text-[9px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  onClick={() => {
+                    const next = { ...ck }
+                    delete next.luma
+                    updateClip(clip.id, { chromaKey: next }, 'chroma-luma-off')
+                  }}
+                >
+                  Turn off luma key
+                </button>
+              </div>
+            )
+          })()}
           <p className="text-[10px] leading-snug text-muted-foreground/75">
             Edge hardens or softens the matte boundary; Spill pulls the screen-color cast out of hair and edges.
           </p>

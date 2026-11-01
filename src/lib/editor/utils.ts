@@ -440,6 +440,25 @@ export function applyPixelEffects(
     let g = d[i + 1]
     let b = d[i + 2]
 
+    if (chroma && chroma.luma) {
+      // Day 79 — Luma Keyer: key out a brightness band (soft edges)
+      const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+      const lo = clamp(chroma.luma.low, 0, 1)
+      const hi = clamp(chroma.luma.high, 0, 1)
+      const feather = Math.max(0.01, (hi - lo) * 0.25 + 0.02)
+      if (luma >= lo && luma <= hi) {
+        d[i + 3] = 0
+        continue
+      }
+      // soft shoulder outside the band
+      const edgeLow = lo - feather
+      const edgeHigh = hi + feather
+      if (luma < lo && luma > edgeLow) {
+        d[i + 3] = Math.min(d[i + 3], Math.round(255 * ((luma - edgeLow) / feather)))
+      } else if (luma > hi && luma < edgeHigh) {
+        d[i + 3] = Math.min(d[i + 3], Math.round(255 * ((edgeHigh - luma) / feather)))
+      }
+    }
     if (chroma) {
       const dr = r - keyRgb[0]
       const dg = g - keyRgb[1]

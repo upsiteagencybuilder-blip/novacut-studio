@@ -12,7 +12,7 @@ export const VFX_TOOLS: ProTool[] = [
   { id: 'vfx-chroma-keyer', name: 'Chroma Keyer', section: 'vfx', group: 'Keying', status: 'live', desc: 'Chroma section keys any color with tolerance, softness, edge shaping (soften/harden the matte) and spill suppression, plus chroma green/blue quick swatches' },
   { id: 'vfx-ultra-keyer', name: 'Ultra Keyer', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Advanced keyer with auto-spill, edge and light wrap controls' },
   { id: 'vfx-delta-keyer', name: 'Delta Keyer', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Resolve-class delta keyer with matte finesse controls' },
-  { id: 'vfx-luma-keyer', name: 'Luma Keyer', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Key footage by brightness range for skies and smoke' },
+  { id: 'vfx-luma-keyer', name: 'Luma Keyer', section: 'vfx', group: 'Keying', status: 'live', desc: 'Key out a brightness band with soft edges — clip properties → Green Screen → Luma Keyer (skies and smoke)', action: 'open-properties-chroma' },
   { id: 'vfx-difference-keyer', name: 'Difference Keyer', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Key by difference against a clean background plate' },
   { id: 'vfx-linear-color-keyer', name: 'Linear Color Keyer', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Simple linear color-distance key with matching tolerance' },
   { id: 'vfx-spill-suppressor', name: 'Spill Suppressor', section: 'vfx', group: 'Keying', status: 'planned', desc: 'Neutralize green or blue spill on keyed edges and skin' },
