@@ -1,5 +1,9 @@
 # NovaCut — 90-Day Development Roadmap
 
+> **✅ COMPLETE — Day 90 shipped v1.0.0.** All 9 categories (A–I) executed and logged in
+> `worklog.md`; final regression receipts in `docs/RELEASE-v1.0.0.md`; production
+> checklist in `docs/DEPLOY-v1.0.0.md`. Final catalog: **297 live / 283 planned (honest)**.
+
 > **Cadence**: every single day ships something real (feature / fix / verified flip), follows the
 > serial sector protocol — implement → lint + filtered tsc → agent-browser E2E (desktop + mobile)
 > → worklog entry → Bengali report → `git push origin main`.
