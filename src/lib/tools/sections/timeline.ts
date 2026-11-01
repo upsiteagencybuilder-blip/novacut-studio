@@ -59,7 +59,7 @@ export const TIMELINE_TOOLS: ProTool[] = [
   { id: 'timeline-four-point-editing', name: 'Four-Point Editing Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Fit or fill source between four marked in and out points' },
   { id: 'timeline-multicam-monitor', name: 'Multi-Camera Monitor', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Cut between synchronized angles live in a grid monitor' },
   { id: 'timeline-sync-clips-tool', name: 'Sync Clips Tool', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Align clips by audio waveforms or timecode automatically' },
-  { id: 'timeline-nest-sequence', name: 'Nest Sequence Command', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Bundle selected clips into one nested sequence container' },
+  { id: 'timeline-nest-sequence', name: 'Nest Sequence Command', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Select clips and press Ctrl+G to bundle them into one nested compound container (double-click to edit inside)', action: 'open-shortcuts' },
   { id: 'timeline-unlink-audio-video', name: 'Unlink Audio/Video', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Detach a linked clip audio and video for separate edits' },
   { id: 'timeline-link-audio-video', name: 'Link Audio/Video', section: 'timeline', group: 'Cutting & trimming', status: 'planned', desc: 'Relink clip audio and video so they edit as one' },
   { id: 'timeline-group-clips', name: 'Group Clips', section: 'timeline', group: 'Cutting & trimming', status: 'live', desc: 'Multi-select clips and drag once to move the whole group in sync' },

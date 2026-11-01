@@ -2548,3 +2548,29 @@ Stage Summary:
 - Days 79–82 shipped: a real Luma Keyer and an audited, honest VFX backlog — the tool wall now says exactly what exists.
 - Files: lib/editor/types.ts, lib/editor/utils.ts, preview/PropertiesPanel.tsx, lib/tools/sections/vfx.ts, docs/ROADMAP-90.md.
 - Next: Day 83–85 — Timeline batch audit (48 planned).
+
+---
+## Day 83–89 — Category I batches 3–6: Timeline / Delivery / Sound / AI+Panels+Libraries+Motion audits
+**Date:** 2025-12-XX · **Category:** I (Tools-Wall Honesty Batches)
+
+### Task ID: Day-83
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Days 83–89 — audit the remaining 163 planned entries (timeline 48, delivery 34, sound 23, ai 8, panels 19, libraries 10, motion 21) for honest flips. Verdict after line-by-line review: **exactly ONE has a real behavior behind it — the rest are genuinely missing features.**
+
+**Work Log:**
+- FLIPPED: `timeline-nest-sequence` → live — "bundle selected clips into one nested sequence container" IS the shipped compound grouping (Ctrl+G, double-click to edit inside). Deep link → shortcuts dialog. Catalog: **297 live / 283 planned**.
+- AUDIT CONCLUSIONS (recorded for the tool wall):
+  - Timeline: track-select tools, pen/shape/type tools, rate-stretch, three/four-point editing, multicam, sync-by-audio, insert/overlay buttons, unlink A/V — none exist; the compound/nest does (now disclosed).
+  - Delivery: AVI, ProRes tiers, interlace/field-order, pixel aspect, source scaling — the render pipeline targets WebM/MP4/GIF/PNG/WAV; no interlaced or legacy-container paths exist.
+  - Sound: the remaining planned entries (notch, multiband, limiters, de-esser/hummer/reverb, expander) are real DSP that the current chains do not ship.
+  - AI: smart cutout, tracking, portrait, object-remove, stems, audio-stretch, stabilizer, masking — no such models wired.
+  - Libraries: shared cloud media, stock integrations (GIPHY/Pixabay/Unsplash/Pexels), Filmstock — no such integrations.
+  - Panels: the industry pages (Cut/Fusion/Color/Fairlight), Source Monitor, Media Browser, composition/layer panels — none exist as separate surfaces.
+  - Motion: responsive-design time/position, pin-to-layer, .mogrt import — none exist (opener library already flipped Day 67).
+- E2E receipt: Ctrl+G grouping → 6 clips → 4 with a compound of 3 children → undo restores 6.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- The tool wall's honesty is now systematically audited: 297 entries point at real behavior, 283 truthfully say planned. No fake flips were made under batch pressure.
+- Files: lib/tools/sections/timeline.ts, docs/ROADMAP-90.md.
+- Next: Day 90 — v1.0.0: full regression across all categories, version tag, release report.
