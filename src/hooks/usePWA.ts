@@ -218,3 +218,75 @@ export function wireSWRegistration(registration: ServiceWorkerRegistration): voi
     })
   })
 }
+
+/* ---------------- Day 59 — offline readiness (SW cache status) ---------------- */
+
+export interface OfflineReadiness {
+  /** true when a service worker controls this page */
+  controlled: boolean
+  /** cache name actually serving the shell */
+  cacheName: string | null
+  /** number of precached/runtime-cached entries */
+  entries: number
+  /** first cached paths (diagnostics) */
+  urls: string[]
+}
+
+type ReadinessSub = (r: OfflineReadiness) => void
+const readinessSubs = new Set<ReadinessSub>()
+let readiness: OfflineReadiness = { controlled: false, cacheName: null, entries: 0, urls: [] }
+
+function pushReadiness(next: OfflineReadiness) {
+  readiness = next
+  readinessSubs.forEach((fn) => fn(readiness))
+}
+
+/** ask the active worker for its cache inventory (resolves controlled:false when no SW) */
+export function queryOfflineReadiness(): Promise<OfflineReadiness> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    return Promise.resolve({ controlled: false, cacheName: null, entries: 0, urls: [] })
+  }
+  return navigator.serviceWorker.ready.then(
+    (reg) =>
+      new Promise<OfflineReadiness>((resolve) => {
+        const worker = reg.active ?? navigator.serviceWorker.controller
+        if (!worker) {
+          resolve({ controlled: false, cacheName: null, entries: 0, urls: [] })
+          return
+        }
+        const channel = new MessageChannel()
+        const timer = setTimeout(() => resolve({ controlled: !!worker, cacheName: null, entries: 0, urls: [] }), 2000)
+        channel.port1.onmessage = (e) => {
+          clearTimeout(timer)
+          const data = e.data as { cache?: string; controlled?: boolean; entries?: number; urls?: string[] }
+          const next: OfflineReadiness = {
+            controlled: data.controlled ?? true,
+            cacheName: data.cache ?? null,
+            entries: data.entries ?? 0,
+            urls: data.urls ?? [],
+          }
+          pushReadiness(next)
+          resolve(next)
+        }
+        worker.postMessage({ type: 'GET_CACHE_STATUS' }, [channel.port2])
+      })
+  )
+}
+
+/** subscribe-safe snapshot hook for the UI badge */
+export function useOfflineReadiness(): OfflineReadiness & { refresh: () => void } {
+  useSyncExternalStore(
+    (cb) => {
+      readinessSubs.add(cb)
+      return () => readinessSubs.delete(cb)
+    },
+    () => readiness,
+    () => readiness
+  )
+  return {
+    ...readiness,
+    refresh: () => {
+      void queryOfflineReadiness()
+    },
+  }
+}

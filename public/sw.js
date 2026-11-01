@@ -1,25 +1,36 @@
-/* NovaCut Studio service worker — offline-first shell */
-const CACHE = 'novacut-v4'
+/* NovaCut Studio service worker — offline-first shell.
+   Day 59 (full offline mode): the immutable PUBLIC assets (icons, logo, demo
+   samples, manifest) are precached on EVERY host — they are static files, not
+   build output, so dev caching cannot go stale. Code chunks stay host-gated:
+   /_next/static is content-hashed and cache-first in PRODUCTION only, because
+   dev Turbopack URLs are un-hashed and caching them would serve stale code.
+   The page can query the cache via a GET_CACHE_STATUS message. */
+const CACHE = 'novacut-v5'
 const IS_DEV_HOST = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1'
-const PRECACHE = IS_DEV_HOST
-  ? ['/manifest.webmanifest']
-  : [
-      '/',
-      '/manifest.webmanifest',
-      '/logo.svg',
-      '/icons/icon-192.png',
-      '/icons/icon-512.png',
-      '/icons/maskable-512.png',
-      '/icons/apple-touch-icon.png',
-      '/icons/favicon-64.png',
-      '/samples/demo-1.jpg',
-      '/samples/demo-2.jpg',
-      '/samples/demo-3.jpg',
-    ]
+/* immutable public files — identical on every host */
+const PUBLIC_ASSETS = [
+  '/manifest.webmanifest',
+  '/logo.svg',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/maskable-512.png',
+  '/icons/apple-touch-icon.png',
+  '/icons/favicon-64.png',
+  '/samples/demo-1.jpg',
+  '/samples/demo-2.jpg',
+  '/samples/demo-3.jpg',
+]
+const PRECACHE = IS_DEV_HOST ? PUBLIC_ASSETS : ['/', ...PUBLIC_ASSETS]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE).catch(() => undefined)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE)
+      .then((cache) =>
+        // addAll fails the whole batch on one 404 — precache piecewise instead
+        Promise.all(PRECACHE.map((url) => cache.add(url).catch(() => undefined)))
+      )
+      .then(() => self.skipWaiting())
   )
 })
 
@@ -32,11 +43,24 @@ self.addEventListener('activate', (event) => {
   )
 })
 
-/* allow the page to activate a waiting worker (update flow) */
+/* allow the page to activate a waiting worker (update flow) + query cache status */
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting()
     if (event.ports && event.ports[0]) event.ports[0].postMessage({ activated: true })
+  }
+  if (event.data && event.data.type === 'GET_CACHE_STATUS' && event.ports && event.ports[0]) {
+    event.waitUntil(
+      caches.open(CACHE).then(async (cache) => {
+        const keys = await cache.keys()
+        event.ports[0].postMessage({
+          cache: CACHE,
+          controlled: !!self.registration.active,
+          entries: keys.length,
+          urls: keys.slice(0, 30).map((r) => new URL(r.url).pathname),
+        })
+      })
+    )
   }
 })
 
@@ -45,17 +69,18 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return
   const url = new URL(req.url)
 
-  // static assets: cache-first — ONLY in production, where /_next/static URLs
+  // static assets: cache-first — /_next/static ONLY in production, where URLs
   // are content-hashed and immutable. In dev, Turbopack reuses un-hashed URLs,
-  // so caching them would serve stale code after every edit.
+  // so caching them would serve stale code after every edit. The PUBLIC_ASSETS
+  // set is host-agnostic (already precached) and keeps its cache-first path.
   if (
-    !IS_DEV_HOST &&
     url.origin === self.location.origin &&
     (url.pathname.startsWith('/_next/static') ||
       url.pathname.startsWith('/icons') ||
       url.pathname.startsWith('/samples') ||
       url.pathname === '/logo.svg' ||
-      url.pathname === '/manifest.webmanifest')
+      url.pathname === '/manifest.webmanifest') &&
+    (!url.pathname.startsWith('/_next/static') || !IS_DEV_HOST)
   ) {
     event.respondWith(
       caches.match(req).then(

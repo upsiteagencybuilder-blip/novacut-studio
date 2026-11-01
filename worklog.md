@@ -2081,3 +2081,24 @@ Work Log:
 Stage Summary:
 - CATEGORY F (Export & Delivery, Days 51–58) COMPLETE: preset bundles, quality ladder with probed 4K/60 exports, GIF + PNG-sequence offline exports, burn-toggle + three sidecar formats with a root-caused 0-byte fix, branding kit (watermark + transient intro/outro), a real export queue (background drain, cancel, snapshot isolation), platform-honest share/clipboard helpers — every entry backed by UI-driven receipts, catalog +13 live since Day 51 (10 new + 2 flips + 1 desc-verified).
 - Next: Category G — PWA, Performance & Reliability (Days 59–66), starting Day 59 — full offline mode (service worker caching).
+
+---
+Task ID: Day-59
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category G Day 59 — Full offline mode (editor shell + assets cached by service worker).
+
+Work Log:
+- SW v5 (public/sw.js): PRECACHE now includes the immutable PUBLIC assets on EVERY host — icons×5, logo.svg, manifest, demo samples×3 (static files, host-agnostic, cannot go stale in dev; previously manifest-only in dev); piecewise cache.add (one 404 no longer kills the batch); /_next/static stays PRODUCTION-gated cache-first (dev Turbopack URLs are un-hashed — caching them would serve stale code) with the public-asset set now host-independent; cache bumped novacut-v4→v5; NEW message protocol GET_CACHE_STATUS → { cache, controlled, entries, urls } so the page can introspect the offline inventory.
+- hooks/usePWA.ts: queryOfflineReadiness() (postMessage + MessageChannel, 2s safety timeout) + useOfflineReadiness() subscribe-safe snapshot hook.
+- PWAStatus.tsx: NEW OfflineReadinessBadge — emerald "Offline shell · N files" pill (title/aria disclose the cache name + meaning) once the worker holds entries; spinner state while precaching; silent before a worker controls the page; re-probes on controllerchange. Mounted in the TopBar next to the ConnectionPill (desktop row).
+- Catalog: +1 panel-offline-shell (live, open-projects) with the honest dev/prod caching split in the description.
+- E2E receipts (desktop 1280×800):
+  • SW: sw.js registered, page CONTROLLED, cache 'novacut-v5' with exactly 10 entries (3 samples + manifest + icons + logo); badge renders "Offline shell · 10 files".
+  • OFFLINE (browser set offline): /samples/demo-1.jpg → 200 from cache (120 KB), /manifest.webmanifest → 200; FULL RELOAD offline → the shell document came from the SW network-first fallback, the editor HYDRATED with the full project (store live, 6 clips, media re-linked from IndexedDB) and ZERO console errors — dev chunks were served through the browser HTTP cache behind the SW fetch path, so full offline editing worked end-to-end even on localhost; production keeps the same guarantees with content-hashed chunks.
+  • Back online: reload → navigator.onLine true, store intact.
+  • Mobile 390×844: ConnectionPill owns the offline state on phones (badge is a desktop-row element by design); fresh-session zero console errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 59 shipped: a genuinely introspectable offline mode — the SW precaches shell assets on every host, reports its inventory to the UI, and the app provably reloads and edits fully offline with local-first persistence.
+- Files: public/sw.js, hooks/usePWA.ts, components/editor/pwa/PWAStatus.tsx, components/editor/TopBar.tsx, lib/tools/sections/panels.ts.
+- Next: Day 60 — IndexedDB autosave hardening + storage manager (quota, cleanup).

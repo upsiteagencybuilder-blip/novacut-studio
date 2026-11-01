@@ -20,7 +20,7 @@ import { useEditor } from '@/lib/editor/store'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ConnectionPill, InstallApp, PWAUpdateToast } from '@/components/editor/pwa/PWAStatus'
+import { ConnectionPill, InstallApp, OfflineReadinessBadge, PWAUpdateToast } from '@/components/editor/pwa/PWAStatus'
 
 function AutosaveIndicator() {
   const autosave = useEditor((s) => s.autosave)
@@ -97,6 +97,7 @@ export function TopBar() {
         <AutosaveIndicator />
       </div>
       <div className="ml-2 hidden md:flex">
+        <OfflineReadinessBadge />
         <ConnectionPill />
       </div>
 

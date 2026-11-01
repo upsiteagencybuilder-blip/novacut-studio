@@ -6,10 +6,10 @@
  */
 import { useEffect, useReducer, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowDownToLine, Loader2, RefreshCw, Share, SquarePlus, WifiOff } from 'lucide-react'
+import { ArrowDownToLine, Database, Loader2, RefreshCw, Share, SquarePlus, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { applySWUpdate, usePWAInstall, useOnlineStatus, useSWUpdateWaiting } from '@/hooks/usePWA'
+import { applySWUpdate, usePWAInstall, useOnlineStatus, useSWUpdateWaiting, useOfflineReadiness, queryOfflineReadiness } from '@/hooks/usePWA'
 
 /* ---------------- offline / online pill ---------------- */
 
@@ -38,6 +38,42 @@ export function ConnectionPill() {
     >
       <WifiOff className="size-3" />
       Offline — editing continues, everything saves locally
+    </div>
+  )
+}
+
+/* ---------------- Day 59 — offline shell readiness badge ---------------- */
+
+export function OfflineReadinessBadge() {
+  const { controlled, cacheName, entries } = useOfflineReadiness()
+
+  useEffect(() => {
+    // first probe after mount, then refresh when the worker takes control
+    void queryOfflineReadiness()
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const onCtrl = () => void queryOfflineReadiness()
+    navigator.serviceWorker.addEventListener('controllerchange', onCtrl)
+    return () => navigator.serviceWorker.removeEventListener('controllerchange', onCtrl)
+  }, [])
+
+  // no SW yet — say nothing (first paint before registration is normal)
+  if (!controlled && entries === 0) return null
+  const ready = entries > 0
+
+  return (
+    <div
+      role="status"
+      title={ready ? `Service worker ${cacheName ?? ''} holds ${entries} cached files — the shell and public assets open offline` : 'Service worker active — precaching the offline shell'}
+      aria-label={ready ? `Offline ready — ${entries} files cached` : 'Offline shell preparing'}
+      className={
+        'nc-glass flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium ' +
+        (ready
+          ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+          : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground')
+      }
+    >
+      {ready ? <Database className="size-3" /> : <Loader2 className="size-3 animate-spin" />}
+      {ready ? `Offline shell · ${entries} files` : 'Offline shell…'}
     </div>
   )
 }
