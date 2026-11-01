@@ -2494,3 +2494,35 @@ Stage Summary:
 - **CATEGORY H COMPLETE (Days 67–74):** templates, onboarding v2, i18n scaffold, shortcut editor, ⌘K palette, accessibility, and documentation that tells the truth. Catalog stands at **289 live / 291 planned**.
 - Files: README.md (new).
 - Next: Day 75–78 — Category I batch 1: Color + filters honesty flips (~42+29 planned entries).
+
+---
+## Day 75–78 — Category I batch 1: Color + filters honesty flips
+**Date:** 2025-12-XX · **Category:** I (Tools-Wall Honesty Batches)
+
+### Task ID: Day-75
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Days 75–78 — flip the color/filter backlog entries that can do so HONESTLY: 4 brand-new real pixel effects + 2 true mappings to existing live controls. The rest stay planned — that is the point.
+
+**Work Log:**
+- FOUR NEW REAL VISION EFFECT FAMILIES (engine + renderer + effects-browser cards):
+  - Solarize (`solarize`, threshold-based partial invert, 2 presets: Highlights Flip / Full Solar)
+  - Threshold (`threshold`, luma snap to black/white with intensity mix, 2 presets)
+  - Tritone (`tritone`, shadows/mids/highs → three-color gradient map, 2 presets: Neon Dusk / Teal Amber)
+  - Edge Detect (`edges`, full Sobel with strength + invert, 2 presets: Pencil Outline / Edge Glow)
+  All four: real ImageData pixel pipelines in vision-render.ts (destination-in confined to clip alpha — never bleeds onto neighbours), new VisionDraw kinds in types.ts, 8 new effect cards in the effects browser.
+- TWO TRUE MAPPINGS (no code needed — the behavior already shipped):
+  - `color-midtones-slider` → the interactive gamma wheel IS the independent midtones control (angle=hue, radius=strength) → live + open-properties-wheels
+  - `filter-color-balance` → per-tonal-range RGB push = lift/gamma/gain wheels → live + open-properties-wheels
+- HONEST PRESERVATION: curves (hue-vs-hue etc.), qualifiers, warper, corner-pin, blur variants, Boris/NewBlue packs… all stay `planned` — flipping them would be lying. Catalog: **295 live / 285 planned**.
+
+**E2E receipts (desktop 1280×800):**
+- Effects browser: searching "Solarize" lists both new cards (leaf nodes verified).
+- Apply: `vision-solarize-01` lands on the selected image clip with intensity 0.75.
+- PIXEL PROOF: canvas average brightness with the effect ON = 96.5 → with it removed = 116.2 (the effect genuinely alters rendered pixels).
+- Session cleaned (vision null, 6 clips, zero console errors).
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Days 75–78 shipped: the honesty batch flips only what is REAL — 8 new live effect presets + 2 true mappings, and the backlog shrinks to entries that are genuinely missing.
+- Files: lib/effects/types.ts, lib/effects/vision-render.ts, lib/effects/vision.ts, lib/tools/sections/filters.ts, lib/tools/sections/color.ts, docs/ROADMAP-90.md.
+- Next: Day 79–82 — VFX batch (51 planned; same honesty bar).

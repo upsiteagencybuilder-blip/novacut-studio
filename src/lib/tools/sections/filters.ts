@@ -40,16 +40,16 @@ export const FILTERS_TOOLS: ProTool[] = [
   { id: 'filter-turbulent-displace', name: 'Turbulent Displace', section: 'filters', group: 'Distort & warp', status: 'planned', desc: 'Fractal noise warping for heat and water wobble' },
 
   // -------- Stylize --------
-  { id: 'filter-find-edges', name: 'Find Edges Filter', section: 'filters', group: 'Stylize', status: 'planned', desc: 'Outline contours like a pencil sketch overlay' },
+  { id: 'filter-find-edges', name: 'Find Edges Filter', section: 'filters', group: 'Stylize', status: 'live', desc: 'Sobel edge detection presets — pencil-sketch (inverted) or edge-glow outlines', action: 'open-effects' },
   { id: 'filter-posterize-effect', name: 'Posterize Effect', section: 'filters', group: 'Stylize', status: 'live', desc: 'Vision poster presets crush colors into poster tones', action: 'open-effects' },
-  { id: 'filter-solarize-effect', name: 'Solarize Effect', section: 'filters', group: 'Stylize', status: 'planned', desc: 'Partially invert tones above a threshold' },
-  { id: 'filter-threshold-filter', name: 'Threshold Filter', section: 'filters', group: 'Stylize', status: 'planned', desc: 'Snap every pixel to pure black or white' },
+  { id: 'filter-solarize-effect', name: 'Solarize Effect', section: 'filters', group: 'Stylize', status: 'live', desc: 'Two vision presets invert tones above a threshold with intensity blending — applied from the effects browser', action: 'open-effects' },
+  { id: 'filter-threshold-filter', name: 'Threshold Filter', section: 'filters', group: 'Stylize', status: 'live', desc: 'Two vision presets snap luma to pure black/white around an adjustable level', action: 'open-effects' },
   { id: 'filter-utility-effects', name: 'Utility Effects (Image Mask · Crop · Tilt-Shift)', section: 'filters', group: 'Stylize', status: 'planned', desc: 'Mask-driven utility trio for crops and miniatures' },
 
   // -------- Color effects --------
   { id: 'filter-tint-effect', name: 'Tint Effect', section: 'filters', group: 'Color effects', status: 'live', desc: 'Duotone vision effect maps shadows and highlights to two colors', action: 'open-effects' },
-  { id: 'filter-tritone-effect', name: 'Tritone Effect', section: 'filters', group: 'Color effects', status: 'planned', desc: 'Map shadows, midtones and highlights to three colors' },
-  { id: 'filter-color-balance', name: 'Color Balance Filter', section: 'filters', group: 'Color effects', status: 'planned', desc: 'Push red, green and blue per tonal range' },
+  { id: 'filter-tritone-effect', name: 'Tritone Effect', section: 'filters', group: 'Color effects', status: 'live', desc: 'Two vision presets map shadows/mids/highs to three-color tonal gradients', action: 'open-effects' },
+  { id: 'filter-color-balance', name: 'Color Balance Filter', section: 'filters', group: 'Color effects', status: 'live', desc: 'Per-tonal-range RGB push via the interactive lift/gamma/gain wheels in clip properties', action: 'open-properties-wheels' },
   { id: 'filter-leave-color', name: 'Leave Color Filter', section: 'filters', group: 'Color effects', status: 'planned', desc: 'Desaturate everything except one chosen color' },
   { id: 'filter-change-color-tool', name: 'Change Color Tool', section: 'filters', group: 'Color effects', status: 'planned', desc: 'Hue-shift a sampled color range on the canvas' },
   { id: 'filter-invert-effect', name: 'Invert Effect', section: 'filters', group: 'Color effects', status: 'live', desc: 'Invert slider flips colors to negative in properties' },

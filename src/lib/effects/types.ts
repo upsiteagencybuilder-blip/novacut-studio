@@ -276,6 +276,10 @@ export type VisionDraw =
   | { kind: 'dreamy'; amount: number }
   | { kind: 'vhs'; shift: number; amount: number }
   | { kind: 'poster'; levels: number; strength: number }
+  | { kind: 'solarize'; threshold: number }
+  | { kind: 'threshold'; level: number }
+  | { kind: 'tritone'; shadows: string; mids: string; highs: string }
+  | { kind: 'edges'; strength: number; invert: boolean }
 
 export interface VisionEffect {
   id: string

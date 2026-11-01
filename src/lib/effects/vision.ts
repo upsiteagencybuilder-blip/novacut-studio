@@ -57,6 +57,94 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${Math.round(alpha * 100) / 100})`
 }
 
+/* ---------------- Solarize (2) — Day 75, invert above threshold ---------------- */
+
+const SOLARIZE: Array<{ label: string; threshold: number; intensity: number; tags: string[] }> = [
+  { label: 'Highlights Flip', threshold: 0.62, intensity: 0.75, tags: ['partial'] },
+  { label: 'Full Solar', threshold: 0.42, intensity: 1, tags: ['extreme'] },
+]
+
+function buildSolarize(): VisionEffect[] {
+  return SOLARIZE.map((v) =>
+    mk(
+      'solarize',
+      'Solarize',
+      `Solarize · ${v.label}`,
+      '🌗',
+      { kind: 'solarize', threshold: v.threshold },
+      v.intensity,
+      `linear-gradient(135deg, #1a1a2e 50%, #f7f3e9 50%)`,
+      v.tags,
+    ),
+  )
+}
+
+/* ---------------- Threshold (2) — Day 75, luma snap ---------------- */
+
+const THRESHOLD: Array<{ label: string; level: number; intensity: number; tags: string[] }> = [
+  { label: 'Poster Snap', level: 0.5, intensity: 0.9, tags: ['graphic'] },
+  { label: 'Hard Ink', level: 0.38, intensity: 1, tags: ['extreme'] },
+]
+
+function buildThreshold(): VisionEffect[] {
+  return THRESHOLD.map((v) =>
+    mk(
+      'threshold',
+      'Threshold',
+      `Threshold · ${v.label}`,
+      '⬛',
+      { kind: 'threshold', level: v.level },
+      v.intensity,
+      `linear-gradient(90deg, #000 50%, #fff 50%)`,
+      v.tags,
+    ),
+  )
+}
+
+/* ---------------- Tritone (2) — Day 76, three-color tonal map ---------------- */
+
+const TRITONE: Array<{ label: string; shadows: string; mids: string; highs: string; intensity: number; tags: string[] }> = [
+  { label: 'Neon Dusk', shadows: '#141428', mids: '#d946ef', highs: '#f7f3e9', intensity: 0.85, tags: ['stylize'] },
+  { label: 'Teal Amber', shadows: '#0d2b33', mids: '#14b8a6', highs: '#fbbf24', intensity: 0.8, tags: ['cinematic'] },
+]
+
+function buildTritone(): VisionEffect[] {
+  return TRITONE.map((v) =>
+    mk(
+      'tritone',
+      'Tritone',
+      `Tritone · ${v.label}`,
+      '🎚️',
+      { kind: 'tritone', shadows: v.shadows, mids: v.mids, highs: v.highs },
+      v.intensity,
+      `linear-gradient(180deg, ${v.shadows}, ${v.mids}, ${v.highs})`,
+      v.tags,
+    ),
+  )
+}
+
+/* ---------------- Edge Detect (2) — Day 76, Sobel outlines ---------------- */
+
+const EDGES: Array<{ label: string; strength: number; invert: boolean; intensity: number; tags: string[] }> = [
+  { label: 'Pencil Outline', strength: 1, invert: true, intensity: 0.9, tags: ['sketch'] },
+  { label: 'Edge Glow', strength: 1.6, invert: false, intensity: 0.85, tags: ['graphic'] },
+]
+
+function buildEdges(): VisionEffect[] {
+  return EDGES.map((v) =>
+    mk(
+      'edges',
+      'Edge Detect',
+      `Edge Detect · ${v.label}`,
+      '✏️',
+      { kind: 'edges', strength: v.strength, invert: v.invert },
+      v.intensity,
+      `linear-gradient(135deg, #222, #e8e8e8, #222)`,
+      v.tags,
+    ),
+  )
+}
+
 /* ---------------- Pixelate (6) — grid mosaic, size 4..52 px ---------------- */
 
 const PIXELATE: Array<{ label: string; size: number; cell: number; intensity: number; tags: string[] }> = [
@@ -386,4 +474,9 @@ export const VISION_EFFECTS: VisionEffect[] = [
   ...buildDuotone(),
   ...buildVhs(),
   ...buildPoster(),
+
+  ...buildSolarize(),
+  ...buildThreshold(),
+  ...buildTritone(),
+  ...buildEdges(),
 ]

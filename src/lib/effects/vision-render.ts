@@ -233,6 +233,18 @@ export function drawVisionFrame(
       case 'poster':
         visPoster(job, draw)
         break
+      case 'solarize':
+        visSolarize(job, draw)
+        break
+      case 'threshold':
+        visThreshold(job, draw)
+        break
+      case 'tritone':
+        visTritone(job, draw)
+        break
+      case 'edges':
+        visEdges(job, draw)
+        break
       default:
         // unknown runtime kind — plain content, never blank
         target.drawImage(src, 0, 0, w, h)
@@ -525,6 +537,194 @@ function visDuotone(
   T.globalAlpha = j.baseAlpha
   T.globalCompositeOperation = j.baseComposite
   T.drawImage(work.canvas, 0, 0, j.w, j.h)
+}
+
+/** Day 75 — Solarize: invert tones above a threshold (partial by intensity) */
+function visSolarize(
+  j: VisionJob,
+  draw: Extract<VisionDraw, { kind: 'solarize' }>
+): void {
+  const work = acquire(slots.work, j.bw, j.bh)
+  if (!work) {
+    replaceBase(j)
+    return
+  }
+  const g = work.ctx
+  g.drawImage(j.S, 0, 0, work.canvas.width, work.canvas.height)
+  try {
+    const img = g.getImageData(0, 0, work.canvas.width, work.canvas.height)
+    const d = img.data
+    const thr = (draw.threshold ?? 0.5) * 255
+    const amt = j.amt
+    for (let i = 0; i < d.length; i += 4) {
+      if (amt <= 0.01) break
+      for (let c = 0; c < 3; c++) {
+        const v = d[i + c]
+        if (v > thr) d[i + c] = v + (255 - v - v) * amt
+      }
+    }
+    g.putImageData(img, 0, 0)
+  } catch {
+    replaceBase(j)
+    return
+  }
+  g.globalAlpha = 1
+  g.globalCompositeOperation = 'destination-in'
+  g.drawImage(j.S, 0, 0, work.canvas.width, work.canvas.height)
+  g.globalCompositeOperation = 'source-over'
+  eraseContent(j)
+  j.T.globalAlpha = j.baseAlpha
+  j.T.globalCompositeOperation = j.baseComposite
+  j.T.drawImage(work.canvas, 0, 0, j.w, j.h)
+}
+
+/** Day 75 — Threshold: snap every pixel to pure black or white by luma */
+function visThreshold(
+  j: VisionJob,
+  draw: Extract<VisionDraw, { kind: 'threshold' }>
+): void {
+  const work = acquire(slots.work, j.bw, j.bh)
+  if (!work) {
+    replaceBase(j)
+    return
+  }
+  const g = work.ctx
+  g.drawImage(j.S, 0, 0, work.canvas.width, work.canvas.height)
+  try {
+    const img = g.getImageData(0, 0, work.canvas.width, work.canvas.height)
+    const d = img.data
+    const level = (draw.level ?? 0.5) * 255
+    // soft blend toward the hard snap so intensity feels like a mix
+    const amt = j.amt
+    for (let i = 0; i < d.length; i += 4) {
+      const luma = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
+      const snapped = luma >= level ? 255 : 0
+      d[i] = d[i] + (snapped - d[i]) * amt
+      d[i + 1] = d[i + 1] + (snapped - d[i + 1]) * amt
+      d[i + 2] = d[i + 2] + (snapped - d[i + 2]) * amt
+    }
+    g.putImageData(img, 0, 0)
+  } catch {
+    replaceBase(j)
+    return
+  }
+  g.globalAlpha = 1
+  g.globalCompositeOperation = 'destination-in'
+  g.drawImage(j.S, 0, 0, work.canvas.width, work.canvas.height)
+  g.globalCompositeOperation = 'source-over'
+  eraseContent(j)
+  j.T.globalAlpha = j.baseAlpha
+  j.T.globalCompositeOperation = j.baseComposite
+  j.T.drawImage(work.canvas, 0, 0, j.w, j.h)
+}
+
+/** Day 76 — Tritone: map shadows / mids / highlights to three colors */
+function visTritone(
+  j: VisionJob,
+  draw: Extract<VisionDraw, { kind: 'tritone' }>
+): void {
+  const work = acquire(slots.work, j.bw, j.bh)
+  if (!work) {
+    replaceBase(j)
+    return
+  }
+  const g = work.ctx
+  try {
+    g.filter = 'grayscale(1)'
+  } catch {
+    /* filter unsupported */
+  }
+  g.drawImage(j.S, 0, 0, work.canvas.width, work.canvas.height)
+  g.filter = 'none'
+  try {
+    const img = g.getImageData(0, 0, work.canvas.width, work.canvas.height)
+    const d = img.data
+    const parse = (hex: string, fallback: [number, number, number]): [number, number, number] => {
+      const h = (hex || '').replace('#', '')
+      if (h.length !== 6) return fallback
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
+    }
+    const lo = parse(draw.shadows, [26, 26, 46])
+    const mid = parse(draw.mids, [217, 70, 239])
+    const hi = parse(draw.highs, [247, 243, 233])
+    const mix = (a: number[], b: number[], t: number) => a.map((v, k) => v + (b[k] - v) * t)
+    const amt = j.amt
+    for (let i = 0; i < d.length; i += 4) {
+      const luma = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255
+      const mapped = luma < 0.5 ? mix(lo, mid, luma * 2) : mix(mid, hi, (luma - 0.5) * 2)
+      d[i] = d[i] + (mapped[0] - d[i]) * amt
+      d[i + 1] = d[i + 1] + (mapped[1] - d[i + 1]) * amt
+      d[i + 2] = d[i + 2] + (mapped[2] - d[i + 2]) * amt
+    }
+    g.putImageData(img, 0, 0)
+  } catch {
+    replaceBase(j)
+    return
+  }
+  g.globalAlpha = 1
+  g.globalCompositeOperation = 'destination-in'
+  g.drawImage(j.S, 0, 0, work.canvas.width, work.canvas.height)
+  g.globalCompositeOperation = 'source-over'
+  eraseContent(j)
+  j.T.globalAlpha = j.baseAlpha
+  j.T.globalCompositeOperation = j.baseComposite
+  j.T.drawImage(work.canvas, 0, 0, j.w, j.h)
+}
+
+/** Day 76 — Edge Detect: Sobel outlines (optionally inverted to sketch) */
+function visEdges(
+  j: VisionJob,
+  draw: Extract<VisionDraw, { kind: 'edges' }>
+): void {
+  const work = acquire(slots.work, j.bw, j.bh)
+  if (!work) {
+    replaceBase(j)
+    return
+  }
+  const g = work.ctx
+  g.drawImage(j.S, 0, 0, work.canvas.width, work.canvas.height)
+  try {
+    const img = g.getImageData(0, 0, work.canvas.width, work.canvas.height)
+    const src = img.data
+    const w = work.canvas.width
+    const h = work.canvas.height
+    const lum = new Float32Array(w * h)
+    for (let i = 0, p = 0; i < src.length; i += 4, p++) {
+      lum[p] = 0.2126 * src[i] + 0.7152 * src[i + 1] + 0.0722 * src[i + 2]
+    }
+    const out = g.createImageData(w, h)
+    const o = out.data
+    const strength = draw.strength ?? 1
+    const amt = j.amt
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const p = y * w + x
+        const gx =
+          -lum[p - w - 1] - 2 * lum[p - 1] - lum[p + w - 1] + lum[p - w + 1] + 2 * lum[p + 1] + lum[p + w + 1]
+        const gy =
+          -lum[p - w - 1] - 2 * lum[p - w] - lum[p - w + 1] + lum[p + w - 1] + 2 * lum[p + w] + lum[p + w + 1]
+        const mag = Math.min(255, Math.sqrt(gx * gx + gy * gy) * strength)
+        const edge = draw.invert ? 255 - mag : mag
+        const i4 = p * 4
+        o[i4] = src[i4] + (edge - src[i4]) * amt
+        o[i4 + 1] = src[i4 + 1] + (edge - src[i4 + 1]) * amt
+        o[i4 + 2] = src[i4 + 2] + (edge - src[i4 + 2]) * amt
+        o[i4 + 3] = src[i4 + 3]
+      }
+    }
+    g.putImageData(out, 0, 0)
+  } catch {
+    replaceBase(j)
+    return
+  }
+  g.globalAlpha = 1
+  g.globalCompositeOperation = 'destination-in'
+  g.drawImage(j.S, 0, 0, work.canvas.width, work.canvas.height)
+  g.globalCompositeOperation = 'source-over'
+  eraseContent(j)
+  j.T.globalAlpha = j.baseAlpha
+  j.T.globalCompositeOperation = j.baseComposite
+  j.T.drawImage(work.canvas, 0, 0, j.w, j.h)
 }
 
 function visDreamy(
