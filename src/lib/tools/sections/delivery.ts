@@ -11,7 +11,7 @@ import type { ProTool } from '../types'
 
 export const DELIVERY_TOOLS: ProTool[] = [
   // -------- Formats & containers --------
-  { id: 'delivery-media-encoder-queue', name: 'Media Encoder Queue', section: 'delivery', group: 'Formats & containers', status: 'planned', desc: 'Batch export queue that renders while you keep editing' },
+  { id: 'delivery-media-encoder-queue', name: 'Media Encoder Queue', section: 'delivery', group: 'Formats & containers', status: 'live', desc: 'Queue any number of export jobs with a full settings snapshot — they render strictly one at a time on the single engine, keep draining with the dialog closed, support per-job cancel/remove, auto-download and clear-finished', action: 'open-export' },
   { id: 'delivery-format-dropdown', name: 'Format Dropdown', section: 'delivery', group: 'Formats & containers', status: 'live', desc: 'Pick WebM VP9 or MP4 H.264 in the format dropdown', action: 'open-export' },
   { id: 'delivery-mov-container', name: 'QuickTime Container (.mov)', section: 'delivery', group: 'Formats & containers', status: 'planned', desc: 'QuickTime wrapper for ProRes and editorial mezzanines' },
   { id: 'delivery-mp4-container', name: 'MPEG-4 Container (.mp4)', section: 'delivery', group: 'Formats & containers', status: 'live', desc: 'MP4 is the second export format alongside WebM' },

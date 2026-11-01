@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AudioLines,
   BadgeCheck,
+  Ban,
   Captions,
   CheckCircle2,
   ChevronDown,
@@ -19,9 +20,11 @@ import {
   FileImage,
   Gauge,
   Images,
+  ListVideo,
   MonitorPlay,
   Package,
   PauseCircle,
+  Plus,
   Save,
   Settings2,
   Stamp,
@@ -68,6 +71,15 @@ import {
   type BrandingKit,
   type WatermarkPosition,
 } from '@/lib/editor/branding'
+import {
+  makeQueueJob,
+  pumpQueue,
+  queueSummary,
+  useExportQueue,
+  type QueueJob,
+  type QueueJobSettings,
+  type QueueJobStatus,
+} from '@/lib/editor/export-queue'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -143,6 +155,12 @@ export function ExportDialog() {
       saveBrandingKit(next)
       return next
     })
+
+  // Day 56: export queue
+  const queueJobs = useExportQueue((s) => s.jobs)
+  const queueAutoDownload = useExportQueue((s) => s.autoDownload)
+  const queueRendering = queueJobs.some((j) => j.status === 'rendering')
+  const queuePending = queueJobs.filter((j) => j.status === 'queued').length
 
   const duration = projectDuration(project)
   const phase = exportState.phase
@@ -484,6 +502,41 @@ export function ExportDialog() {
     } finally {
       setFrameBusy(null)
       setFrameProgress(0)
+    }
+  }
+
+  const handleAddToQueue = () => {
+    let watermark: QueueJobSettings['watermark'] = null
+    if (branding.watermarkEnabled && branding.watermarkAssetId) {
+      const asset = mediaAssets.find((a) => a.id === branding.watermarkAssetId)
+      if (asset) {
+        watermark = { url: watermarkUrlForAsset(asset), position: branding.watermarkPosition, scale: branding.watermarkScale, opacity: branding.watermarkOpacity }
+      }
+    }
+    const job = makeQueueJob({
+      width: project.canvasWidth,
+      height: project.canvasHeight,
+      fps,
+      bitrate,
+      format,
+      audioKbps,
+      burnIn,
+      skipCaptions: !burnCaptions,
+      watermark,
+      branding,
+      fileName: safeFileName(fileName),
+    })
+    useExportQueue.getState().add(job)
+    void pumpQueue()
+    toast.success(`Queued — ${queueSummary(job.settings)}${queueRendering || queuePending > 0 ? ' · starts after the current job' : ''}`)
+  }
+
+  const handleQueueAction = (job: QueueJob) => {
+    if (job.status === 'rendering') {
+      cancelExport() // the processor marks it cancelled and moves on
+    } else {
+      if (job.resultUrl) URL.revokeObjectURL(job.resultUrl)
+      useExportQueue.getState().remove(job.id)
     }
   }
 
@@ -1303,6 +1356,111 @@ export function ExportDialog() {
               )}
             </div>
 
+            {/* Day 56: export queue */}
+            <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel) p-3" data-nc-queue-card>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <ListVideo className="h-4 w-4 shrink-0 text-teal-400" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold">
+                      Export queue
+                      {queueJobs.length > 0 && (
+                        <Badge variant="outline" className="ml-1.5 border-teal-400/40 bg-teal-500/10 px-1.5 py-0 text-[9px] text-teal-300">
+                          {queueJobs.length}
+                        </Badge>
+                      )}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">Renders one at a time — keeps draining with this dialog closed</p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground">Auto-dl</span>
+                  <Switch
+                    aria-label="Auto download queue results"
+                    checked={queueAutoDownload}
+                    onCheckedChange={(v) => useExportQueue.getState().setAutoDownload(v)}
+                    className="data-[state=checked]:bg-teal-500"
+                  />
+                </div>
+              </div>
+
+              <Button
+                size="sm"
+                disabled={duration <= 0}
+                onClick={handleAddToQueue}
+                className="mt-2 h-8 w-full rounded-lg border border-teal-400/40 bg-teal-500/10 px-3 text-xs font-semibold text-teal-300 hover:bg-teal-500/20"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add current settings to queue
+              </Button>
+
+              {queueJobs.length > 0 && (
+                <div className="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
+                  {queueJobs.map((job) => (
+                    <div key={job.id} className="rounded-lg bg-(--nc-sheet) px-2.5 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            'h-1.5 w-1.5 shrink-0 rounded-full',
+                            job.status === 'queued' && 'bg-muted-foreground',
+                            job.status === 'rendering' && 'animate-pulse bg-fuchsia-400',
+                            job.status === 'done' && 'bg-emerald-400',
+                            job.status === 'failed' && 'bg-rose-400',
+                            job.status === 'cancelled' && 'bg-yellow-400'
+                          )}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{job.label}</span>
+                        <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{queueSummary(job.settings)}</span>
+                        {job.status === 'done' && job.resultUrl ? (
+                          <a
+                            href={job.resultUrl}
+                            download={`${job.settings.fileName}.${job.resultExt}`}
+                            aria-label={`Download ${job.label}`}
+                            className="shrink-0 rounded p-0.5 text-emerald-300 hover:text-emerald-200"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            aria-label={job.status === 'rendering' ? `Cancel ${job.label}` : `Remove ${job.label}`}
+                            onClick={() => handleQueueAction(job)}
+                            className="shrink-0 rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-rose-400"
+                          >
+                            {job.status === 'rendering' ? <Ban className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+                          </button>
+                        )}
+                      </div>
+                      {job.status === 'rendering' && (
+                        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-(--nc-panel-strong)">
+                          <div className="nc-gradient h-full rounded-full transition-all" style={{ width: `${Math.max(3, job.progress * 100)}%` }} />
+                        </div>
+                      )}
+                      {job.status === 'failed' && (
+                        <p className="mt-0.5 truncate text-[9px] text-rose-300">{job.error}</p>
+                      )}
+                      {job.status === 'done' && (
+                        <p className="mt-0.5 text-[9px] text-emerald-300/80">{formatBytes(job.sizeBytes ?? 0)} · .{job.resultExt}</p>
+                      )}
+                      {job.status === 'cancelled' && <p className="mt-0.5 text-[9px] text-yellow-300/80">cancelled before finishing</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {queueJobs.some((j) => j.status !== 'queued' && j.status !== 'rendering') && (
+                <button
+                  type="button"
+                  onClick={() => useExportQueue.getState().clearFinished()}
+                  className="mt-1.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Clear finished jobs
+                </button>
+              )}
+              <p className="mt-1.5 text-[10px] text-muted-foreground/70">
+                Jobs run strictly one at a time on the single render engine — queued jobs wait for any direct export to finish, and the tab must stay visible while a job records.
+              </p>
+            </div>
+
             <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
               <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
               <p className="text-[11px] leading-relaxed text-amber-200">
@@ -1317,12 +1475,12 @@ export function ExportDialog() {
 
             <Button
               variant="ghost"
-              disabled={duration <= 0}
+              disabled={duration <= 0 || queueRendering}
               onClick={() => void handleStart()}
               className="nc-gradient nc-glow-hover h-10 w-full rounded-xl font-semibold text-white hover:opacity-90"
             >
               <Download className="h-4 w-4" />
-              Start export
+              {queueRendering ? `Queue rendering — ${queuePending} waiting…` : 'Start export'}
             </Button>
           </div>
         )}

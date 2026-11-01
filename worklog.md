@@ -2016,3 +2016,25 @@ Stage Summary:
 - Day 55 shipped: a real branding kit — export-only logo watermark (corner/size/opacity, poster fallback for videos) and one-switch intro/outro auto-attach that transiently extends the timeline for a single export and provably restores the project afterwards.
 - Files: lib/editor/branding.ts (new), engine.ts, exporter.ts, dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
 - Next: Day 56 — export queue (multiple jobs, background, cancel).
+
+---
+Task ID: Day-56
+Agent: main (orchestrator)
+Task: ROADMAP-90 Category F Day 56 — Export queue (multiple jobs, background, cancel).
+
+Work Log:
+- NEW lib/editor/export-queue.ts — module-level zustand queue (survives dialog close; UI-independent): jobs carry a FULL settings snapshot (width·height·fps·bitrate·format·audioKbps·burnIn·skipCaptions·watermark{url,position,scale,opacity}·branding kit·fileName); statuses queued→rendering→done|failed|cancelled; per-job progress, result blob URL + size, error text.
+- Processor `pumpQueue()`: strictly ONE job at a time (the engine is a single realtime MediaRecorder on the live canvas — honest queue, not parallel encoders); yields while any DIRECT export owns the engine (exportState.phase==='recording' || isExporting()); each job temporarily applies its own canvas+fps and the transient branding timeline, restores the project's real canvas/fps and pre-branding clips in `finally` (skips the restore ONLY if the user edited mid-render — disclosed via toast); watermark preloaded at job start (failure fails THAT job, not the queue); AbortError → cancelled, other errors → failed + toast; auto-download toggle (default on) fires the download on done.
+- ExportDialog: teal "Export queue" card — job count badge, Auto-dl switch, "Add current settings to queue" (snapshots the dialog state exactly as the direct flow would use it), scrollable job list (status dot: queued muted / rendering fuchsia-pulse / done emerald / failed rose / cancelled yellow; live progress bar; per-job Download or Cancel-or-Remove; failed error line; clear-finished), honest note about one-at-a-time + visible-tab requirement. Direct "Start export" is DISABLED with "Queue rendering — N waiting…" while a job records — both directions guarded against double-booking the engine.
+- Catalog: delivery-media-encoder-queue FLIPPED planned→live with the real semantics (single engine, sequential, background drain, cancel/remove/auto-download).
+- E2E receipts (desktop 1280×800, queue over the demo project with the Day-55 magenta watermark kit):
+  • 4 jobs queued through the real UI — dots transitioned queued→rendering→done sequentially (a/b/c 2.5–3.9 MB webm blobs), Start export disabled "Queue rendering — 1 waiting…" during drain and re-enabled after.
+  • CANCEL: job "queue-cancel" cancelled mid-render via its Ban button → status flipped to yellow "cancelled before finishing" while the processor kept serving the queue.
+  • BACKGROUND: job "queue-bg" was fuchsia-rendering when the dialog was CLOSED; reopened ~11s later → emerald done (3.9 MB) — the queue drained with the dialog gone.
+  • RESTORE: after the drain the store showed the original canvas 1280×720@30 and 6 clips — per-job canvas/branding swap fully reverted.
+  • Clear finished → 0 rows; mobile 390×844 renders the full card (badge, auto-dl, add button, note); fresh-session zero console errors; eslint + tsc clean.
+
+Stage Summary:
+- Day 56 shipped: a real export queue — snapshot-based jobs, sequential background draining that outlives the dialog, per-job cancel/remove/download, auto-download, engine double-booking guards, and per-job canvas/branding isolation with guaranteed restore.
+- Files: lib/editor/export-queue.ts (new), dialogs/ExportDialog.tsx, lib/tools/sections/delivery.ts.
+- Next: Day 57 — Web Share API + clipboard share helpers.
