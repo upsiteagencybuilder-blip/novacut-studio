@@ -8,6 +8,7 @@ import {
   FolderOpen,
   History,
   Keyboard,
+  Languages,
   Loader2,
   MessageSquareHeart,
   Palette,
@@ -17,7 +18,9 @@ import {
   Undo2,
   UserRound,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
+import { useLocale, useTranslations } from 'next-intl'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +59,8 @@ function AutosaveIndicator() {
 }
 
 export function TopBar() {
+  const locale = useLocale()
+  const tLang = useTranslations('topbar')
   const projectName = useEditor((s) => s.project.name)
   const pastCount = useEditor((s) => s.past.length)
   const futureCount = useEditor((s) => s.future.length)
@@ -125,6 +130,23 @@ export function TopBar() {
           onClick={() => useEditor.getState().redo()}
         >
           <Redo2 className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          title={tLang('language')}
+          aria-label={tLang('language')}
+          data-nc-lang-btn
+          onClick={() => {
+            const next = locale === 'bn' ? 'en' : 'bn'
+            document.cookie = `novacut.locale=${next}; path=/; max-age=31536000; samesite=lax`
+            toast.success(tLang('languageSwitched'))
+            setTimeout(() => window.location.reload(), 700)
+          }}
+        >
+          <Languages className="h-4 w-4" />
+          <span className="sr-only">{tLang('language')}</span>
         </Button>
         <div className="mx-1 h-5 w-px bg-(--nc-panel-strong)" />
         <Button

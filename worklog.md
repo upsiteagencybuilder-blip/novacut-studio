@@ -2366,3 +2366,27 @@ Stage Summary:
 - Day 69 shipped: onboarding v2 — the editor now teaches at the moment of relevance, once, in measured conditions.
 - Files: lib/tips.tsx (new), components/editor/EditorShell.tsx.
 - Next: Day 70 — i18n scaffold (bn/en) via next-intl.
+
+---
+## Day 70 — i18n scaffold (bn / en) via next-intl
+**Date:** 2025-12-XX · **Category:** H (Templates, Onboarding & Growth)
+
+### Task ID: Day-70
+**Agent:** main (orchestrator)
+**Task:** ROADMAP-90 Category H Day 70 — real i18n infrastructure with an honest first translated surface.
+
+**Work Log:**
+- next-intl v4 wired WITHOUT locale routing (single-route app preserved): next.config plugin, `src/i18n/request.ts` (locale from `novacut.locale` cookie, default en), `messages/en.json` + `messages/bn.json` (hand-written Bengali — app name/tagline, the full onboarding door, topbar language strings), RootLayout is now async: `getLocale()` drives `<html lang>` and `NextIntlClientProvider` inherits the request config.
+- TRANSLATED SURFACES (honest scope — scaffold): the onboarding door (title/subtitle/3 feature lines/both buttons/loading state) + the new language control. Everything else stays English until its batch lands; the switch toast says exactly that.
+- TopBar: Languages icon button (`data-nc-lang-btn`) — toggles cookie en⇄bn, honest toast ("part of the UI is translated so far (i18n scaffold)"), reload applies. Bengali already renders with Noto Sans Bengali / Hind Siliguri (loaded since the canvas-font block).
+
+**E2E receipts (desktop 1280×800):**
+- `<html lang>` follows the cookie (en → bn → en verified).
+- Onboarding door in Bengali: "ডেমো প্রজেক্ট দেখুন ✨" + "নতুন প্রজেক্ট শুরু করুন" buttons present with lang=bn (onboarded flag cleared/restored around the check).
+- Language button present in TopBar; mobile 390×844 renders with lang cookie respected.
+- eslint + tsc clean.
+
+**Stage Summary:**
+- Day 70 shipped: the i18n spine is real — cookie-driven locale, provider, message catalogs, `<html lang>` sync, one fully translated surface, and a switcher that tells the truth about coverage.
+- Files: next.config.ts, src/i18n/request.ts (new), messages/en.json + bn.json (new), src/app/layout.tsx, panels/OnboardingOverlay.tsx, TopBar.tsx.
+- Next: Day 71 — custom keyboard-shortcut editor.

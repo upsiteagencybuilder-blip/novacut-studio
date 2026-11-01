@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { Loader2, Scissors, ShieldCheck, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { getKV, setKV } from '@/lib/editor/db'
 import { useEditor } from '@/lib/editor/store'
@@ -21,28 +22,33 @@ interface Feature {
   text: string
 }
 
-const FEATURES: Feature[] = [
+const FEATURES: (Feature & { key: string })[] = [
   {
     icon: ShieldCheck,
     color: '#a855f7', // violet
     bg: 'rgba(168,85,247,0.15)',
     text: '100% local & private — files stay on your device',
+    key: 'privacy',
   },
   {
     icon: Scissors,
     color: '#d946ef', // fuchsia
     bg: 'rgba(217,70,239,0.15)',
     text: 'Pro multi-track timeline with snap & trim',
+    key: 'timeline',
   },
   {
     icon: Zap,
     color: '#fb923c', // orange
     bg: 'rgba(251,146,60,0.15)',
     text: 'Text, stickers, cinematic filters & motion',
+    key: 'fx',
   },
 ]
 
 export function OnboardingOverlay() {
+  // Day 70 — i18n: the door speaks the user's language (en/bn scaffold)
+  const t = useTranslations('onboarding')
   const [state, setState] = useState<OverlayState>('closed')
   const ready = useEditor((s) => s.ready)
   const loadDemoProject = useEditor((s) => s.loadDemoProject)
@@ -92,13 +98,10 @@ export function OnboardingOverlay() {
         </div>
 
         <h2 className="mt-4 text-xl font-bold">
-          Welcome to <span className="nc-gradient-text">NovaCut</span> Studio
+          {t('title')}
         </h2>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Professional video editing — fully local, fully yours.
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Professional editing that never uploads your files.
+          {t('subtitle')}
         </p>
 
         {/* features */}
@@ -113,7 +116,7 @@ export function OnboardingOverlay() {
                 >
                   <Icon className="size-4" />
                 </span>
-                <span className="text-foreground/85">{f.text}</span>
+                <span className="text-foreground/85">{t('features.' + f.key)}</span>
               </div>
             )
           })}
@@ -130,10 +133,10 @@ export function OnboardingOverlay() {
             {loading ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Building your demo…
+                {t('loading')}
               </>
             ) : (
-              'Try the demo project ✨'
+              t('startDemo')
             )}
           </Button>
           <Button
@@ -143,7 +146,7 @@ export function OnboardingOverlay() {
             onClick={() => void handleScratch()}
             className="h-11 w-full rounded-xl border border-(--nc-line-strong) bg-transparent text-foreground/90 hover:bg-(--nc-panel)"
           >
-            Start from scratch
+            {t('startFresh')}
           </Button>
         </div>
       </div>

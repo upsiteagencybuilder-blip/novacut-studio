@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "NovaCut Studio",
+    "tagline": "Professional Video Editor"
+  },
+  "onboarding": {
+    "title": "Welcome to NovaCut Studio",
+    "subtitle": "A pro video editor that runs entirely in your browser — nothing ever leaves your device.",
+    "startDemo": "Try the demo project ✨",
+    "startFresh": "Start from scratch",
+    "loading": "Preparing your studio…",
+    "features": {
+      "privacy": "100% local & private — files stay on your device",
+      "timeline": "Pro multi-track timeline with snap & trim",
+      "fx": "Text, stickers, cinematic filters & motion"
+    }
+  },
+  "topbar": {
+    "language": "Language",
+    "languageSwitched": "Language switched to Bengali — part of the UI is translated so far (i18n scaffold)."
+  }
+}
