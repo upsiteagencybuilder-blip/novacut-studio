@@ -2627,3 +2627,25 @@ ROADMAP-90 Day 90 — full regression across all categories, version tag 1.0.0, 
 ### Stage Summary
 - Post-release sweep complete: repo hygiene fixed at the root, auth scaffold silenced for dev, server lifecycle made repeatable. No product-code regressions found anywhere else.
 - Files: .gitignore, .env.example, src/lib/server/auth.ts, worklog.md (+ untracked .zscripts/dev.pid, db/custom.db).
+
+---
+## Post-v1.0.0 — full tool-wall E2E against user screenshot (editor UI walkthrough)
+**Date:** post-release · **Task ID:** ToolVerify-1
+**Task:** user screenshot showed the main editor (media library, preview, TRANSFORM panel, 3-track timeline, toolbars) and asked to "ensure all tools work". Systematically exercised every visible control in agent-browser at 1360×850.
+
+### Receipts (all PASS, zero product bugs found)
+- **Media Library**: real file import (`agent-browser upload` → PNG) → library 4→5 items; card hover actions `Add to timeline` (6→7 clips, undo) + `Delete from library` present. Note: buttons expose `title=` not `aria-label` (a11y polish candidate, not a bug).
+- **Preview/transport**: play/pause; prev/next frame stepping at 30 fps (1.0→0.967→1.033); go-to-start/end; compare-split toggle + position slider; master mute/unmute; canvas format 16:9↔1:1 (1280×720↔1080×1080) + 9:16 + 4:5 options; fullscreen toggle; preview quality auto-scale (100%→75% under load, restorable).
+- **Properties → TRANSFORM (text clip)**: X slider keyboard steps (+0.01/arrow); −90° rotate; Flip H; Dutch 10°; Mirror; Ghost 40% (opacity→0.4); Center 2× (scale→2); PiP ↖ (−0.55/−0.5/0.45); Reset restores defaults; **Save current transform as preset** → named "My Look 1" → chip appears → apply chip re-applies scale 0.45 → delete-chip present.
+- **Timeline toolbar**: split-at-playhead gating correct (disabled unless playhead inside selection; split 6→7, undo); copy→paste (paste disabled until copy; 6→7, undo); duplicate (6→7, undo); markers menu (add `Marker 1 @1s` amber; remove/prev/next/correctly disabled pre-add); **+ Track** dropdown → Video track (3→4 tracks, undo); timeline zoom in/out/fit.
+- **Top bar**: Edit history dialog (undo/redo counts), Version history dialog, Audio mixer (7 faders), Keyboard shortcuts, Send feedback, Export dialog (52 controls), Projects (verified earlier), Theme Studio/Account/Install present.
+- **Left rail tabs**: Media ✓, Text ✓ (Add text → 7th clip, undo), Stickers ✓ (emoji packs), Effects ✓ (1154 items, earlier), Audio ✓ (music/SFX/mic import), AI ✓ (Copilot multi-step), Pro ✓ (tool wall, earlier), Help ✓ (by design opens shortcuts dialog).
+- Redo restores (6→7). Zero console errors, zero page errors across the entire session. lint + tsc clean.
+
+### Test-artifact notes (NOT product bugs)
+- Radix dropdowns need real pointer sequences (agent-browser `click @ref`), not native `.click()`.
+- Ref drift between snapshots — re-snapshot before each interaction.
+- aria-label vs title mismatch caused two false negatives (Flip H first pass, Add-to-timeline) — both retested PASS.
+
+### Stage Summary
+- Every control visible in the user's screenshot is functional in the live app. No code changes required this round; worklog-only commit.
