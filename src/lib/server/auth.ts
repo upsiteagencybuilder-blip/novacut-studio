@@ -16,7 +16,13 @@ import CredentialsProvider from 'next-auth/providers/credentials'
  */
 
 export const authOptions: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET,
+  // NextAuth requires a secret to sign JWTs; without it every /api/auth/session
+  // call logs [NO_SECRET] + [NEXTAUTH_URL] warnings. Production MUST set
+  // NEXTAUTH_SECRET (see docs/DEPLOY-v1.0.0.md); dev falls back to a fixed
+  // local-only value so the scaffold stays silent and stateless.
+  secret:
+    process.env.NEXTAUTH_SECRET ??
+    (process.env.NODE_ENV === 'production' ? undefined : 'novacut-dev-only-secret'),
   session: { strategy: 'jwt' },
   providers: [
     CredentialsProvider({

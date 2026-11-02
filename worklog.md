@@ -2608,3 +2608,22 @@ ROADMAP-90 Day 90 — full regression across all categories, version tag 1.0.0, 
 ### Stage Summary
 - The 90-day roadmap is COMPLETE: 9 categories, every day logged with receipts, honesty rule intact to the last entry (297 live / 283 planned, nothing faked).
 - Next: production deploy per `docs/DEPLOY-v1.0.0.md`; the 283 planned entries carry recorded audit verdicts for future batches.
+
+---
+## Post-v1.0.0 maintenance — "find and fix all problems" sweep
+**Date:** post-release · **Task ID:** Fix-Sweep-1
+
+### Found & fixed
+1. **Recurring git mode-noise** — 16 files kept flipping 644→755 and `.zscripts/dev.pid` / `db/custom.db` changed on every dev restart / cloud op, polluting every `git status`. FIX: `chmod 644` + `git rm --cached` both runtime files + gitignore `db/*.db` — permanent; receipts no longer risk being buried in noise.
+2. **NextAuth `[NO_SECRET]` + `[NEXTAUTH_URL]` warnings** — every `/api/auth/session` call logged both warnings (Day 48 scaffold shipped without a dev fallback). FIX: `src/lib/server/auth.ts` now falls back to a fixed local-only secret when `NODE_ENV !== 'production'` (prod still requires the real env var), `.env` gains local `NEXTAUTH_URL`/`NEXTAUTH_SECRET`, `.env.example` documents both. VERIFY: 3 session calls after restart → **0 warnings**, warm latency 11–33 ms.
+3. **Dev-server daemonization reliability** — three consecutive `setsid … &` starts died right after "Ready" (env kills the session tree; dev.sh's EXIT/TERM trap then takes the server down too). FIX: double-fork launch `(setsid nohup bash .zscripts/dev.sh … &)` + warm-boot polling — server stayed healthy across subsequent calls (health 200 at t+20 s and t+65 s).
+
+### Regression sweep (all clean)
+- `bun run lint` clean · `bunx tsc --noEmit` clean (filtered) · `/api/cloud/health` 200 (sqlite, ~1–10 ms)
+- All 7 safe GET API probes correct: health/session/projects/versions → 200; share/feedback/assets → 400 with precise param errors (validation, not bugs)
+- agent-browser E2E desktop 1280×800 + mobile 390×844: demo modal → 6 clips → playback 0→1.55 s → pause; export dialog opens; **zero page errors, zero console errors/warnings, zero failed network requests** (only normal blob: 206 media ranges)
+- Stale EADDRINUSE line in dev.log dated an old overlapping start attempt — no duplicate process found (single next-server on :3000)
+
+### Stage Summary
+- Post-release sweep complete: repo hygiene fixed at the root, auth scaffold silenced for dev, server lifecycle made repeatable. No product-code regressions found anywhere else.
+- Files: .gitignore, .env.example, src/lib/server/auth.ts, worklog.md (+ untracked .zscripts/dev.pid, db/custom.db).

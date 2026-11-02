@@ -58,3 +58,8 @@ tool-results/
 dev.log
 server.log
 upload/
+
+# runtime noise — changes on every dev restart / cloud operation
+.zscripts/dev.pid
+db/*.db
+db/*.db-journal
