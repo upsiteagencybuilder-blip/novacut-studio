@@ -14,7 +14,22 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       where: { token },
       select: { title: true },
     })
-    return { title: link ? `${link.title} — NovaCut Share` : 'NovaCut Share' }
+    return {
+      title: link ? `${link.title} — NovaCut Share` : 'NovaCut Share',
+      description: link
+        ? 'A read-only snapshot of an edit made in NovaCut Studio — timeline, clips and stats.'
+        : 'A read-only snapshot of an edit made in NovaCut Studio.',
+      openGraph: {
+        title: link ? `${link.title} — NovaCut Share` : 'NovaCut Share',
+        description: 'A read-only snapshot of an edit made in NovaCut Studio.',
+        images: ['/icons/og-card.png'],
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: link ? `${link.title} — NovaCut Share` : 'NovaCut Share',
+        images: ['/icons/og-card.png'],
+      },
+    }
   } catch {
     return { title: 'NovaCut Share' }
   }

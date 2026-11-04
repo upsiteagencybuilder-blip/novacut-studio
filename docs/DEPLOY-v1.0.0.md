@@ -33,6 +33,7 @@ Prisma schema to **Turso** through `@prisma/adapter-libsql` (see
 | `DATABASE_URL` | `file:./db/novacut.db` | fallback only; cloud/db.ts prefers Turso |
 | `NEXTAUTH_URL` | `https://<your-domain>` | only if sign-in (Day 48 scaffold) is enabled |
 | `NEXTAUTH_SECRET` | `openssl rand -base64 32` | same condition |
+| `NEXT_PUBLIC_SITE_URL` | `https://<your-domain>` | canonical base for OpenGraph/Twitter metadata (defaults to localhost) |
 
 - [ ] Confirm `src/lib/cloud/db.ts` detects `TURSO_DATABASE_URL` in the
       Function logs (first request logs the active engine)

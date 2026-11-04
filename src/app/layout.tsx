@@ -18,13 +18,41 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "NovaCut Studio — Professional Video Editor",
   description:
     "A blazing-fast, installable progressive video editor. Trim, cut, add text, stickers, cinematic filters and motion — all locally in your browser. Nothing ever leaves your device.",
   keywords: ["video editor", "PWA", "NovaCut", "timeline editor", "browser video editing"],
   applicationName: "NovaCut Studio",
   manifest: "/manifest.webmanifest",
+  openGraph: {
+    type: "website",
+    siteName: "NovaCut Studio",
+    title: "NovaCut Studio — Professional Video Editor",
+    description:
+      "Multi-track timeline, cinematic filters, motion, audio suite and one-click 4K export — right in your browser. Nothing ever leaves your device.",
+    url: "/",
+    locale: "en_US",
+    images: [
+      {
+        url: "/icons/og-card.png",
+        width: 1200,
+        height: 630,
+        alt: "NovaCut Studio — pro video editor that runs entirely in your browser",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "NovaCut Studio — Professional Video Editor",
+    description:
+      "Multi-track timeline, cinematic filters, motion, audio suite and one-click 4K export — right in your browser. Nothing ever leaves your device.",
+    images: ["/icons/og-card.png"],
+  },
+  robots: { index: true, follow: true },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

@@ -2649,3 +2649,27 @@ ROADMAP-90 Day 90 — full regression across all categories, version tag 1.0.0, 
 
 ### Stage Summary
 - Every control visible in the user's screenshot is functional in the live app. No code changes required this round; worklog-only commit.
+
+## Post-v1.0.0 — full-site polish sweep (branded edges + social preview)
+**Date:** post-release · **Task ID:** Polish-1
+**Task:** "polish full site" — audit the whole surface (editor + out-of-editor routes) and close the remaining polish gaps.
+
+### Survey (desktop 1280×800 + mobile 390×844, code sweep)
+- Editor shell, panels, dialogs, timeline: already mature (Chroma Engine tokens, aurora, scrollbars, selection, focus ring, reduced-motion, safe-area). No visual defects found.
+- Real gaps were all **outside** the editor: unbranded default 404 (white page breaking the dark identity), no global error boundary for non-editor routes, zero OpenGraph/Twitter metadata (no social/IM link preview), no loading state on the share viewer, and a `.env` regression re-exposing the NextAuth `[NEXTAUTH_URL]` dev warning.
+
+### Fixes shipped
+1. **`src/app/not-found.tsx`** — branded dark 404: aurora backdrop, gradient logo tile, "404 · Scene not found" in editor tone, CTAs "Open NovaCut Studio" + "Try the demo project ✨". Verified desktop + mobile, no overflow, links resolve.
+2. **`src/app/error.tsx`** — root-segment client error boundary (covers `/s/[token]` etc.; the editor keeps its own ErrorBoundary): recovery "Try again" (reset) + "Back to the studio", digest shown when present.
+3. **`public/icons/og-card.png`** — 1200×630 social card rendered from a hand-built brand layout (wordmark, gradient headline, feature chips, video/audio preview tiles, timeline mock) — no AI-garbled text.
+4. **`src/app/layout.tsx`** — `metadataBase` (`NEXT_PUBLIC_SITE_URL`, localhost default), full `openGraph` + `twitter:summary_large_image` + `robots` metadata. Verified: og:title/description/url/image(+dims/alt) and twitter:* all present in served HTML; og-card.png 200 image/png 221KB.
+5. **`src/app/s/[token]/page.tsx`** — share links now carry OG/Twitter tags (title = snapshot title).
+6. **`src/app/s/[token]/loading.tsx`** — branded skeleton + sr-only status for slow Turso round-trips.
+7. **`.env`** — restored dev-only `NEXTAUTH_URL`/`NEXTAUTH_SECRET` (regression: file had lost them); after restart 3× `/api/auth/session` → 0 warnings.
+8. **`docs/DEPLOY-v1.0.0.md`** — added `NEXT_PUBLIC_SITE_URL` row to the env table.
+
+### Verification
+- lint + tsc clean; single next-server on :3000 (double-fork restart), health 200, session warm 33ms.
+- `/definitely-not-a-route` → 404 branded (dark bg rgb(7,7,13), aurora present, both CTAs). Mobile 390 no overflow.
+- `/s/bad-token-test` → branded not-exist card; transient dev-overlay "1 Issue" badge traced to Fast Refresh, gone on reload.
+- Editor golden path after restart: `/?action=demo` → 6 clips/3 tracks, play 1.2s→3.3s advance, pause; desktop + mobile zero console/page errors.
