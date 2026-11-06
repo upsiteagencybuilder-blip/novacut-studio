@@ -47,6 +47,9 @@ export type ToolAction =
   | 'open-properties-curves'
   | 'open-properties-wheels'
   | 'open-properties-chroma'
+  | 'open-monitor-safe'
+  | 'open-monitor-thirds'
+  | 'open-monitor-rulers'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

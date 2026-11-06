@@ -139,6 +139,18 @@ function useToolAction() {
       'open-properties-curves': () => openPropsSection('curves'),
       'open-properties-wheels': () => openPropsSection('wheels'),
       'open-properties-chroma': () => openPropsSection('chroma'),
+      'open-monitor-safe': () => {
+        useEditor.getState().setMonitor('safe', true)
+        toast('Safe margins on — action 93% / title 90% over the preview')
+      },
+      'open-monitor-thirds': () => {
+        useEditor.getState().setMonitor('thirds', true)
+        toast('Thirds grid on — rule-of-thirds over the preview')
+      },
+      'open-monitor-rulers': () => {
+        useEditor.getState().setMonitor('rulers', true)
+        toast('Pixel rulers on — canvas-edge rulers in project pixels')
+      },
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])

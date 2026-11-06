@@ -5,10 +5,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Columns2,
+  Frame,
   Gauge,
+  Grid3x3,
   Maximize,
   Pause,
   Play,
+  Ruler,
   SkipBack,
   SkipForward,
   Volume2,
@@ -21,6 +24,7 @@ import { clamp, formatTimecode, projectDuration } from '@/lib/editor/utils'
 import { toast } from 'sonner'
 import { useEngineBridge } from '@/hooks/useEngineBridge'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 
@@ -55,6 +59,11 @@ export function PreviewPane() {
   const toggleMasterMuted = useEditor((s) => s.toggleMasterMuted)
   const setCanvasSize = useEditor((s) => s.setCanvasSize)
   const addTextClip = useEditor((s) => s.addTextClip)
+  // ---- monitor overlays (guides & grids suite) ----
+  const monitorSafe = useEditor((s) => s.monitorSafe)
+  const monitorThirds = useEditor((s) => s.monitorThirds)
+  const monitorRulers = useEditor((s) => s.monitorRulers)
+  const toggleMonitor = useEditor((s) => s.toggleMonitor)
 
   const rootRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -271,6 +280,78 @@ export function PreviewPane() {
           >
             <canvas ref={canvasRef} role="img" aria-label="Program preview — live composite of the timeline at the playhead" className="block h-full w-full" />
 
+            {/* ---- monitor overlays (guides & grids suite) — purely visual, never intercepts input ---- */}
+            {monitorSafe && (
+              <div data-nc-monitor-safe className="pointer-events-none absolute inset-0 z-10" aria-hidden>
+                {/* SMPTE ST 2046-1: action safe 93%, title safe 90% */}
+                <div className="absolute border border-dashed border-cyan-300/60" style={{ inset: '3.5%' }}>
+                  <span className="absolute -top-px left-0 -translate-y-full font-mono text-[8px] tracking-wider text-cyan-300/80">
+                    ACTION 93%
+                  </span>
+                </div>
+                <div className="absolute border border-cyan-200/40" style={{ inset: '5%' }}>
+                  <span className="absolute -bottom-px right-0 translate-y-full font-mono text-[8px] tracking-wider text-cyan-200/60">
+                    TITLE 90%
+                  </span>
+                </div>
+              </div>
+            )}
+            {monitorThirds && (
+              <div data-nc-monitor-thirds className="pointer-events-none absolute inset-0 z-10" aria-hidden>
+                {[33.333, 66.667].map((p) => (
+                  <div key={`v${p}`} className="absolute inset-y-0 w-px bg-white/35" style={{ left: `${p}%` }} />
+                ))}
+                {[33.333, 66.667].map((p) => (
+                  <div key={`h${p}`} className="absolute inset-x-0 h-px bg-white/35" style={{ top: `${p}%` }} />
+                ))}
+                {/* center crosshair */}
+                <div className="absolute left-1/2 top-1/2 h-4 w-px -translate-x-1/2 -translate-y-1/2 bg-white/50" />
+                <div className="absolute left-1/2 top-1/2 h-px w-4 -translate-x-1/2 -translate-y-1/2 bg-white/50" />
+              </div>
+            )}
+            {monitorRulers && (
+              <div data-nc-monitor-rulers className="pointer-events-none absolute inset-0 z-10" aria-hidden>
+                {/* top ruler — canvas px */}
+                <div className="absolute inset-x-0 top-0 h-4 border-b border-white/25 bg-black/45 backdrop-blur-[2px]">
+                  {Array.from({ length: 11 }, (_, i) => i / 10).map((p) => (
+                    <div
+                      key={p}
+                      className="absolute top-0 w-px bg-white/45"
+                      style={{ left: `${p * 100}%`, height: p % 0.5 === 0 ? '100%' : '45%' }}
+                    />
+                  ))}
+                  {[0, 0.25, 0.5, 0.75, 1].map((p) => (
+                    <span
+                      key={p}
+                      className="absolute top-0.5 ml-1 font-mono text-[8px] leading-none text-white/55"
+                      style={{ left: `${p * 100}%` }}
+                    >
+                      {Math.round(p * canvasWidth)}
+                    </span>
+                  ))}
+                </div>
+                {/* left ruler — canvas px */}
+                <div className="absolute inset-y-0 left-0 w-4 border-r border-white/25 bg-black/45 backdrop-blur-[2px]">
+                  {Array.from({ length: 11 }, (_, i) => i / 10).map((p) => (
+                    <div
+                      key={p}
+                      className="absolute left-0 h-px bg-white/45"
+                      style={{ top: `${p * 100}%`, width: p % 0.5 === 0 ? '100%' : '45%' }}
+                    />
+                  ))}
+                  {[0, 0.25, 0.5, 0.75, 1].map((p) => (
+                    <span
+                      key={p}
+                      className="absolute left-0.5 mt-0.5 origin-left font-mono text-[8px] leading-none text-white/55"
+                      style={{ top: `${p * 100}%` }}
+                    >
+                      {Math.round(p * canvasHeight)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Day 62 — live preview resolution badge (never lies about the scale) */}
             <div
               data-nc-preview-scale
@@ -372,8 +453,8 @@ export function PreviewPane() {
         </div>
       </div>
 
-      {/* ---------------- transport ---------------- */}
-      <div className="nc-glass flex h-14 shrink-0 items-center gap-2 border-t border-(--nc-line) px-3">
+      {/* ---------------- transport (scrollable on narrow screens so no control is silently clipped) ---------------- */}
+      <div className="nc-glass flex h-14 shrink-0 items-center gap-1.5 overflow-x-auto border-t border-(--nc-line) px-2 [scrollbar-width:none] sm:gap-2 sm:overflow-visible sm:px-3 [&::-webkit-scrollbar]:hidden">
         <Button
           variant="ghost"
           size="icon"
@@ -425,13 +506,55 @@ export function PreviewPane() {
           <SkipForward className="h-4 w-4" />
         </Button>
 
-        <div className="ml-1 flex items-baseline gap-1 font-mono text-xs tabular-nums">
+        <div className="ml-1 flex shrink-0 items-baseline gap-1 font-mono text-xs tabular-nums">
           <span className="text-foreground">{formatTimecode(currentTime, fps)}</span>
           <span className="text-muted-foreground">/</span>
-          <span className="text-muted-foreground">{formatTimecode(duration, fps)}</span>
+          <span className="text-muted-foreground max-sm:hidden">{formatTimecode(duration, fps)}</span>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {/* monitor overlays (guides & grids suite) */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-8 w-8 ${monitorSafe || monitorThirds || monitorRulers ? 'bg-cyan-500/20 text-cyan-300' : 'text-muted-foreground hover:text-foreground'}`}
+                title="Monitor overlays: safe margins, thirds grid, rulers"
+                aria-label="Monitor overlays menu"
+                data-nc-monitor-toggle
+              >
+                <Grid3x3 className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-56 p-2">
+              <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Monitor overlays
+              </p>
+              {([
+                { key: 'safe' as const, label: 'Safe margins', icon: Frame, on: monitorSafe, attr: 'safe' },
+                { key: 'thirds' as const, label: 'Thirds grid', icon: Grid3x3, on: monitorThirds, attr: 'thirds' },
+                { key: 'rulers' as const, label: 'Pixel rulers', icon: Ruler, on: monitorRulers, attr: 'rulers' },
+              ]).map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={item.on}
+                  data-nc-monitor-item={item.attr}
+                  onClick={() => toggleMonitor(item.key)}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium text-foreground transition-colors hover:bg-(--nc-panel-strong)"
+                >
+                  <item.icon className={`h-3.5 w-3.5 ${item.on ? 'text-cyan-300' : 'text-muted-foreground'}`} />
+                  <span className="flex-1">{item.label}</span>
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${item.on ? 'bg-cyan-300' : 'bg-muted-foreground/30'}`}
+                    aria-hidden
+                  />
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
           <Button
             variant="ghost"
             size="icon"
@@ -455,7 +578,7 @@ export function PreviewPane() {
             {volumeMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </Button>
           <Slider
-            className="w-20"
+            className="w-20 max-sm:hidden"
             min={0}
             max={1}
             step={0.01}
@@ -471,7 +594,7 @@ export function PreviewPane() {
               if (preset) setCanvasSize(preset.width, preset.height)
             }}
           >
-            <SelectTrigger size="sm" className="h-8 w-[110px] text-xs" title="Canvas format">
+            <SelectTrigger size="sm" className="h-8 w-[110px] text-xs max-sm:hidden" title="Canvas format">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

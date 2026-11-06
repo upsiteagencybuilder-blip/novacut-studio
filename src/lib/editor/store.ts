@@ -266,6 +266,18 @@ interface EditorStore {
   addBeatMarkersToTimeline: (stride?: number) => number
   toggleShowBeatMarkers: () => void
   setPanelTab: (tab: PanelTab) => void
+
+  /* ---------- preview monitor overlays (guides & grids suite) ---------- */
+  /** SMPTE action-safe (93%) + title-safe (90%) rectangles over the preview */
+  monitorSafe: boolean
+  /** rule-of-thirds grid + center crosshair over the preview */
+  monitorThirds: boolean
+  /** canvas-edge pixel rulers (top + left) over the preview */
+  monitorRulers: boolean
+  /** deep-link target — turn one overlay on (idempotent) */
+  setMonitor: (key: 'safe' | 'thirds' | 'rulers', on: boolean) => void
+  /** Monitor popover toggle */
+  toggleMonitor: (key: 'safe' | 'thirds' | 'rulers') => void
   /** which card group is open inside the AI panel (deep-link target) */
   aiSubTab: AiSubTab
   setAiSubTab: (tab: AiSubTab) => void
@@ -461,6 +473,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
   inPoint: null,
   outPoint: null,
   panelTab: 'media',
+  monitorSafe: false,
+  monitorThirds: false,
+  monitorRulers: false,
   aiSubTab: 'assistant',
   activeDialog: null,
   exportState: { phase: 'idle', progress: 0 },
@@ -2073,6 +2088,15 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
   toggleShowBeatMarkers: () => set((s) => ({ showBeatMarkers: !s.showBeatMarkers })),
   setPanelTab: (tab) => set({ panelTab: tab }),
+  setMonitor: (key, on) => set(key === 'safe' ? { monitorSafe: on } : key === 'thirds' ? { monitorThirds: on } : { monitorRulers: on }),
+  toggleMonitor: (key) =>
+    set((s) =>
+      key === 'safe'
+        ? { monitorSafe: !s.monitorSafe }
+        : key === 'thirds'
+          ? { monitorThirds: !s.monitorThirds }
+          : { monitorRulers: !s.monitorRulers },
+    ),
   setAiSubTab: (tab) => set({ aiSubTab: tab }),
   openDialog: (d) => set({ activeDialog: d }),
 

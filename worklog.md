@@ -2673,3 +2673,34 @@ ROADMAP-90 Day 90 — full regression across all categories, version tag 1.0.0, 
 - `/definitely-not-a-route` → 404 branded (dark bg rgb(7,7,13), aurora present, both CTAs). Mobile 390 no overflow.
 - `/s/bad-token-test` → branded not-exist card; transient dev-overlay "1 Issue" badge traced to Fast Refresh, gone on reload.
 - Editor golden path after restart: `/?action=demo` → 6 clips/3 tracks, play 1.2s→3.3s advance, pause; desktop + mobile zero console/page errors.
+
+## Post-v1.0.0 — "next step": Monitor Overlays suite (6 honest catalog flips, 3 new live tools)
+**Date:** post-release · **Task ID:** Next-1
+**Task:** with the 90-day roadmap complete, the highest-value next step was converting planned catalog entries into real shipped features under the Day-72 honesty protocol (real behavior + deep link + E2E proof).
+
+### Shipped: preview Monitor overlays (guides & grids suite)
+- **Store** (`store.ts`): `monitorSafe/monitorThirds/monitorRulers` + `setMonitor()` (deep-link target) + `toggleMonitor()` (UI).
+- **PreviewPane**: new Monitor popover (Grid3x3, in the transport bar) with three `menuitemcheckbox` rows; three `pointer-events-none` overlays on the stage:
+  - Safe margins — SMPTE ST 2046-1 action-safe 93% (dashed) + title-safe 90%, labelled.
+  - Thirds grid — rule-of-thirds lines + center crosshair.
+  - Pixel rulers — top+left canvas-edge rulers, ticks every 10%, px labels at 0/25/50/75/100% in project-resolution units.
+- **ToolActions** (`tools/types.ts`): `open-monitor-safe` / `open-monitor-thirds` / `open-monitor-rulers` + handler map in ProToolkitPanel (sets store + sonner toast).
+- **Mobile transport fix (pre-existing clip, now exposed by the extra button)**: transport bar was overflowing 390px (compare button clipped ~5px before this round). Now `overflow-x-auto` with hidden scrollbars as a safety net + `max-sm:hidden` on the volume slider, canvas-format select and duration suffix + tighter mobile gaps. Monitor button right edge: 395px → 318px (fully visible).
+
+### Catalog flips (planned → live, all honest)
+| Tool | Proof |
+| --- | --- |
+| Safe Margins Guide | new feature + deep link (strict proof: off → tool click → on + toast) |
+| Grid Overlays | new feature + deep link |
+| Rulers | new feature + deep link |
+| Toggle Track Output | already shipped (per-track eye + volume mute); card renders LIVE with where-it-lives desc |
+| Toggle Track Lock | already shipped (track-header lock); regression-tested via store `updateTrack(locked:true→true)` |
+| Unlink Audio/Video | already shipped ("Extract audio to track"); desc names the real entry point |
+
+Counts (auto-computed from catalog): **728 total · live 297→303 · planned 283→277**. Pro panel header verified in-browser: "303 live now", filter chips "Live · 303" / "Roadmap · 277".
+
+### E2E receipts
+- Desktop 1280×800: popover → three toggles → overlays render (screenshot: all three visible with px labels 320/640/960); deep-link from Pro wall fires toast + state; playback advance 0.5s→played; 0 console/page errors.
+- Mobile 390×844: no overflow, monitor button fully visible, safe-margins overlay renders, compact timecode; 0 console errors.
+- lint + tsc clean.
+- Honest note: false negative during verification (non-actionable live cards render as `div`, not `button`) — resolved by re-querying divs; all six cards confirmed with LIVE chips.
