@@ -5,10 +5,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Columns2,
+  Contrast,
+  Crosshair,
   Frame,
   Gauge,
   Grid3x3,
   Maximize,
+  Palette,
   Pause,
   Play,
   Ruler,
@@ -63,7 +66,17 @@ export function PreviewPane() {
   const monitorSafe = useEditor((s) => s.monitorSafe)
   const monitorThirds = useEditor((s) => s.monitorThirds)
   const monitorRulers = useEditor((s) => s.monitorRulers)
+  const monitorZebra = useEditor((s) => s.monitorZebra)
+  const zebraThreshold = useEditor((s) => s.zebraThreshold)
+  const monitorFalseColor = useEditor((s) => s.monitorFalseColor)
+  const monitorGuides = useEditor((s) => s.monitorGuides)
+  const guides = useEditor((s) => s.guides)
   const toggleMonitor = useEditor((s) => s.toggleMonitor)
+  const setZebraThreshold = useEditor((s) => s.setZebraThreshold)
+  const addGuide = useEditor((s) => s.addGuide)
+  const moveGuide = useEditor((s) => s.moveGuide)
+  const removeGuide = useEditor((s) => s.removeGuide)
+  const clearGuides = useEditor((s) => s.clearGuides)
 
   const rootRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -127,6 +140,172 @@ export function PreviewPane() {
     const v = clamp((clientX - r.left) / r.width, 0.02, 0.98)
     setSplit(v)
     getEngine().setCompareSplit(v)
+  }
+
+  /* -------- exposure overlays: zebra stripes + false color (post-v1.0.0 monitor suite) -------- */
+  const exposureRef = useRef<HTMLCanvasElement>(null)
+  const exposureActive = monitorZebra || monitorFalseColor
+  useEffect(() => {
+    if (!exposureActive) return
+    const SAMPLE = 192
+    const off = document.createElement('canvas')
+    const offCtx = off.getContext('2d', { willReadFrequently: true })
+    if (!offCtx) return
+    let raf = 0
+    let last = 0
+    const draw = (ts: number) => {
+      raf = requestAnimationFrame(draw)
+      if (ts - last < 80) return // ~12 fps — plenty for an exposure judge
+      last = ts
+      const canvas = exposureRef.current
+      const ctx = canvas?.getContext('2d')
+      if (!canvas || !ctx || !canvas.width || !canvas.height) return
+      const dims = getEngine().getSampleDims(SAMPLE)
+      const data = getEngine().sampleFrame(SAMPLE)
+      if (!dims || !data) return
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      const img = offCtx.createImageData(dims.w, dims.h)
+      const px = img.data
+      const n = dims.w * dims.h
+      for (let i = 0, p = 0; i < n; i++, p += 4) {
+        const r = data[p]
+        const g = data[p + 1]
+        const b = data[p + 2]
+        const luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+        if (monitorFalseColor) {
+          // selective bands keep the picture readable: clip / near-clip / skin / mid-grey / crushed
+          let band: readonly [number, number, number, number] | null = null
+          if (luma >= 0.97) band = [255, 48, 48, 200]
+          else if (luma >= 0.9) band = [255, 176, 0, 170]
+          else if (luma >= 0.55 && luma < 0.7) band = [255, 96, 170, 150]
+          else if (luma >= 0.4 && luma < 0.47) band = [0, 235, 96, 170]
+          else if (luma <= 0.04) band = [64, 96, 255, 190]
+          if (band) {
+            px[p] = band[0]
+            px[p + 1] = band[1]
+            px[p + 2] = band[2]
+            px[p + 3] = band[3]
+          }
+        }
+        if (monitorZebra && luma >= zebraThreshold) {
+          const x = i % dims.w
+          const y = (i / dims.w) | 0
+          if (((x + y) & 7) < 4) {
+            px[p] = 255
+            px[p + 1] = 255
+            px[p + 2] = 255
+            px[p + 3] = 210
+          }
+        }
+      }
+      off.width = dims.w
+      off.height = dims.h
+      offCtx.putImageData(img, 0, 0)
+      ctx.imageSmoothingEnabled = false
+      ctx.drawImage(off, 0, 0, canvas.width, canvas.height)
+    }
+    raf = requestAnimationFrame(draw)
+    return () => cancelAnimationFrame(raf)
+  }, [exposureActive, monitorFalseColor, monitorZebra, zebraThreshold])
+
+  /* -------- transport audio meter: 4× oversampled true peak + RMS + falling peak hold + clip lamp -------- */
+  const [meterPulse, setMeterPulse] = useState(false)
+  const rmsRef = useRef<HTMLDivElement>(null)
+  const peakRef = useRef<HTMLDivElement>(null)
+  const holdRef = useRef<HTMLDivElement>(null)
+  const clipRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const toPct = (v: number) => {
+      const db = 20 * Math.log10(Math.max(v, 1e-4))
+      return clamp((db + 48) / 48, 0, 1) * 100 // −48 dBFS..0 dBFS → 0..100%
+    }
+    let raf = 0
+    let last = 0
+    let hold = 0 // peak-hold, in %
+    let holdAt = 0
+    let clipUntil = 0
+    const tick = (ts: number) => {
+      raf = requestAnimationFrame(tick)
+      if (ts - last < 50) return // 20 fps
+      last = ts
+      const engine = getEngine()
+      const rms = engine.getMasterLevel()
+      // true peak: 4× oversample the master time-domain frame via linear interpolation
+      let peak = 0
+      const td = engine.getMasterTimeData()
+      if (td && td.length > 1) {
+        for (let i = 0; i < td.length - 1; i++) {
+          const a = td[i]
+          const b = td[i + 1]
+          const d = b - a
+          const m0 = Math.abs(a)
+          if (m0 > peak) peak = m0
+          const m1 = Math.abs(a + d * 0.25)
+          if (m1 > peak) peak = m1
+          const m2 = Math.abs(a + d * 0.5)
+          if (m2 > peak) peak = m2
+          const m3 = Math.abs(a + d * 0.75)
+          if (m3 > peak) peak = m3
+        }
+        const lastAbs = Math.abs(td[td.length - 1])
+        if (lastAbs > peak) peak = lastAbs
+      }
+      if (peak >= hold) {
+        hold = toPct(peak)
+        holdAt = ts
+      } else if (ts - holdAt > 900) {
+        hold = Math.max(toPct(peak), hold - ((ts - holdAt - 900) / 1000) * 25) // fall 25%/s after 0.9 s
+      }
+      if (peak >= 0.995) clipUntil = ts + 2000
+      if (rmsRef.current) rmsRef.current.style.height = `${toPct(rms)}%`
+      if (peakRef.current) peakRef.current.style.bottom = `${toPct(peak)}%`
+      if (holdRef.current) holdRef.current.style.bottom = `${hold}%`
+      if (clipRef.current) clipRef.current.style.opacity = ts < clipUntil ? '1' : '0'
+    }
+    raf = requestAnimationFrame(tick)
+    const onPulse = () => {
+      setMeterPulse(true)
+      window.setTimeout(() => setMeterPulse(false), 1600)
+    }
+    window.addEventListener('nc-pulse-transport-meter', onPulse)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('nc-pulse-transport-meter', onPulse)
+    }
+  }, [])
+
+  /* -------- draggable composition guides (post-v1.0.0 monitor suite) -------- */
+  const guideDragRef = useRef<{ axis: 'v' | 'h'; index: number; grab: number } | null>(null)
+  const beginGuideDrag = (axis: 'v' | 'h', index: number, e: React.PointerEvent<HTMLDivElement>) => {
+    const box = wrapperRef.current?.getBoundingClientRect()
+    if (!box) return
+    e.preventDefault()
+    e.stopPropagation()
+    const pos = axis === 'v' ? guides.v[index] : guides.h[index]
+    const grab =
+      axis === 'v' ? (e.clientX - box.left) / box.width - pos : (e.clientY - box.top) / box.height - pos
+    guideDragRef.current = { axis, index, grab }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      /* synthetic pointers (tests) have no capture target */
+    }
+  }
+  const moveGuideDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = guideDragRef.current
+    const box = wrapperRef.current?.getBoundingClientRect()
+    if (!d || !box) return
+    const pos =
+      d.axis === 'v' ? (e.clientX - box.left) / box.width - d.grab : (e.clientY - box.top) / box.height - d.grab
+    moveGuide(d.axis, d.index, pos)
+  }
+  const endGuideDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    guideDragRef.current = null
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* synthetic pointers */
+    }
   }
 
   // The ONLY component allowed to mount the engine bridge.
@@ -243,8 +422,8 @@ export function PreviewPane() {
   const handleStageDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const box = wrapperRef.current?.getBoundingClientRect()
     if (!box || box.width < 2 || box.height < 2) return
-    // ignore double-clicks that start on the selection overlay handles
-    if ((e.target as HTMLElement).closest('[data-nc-selection]')) return
+    // ignore double-clicks that start on the selection overlay handles or the guides
+    if ((e.target as HTMLElement).closest('[data-nc-selection], [data-nc-guide]')) return
     const x = Math.round((clamp(((e.clientX - box.left) / box.width) * 2 - 1, -1, 1)) * 1000) / 1000
     const y = Math.round((clamp(((e.clientY - box.top) / box.height) * 2 - 1, -1, 1)) * 1000) / 1000
     addTextClip(undefined, { x, y })
@@ -266,6 +445,8 @@ export function PreviewPane() {
   }
 
   const volumeMuted = masterMuted || masterVolume === 0
+  const anyMonitorOn =
+    monitorSafe || monitorThirds || monitorRulers || monitorZebra || monitorFalseColor || monitorGuides
 
   return (
     <div ref={rootRef} className="flex h-full min-w-0 flex-col">
@@ -349,6 +530,98 @@ export function PreviewPane() {
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* ---- exposure overlays: zebra stripes + false color — sampled live off the composited frame ---- */}
+            {exposureActive && (
+              <canvas
+                ref={exposureRef}
+                data-nc-monitor-exposure
+                width={fit.w || 640}
+                height={fit.h || 360}
+                className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+                aria-hidden
+              />
+            )}
+
+            {/* ---- draggable composition guides — amber, non-printing, session-scoped ---- */}
+            {monitorGuides && (
+              <div data-nc-monitor-guides className="pointer-events-none absolute inset-0 z-10">
+                {guides.v.map((pos, i) => (
+                  <div
+                    key={`gv${i}`}
+                    role="slider"
+                    tabIndex={0}
+                    data-nc-guide="v"
+                    aria-label={`Vertical guide ${i + 1}`}
+                    aria-valuemin={2}
+                    aria-valuemax={98}
+                    aria-valuenow={Math.round(pos * 100)}
+                    className="group pointer-events-auto absolute inset-y-0 w-5 -translate-x-1/2 cursor-ew-resize touch-none outline-none"
+                    style={{ left: `${pos * 100}%` }}
+                    onPointerDown={(e) => beginGuideDrag('v', i, e)}
+                    onPointerMove={moveGuideDrag}
+                    onPointerUp={endGuideDrag}
+                    onPointerCancel={endGuideDrag}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation()
+                      removeGuide('v', i)
+                    }}
+                    onKeyDown={(e) => {
+                      const step = e.shiftKey ? 0.05 : 0.01
+                      if (e.key === 'ArrowLeft') {
+                        e.preventDefault()
+                        moveGuide('v', i, pos - step)
+                      }
+                      if (e.key === 'ArrowRight') {
+                        e.preventDefault()
+                        moveGuide('v', i, pos + step)
+                      }
+                    }}
+                  >
+                    <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-amber-300/80 transition-colors group-hover:bg-amber-200 group-focus-visible:bg-amber-200" />
+                    <div className="absolute left-1/2 top-0 h-1.5 w-3 -translate-x-1/2 rounded-b bg-amber-300" />
+                    <div className="absolute bottom-0 left-1/2 h-1.5 w-3 -translate-x-1/2 rounded-t bg-amber-300" />
+                  </div>
+                ))}
+                {guides.h.map((pos, i) => (
+                  <div
+                    key={`gh${i}`}
+                    role="slider"
+                    tabIndex={0}
+                    data-nc-guide="h"
+                    aria-label={`Horizontal guide ${i + 1}`}
+                    aria-valuemin={2}
+                    aria-valuemax={98}
+                    aria-valuenow={Math.round(pos * 100)}
+                    className="group pointer-events-auto absolute inset-x-0 h-5 -translate-y-1/2 cursor-ns-resize touch-none outline-none"
+                    style={{ top: `${pos * 100}%` }}
+                    onPointerDown={(e) => beginGuideDrag('h', i, e)}
+                    onPointerMove={moveGuideDrag}
+                    onPointerUp={endGuideDrag}
+                    onPointerCancel={endGuideDrag}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation()
+                      removeGuide('h', i)
+                    }}
+                    onKeyDown={(e) => {
+                      const step = e.shiftKey ? 0.05 : 0.01
+                      if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        moveGuide('h', i, pos - step)
+                      }
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        moveGuide('h', i, pos + step)
+                      }
+                    }}
+                  >
+                    <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-amber-300/80 transition-colors group-hover:bg-amber-200 group-focus-visible:bg-amber-200" />
+                    <div className="absolute left-0 top-1/2 h-3 w-1.5 -translate-y-1/2 rounded-r bg-amber-300" />
+                    <div className="absolute right-0 top-1/2 h-3 w-1.5 -translate-y-1/2 rounded-l bg-amber-300" />
+                  </div>
+                ))}
               </div>
             )}
 
@@ -513,21 +786,21 @@ export function PreviewPane() {
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-          {/* monitor overlays (guides & grids suite) */}
+          {/* monitor overlays (guides, grids & exposure suite) */}
           <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 ${monitorSafe || monitorThirds || monitorRulers ? 'bg-cyan-500/20 text-cyan-300' : 'text-muted-foreground hover:text-foreground'}`}
-                title="Monitor overlays: safe margins, thirds grid, rulers"
+                className={`h-8 w-8 ${anyMonitorOn ? 'bg-cyan-500/20 text-cyan-300' : 'text-muted-foreground hover:text-foreground'}`}
+                title="Monitor overlays: safe margins, thirds, rulers, zebra, false color, guides"
                 aria-label="Monitor overlays menu"
                 data-nc-monitor-toggle
               >
                 <Grid3x3 className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-56 p-2">
+            <PopoverContent align="end" className="w-64 p-2">
               <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Monitor overlays
               </p>
@@ -535,6 +808,9 @@ export function PreviewPane() {
                 { key: 'safe' as const, label: 'Safe margins', icon: Frame, on: monitorSafe, attr: 'safe' },
                 { key: 'thirds' as const, label: 'Thirds grid', icon: Grid3x3, on: monitorThirds, attr: 'thirds' },
                 { key: 'rulers' as const, label: 'Pixel rulers', icon: Ruler, on: monitorRulers, attr: 'rulers' },
+                { key: 'zebra' as const, label: 'Zebra stripes', icon: Contrast, on: monitorZebra, attr: 'zebra' },
+                { key: 'falsecolor' as const, label: 'False color', icon: Palette, on: monitorFalseColor, attr: 'falsecolor' },
+                { key: 'guides' as const, label: 'Drag guides', icon: Crosshair, on: monitorGuides, attr: 'guides' },
               ]).map((item) => (
                 <button
                   key={item.key}
@@ -553,6 +829,56 @@ export function PreviewPane() {
                   />
                 </button>
               ))}
+              {monitorZebra && (
+                <div className="mt-1 border-t border-(--nc-line) px-2 pb-1 pt-2" data-nc-zebra-threshold>
+                  <div className="flex items-center justify-between text-[10px] font-medium text-muted-foreground">
+                    <span>Zebra threshold</span>
+                    <span className="font-mono text-cyan-300">{Math.round(zebraThreshold * 100)} IRE</span>
+                  </div>
+                  <Slider
+                    className="mt-1.5"
+                    min={50}
+                    max={100}
+                    step={1}
+                    value={[Math.round(zebraThreshold * 100)]}
+                    onValueChange={(v) => setZebraThreshold((v[0] ?? 100) / 100)}
+                    aria-label="Zebra threshold"
+                  />
+                </div>
+              )}
+              {monitorGuides && (
+                <div className="mt-1 border-t border-(--nc-line) px-2 pb-1 pt-2" data-nc-guides-controls>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      data-nc-guides-add-v
+                      onClick={() => addGuide('v', 0.5)}
+                      className="flex-1 cursor-pointer rounded-md border border-(--nc-line) px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:bg-(--nc-panel-strong)"
+                    >
+                      + Vertical
+                    </button>
+                    <button
+                      type="button"
+                      data-nc-guides-add-h
+                      onClick={() => addGuide('h', 0.5)}
+                      className="flex-1 cursor-pointer rounded-md border border-(--nc-line) px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:bg-(--nc-panel-strong)"
+                    >
+                      + Horizontal
+                    </button>
+                    <button
+                      type="button"
+                      data-nc-guides-clear
+                      onClick={clearGuides}
+                      className="flex-1 cursor-pointer rounded-md border border-transparent px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:text-red-300"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">
+                    Drag lines on the canvas · double-click removes · arrow keys nudge
+                  </p>
+                </div>
+              )}
             </PopoverContent>
           </Popover>
           <Button
@@ -577,6 +903,31 @@ export function PreviewPane() {
           >
             {volumeMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </Button>
+
+          {/* true-peak master meter (always-on; pulse highlights via Pro-wall deep link) */}
+          <div
+            data-nc-audio-meter
+            role="img"
+            aria-label="Master audio meter — 4× oversampled true peak, RMS level, falling peak hold and clip lamp"
+            title="Master meter: white tick = 4× oversampled true peak, bar = RMS, amber = falling peak hold, red lamp = clip"
+            className={`relative h-6 w-3 shrink-0 max-sm:hidden ${meterPulse ? 'rounded-sm ring-2 ring-amber-300' : ''}`}
+          >
+            <div className="absolute inset-0 overflow-hidden rounded-sm border border-(--nc-line) bg-black/55">
+              <div ref={rmsRef} className="absolute inset-x-0 bottom-0" style={{ height: '0%' }}>
+                <div
+                  className="absolute inset-x-0 bottom-0 h-6"
+                  style={{ background: 'linear-gradient(to top, #34d399 0%, #34d399 60%, #fbbf24 85%, #f87171 100%)' }}
+                />
+              </div>
+              <div ref={peakRef} className="absolute inset-x-0 h-px bg-white/90" style={{ bottom: '0%' }} />
+              <div ref={holdRef} className="absolute inset-x-0 h-px bg-amber-300/80" style={{ bottom: '0%' }} />
+            </div>
+            <div
+              ref={clipRef}
+              className="absolute -top-1 left-1/2 size-1 -translate-x-1/2 rounded-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.9)]"
+              style={{ opacity: 0 }}
+            />
+          </div>
           <Slider
             className="w-20 max-sm:hidden"
             min={0}

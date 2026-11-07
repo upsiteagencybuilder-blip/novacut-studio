@@ -599,6 +599,16 @@ class PreviewEngine {
     return this.analyserFloat
   }
 
+  /** Dimensions of the buffer `sampleFrame(maxSize)` returns (null when the canvas is not mounted yet) */
+  getSampleDims(maxSize = 96): { w: number; h: number } | null {
+    if (!this.canvas) return null
+    const scale = Math.min(1, maxSize / Math.max(this.canvas.width, this.canvas.height))
+    return {
+      w: Math.max(1, Math.round(this.canvas.width * scale)),
+      h: Math.max(1, Math.round(this.canvas.height * scale)),
+    }
+  }
+
   /** Sample the current preview frame at a small resolution (for scopes) */
   sampleFrame(maxSize = 96): Uint8ClampedArray | null {
     if (!this.canvas) return null

@@ -2704,3 +2704,26 @@ Counts (auto-computed from catalog): **728 total · live 297→303 · planned 28
 - Mobile 390×844: no overflow, monitor button fully visible, safe-margins overlay renders, compact timecode; 0 console errors.
 - lint + tsc clean.
 - Honest note: false negative during verification (non-actionable live cards render as `div`, not `button`) — resolved by re-querying divs; all six cards confirmed with LIVE chips.
+
+## Post-v1.0.0 — next batch: exposure + guides + meter (4 honest catalog flips)
+**Date:** post-release · **Task ID:** Next-2
+**Task:** user nominated the next batch under the same protocol — zebra/false-color overlay, draggable guides, audio meter.
+
+### Shipped: preview Monitor suite round 2 (exposure & composition) + transport meter
+- **Store** (`store.ts`): `monitorZebra` + `zebraThreshold` (0.5..1, default 100 IRE), `monitorFalseColor`, `monitorGuides` + `guides {v[],h[]}` (canvas fractions, session-scoped), `setZebraThreshold`, `addGuide/moveGuide/removeGuide/clearGuides`; `setMonitor`/`toggleMonitor` key union extended to 6 — guides auto-seed 1 vertical + 1 horizontal at 1/3 on first enable.
+- **Engine**: new `getSampleDims(maxSize)` mirroring `sampleFrame` math so overlay code knows the sample buffer's exact w×h.
+- **PreviewPane**:
+  - Exposure overlay canvas (`data-nc-monitor-exposure`, pointer-events-none): single ~12 fps rAF loop samples the composited frame at 192px; false color paints selective bands (≥97% clip red, ≥90% near-clip amber, 55–70% skin pink, 40–47% mid-grey green, ≤4% crushed blue) so the picture stays readable; zebra paints diagonal `((x+y)&7)<4` stripes where luma ≥ threshold; nearest-neighbor upscale.
+  - Draggable guides (`data-nc-monitor-guides`): amber lines with end caps, `role="slider"` + aria-valuenow, grab-offset-corrected pointer drag (clamped 2–98%), arrow-key nudge ±1% (Shift 5%), double-click removes (stage double-click-to-text guard extended to guides), popover buttons +V/+H/Clear.
+  - Monitor popover: 6 items (safe/thirds/rulers/zebra/falsecolor/guides) + zebra threshold slider (50–100 IRE, shown when on) + guides controls/hints; trigger button lights when any overlay is on.
+  - Transport true-peak meter (`data-nc-audio-meter`, max-sm:hidden to preserve the mobile width fix): 20 fps direct-DOM updates (no re-renders) — RMS gradient bar (−48..0 dBFS), white 4× linear-interpolation oversampled true-peak tick, amber falling peak hold (0.9 s hold, 25%/s fall), red clip lamp (≥99.5% arms 2 s).
+- **ToolActions** (`types.ts`): `open-monitor-zebra` / `open-monitor-falsecolor` / `open-monitor-guides` / `open-transport-meter` + handler map (meter pulse = `nc-pulse-transport-meter` window event → 1.6 s amber ring around the meter + toast).
+- **Catalog flips (planned → live, all honest)**: Zebra Strips Overlay, False Color Overlay (color / Scopes & monitoring), Guides (timeline / Markers & navigation), True Peak Meter (sound / Meters & analysis) — each desc names its real entry point and all four deep-link to live behavior. Counts auto: **728 total · live 303→307 · planned 277→273**.
+
+### E2E receipts
+- Desktop 1280×800: popover 6 items; zebra honest-behavior proof — 0 opaque px @100 IRE (demo frame has no clipped highlights) → 39,403 px @50 IRE after threshold change; false color bands confirmed by pixel census (green 36,139 / pink 16,708 / blue 11,491 + zebra 39,403); guides seeded 1v+1h, synthetic pointer drag 0.3333→0.5294 (exact +120 px on 612 px canvas), ArrowLeft nudge 0.5→0.49, dblclick removed, +V/+H/Clear OK; meter live under real (trusted) click playback: RMS 60.77%, peak tick 61.48%, hold 61.48% (eval-driven play has no user activation → AudioContext suspended → honest 0%, noted).
+- Deep links (strict): zebra false→true + toast + canvas mounted; falsecolor false→true; guides idempotent + seed path proven via off→on; True Peak card → pulse ring on the meter.
+- Pro wall: header "728 tools · 307 live now"; chips All·728 / Live·307 / Roadmap·273.
+- Mobile 390×844: meter hidden, monitor button right edge 318 px (no regression), no h-scroll, 6 popover items, h-guide drag 0.333→0.632.
+- Zero console/page errors; transient dev-tools "1 Issue" badge during live edits confirmed gone after hard reload (Fast Refresh artifact).
+- lint + tsc clean.

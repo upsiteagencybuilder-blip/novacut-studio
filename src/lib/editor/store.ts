@@ -274,10 +274,30 @@ interface EditorStore {
   monitorThirds: boolean
   /** canvas-edge pixel rulers (top + left) over the preview */
   monitorRulers: boolean
+  /** zebra stripes painted where luma crosses the threshold (exposure tool) */
+  monitorZebra: boolean
+  /** zebra threshold as luma fraction 0.5..1 (1 = 100 IRE clip check) */
+  zebraThreshold: number
+  /** false-color exposure bands painted over the preview (exposure tool) */
+  monitorFalseColor: boolean
+  /** draggable non-printing composition guides over the preview */
+  monitorGuides: boolean
+  /** guide positions as canvas fractions (0..1) — session-scoped, non-printing */
+  guides: { v: number[]; h: number[] }
   /** deep-link target — turn one overlay on (idempotent) */
-  setMonitor: (key: 'safe' | 'thirds' | 'rulers', on: boolean) => void
+  setMonitor: (key: 'safe' | 'thirds' | 'rulers' | 'zebra' | 'falsecolor' | 'guides', on: boolean) => void
   /** Monitor popover toggle */
-  toggleMonitor: (key: 'safe' | 'thirds' | 'rulers') => void
+  toggleMonitor: (key: 'safe' | 'thirds' | 'rulers' | 'zebra' | 'falsecolor' | 'guides') => void
+  /** zebra threshold (luma fraction, clamped 0.5..1) */
+  setZebraThreshold: (v: number) => void
+  /** append a composition guide (pos = canvas fraction 0..1, default center) */
+  addGuide: (axis: 'v' | 'h', pos?: number) => void
+  /** drag target — reposition one guide (clamped 0.02..0.98) */
+  moveGuide: (axis: 'v' | 'h', index: number, pos: number) => void
+  /** double-click target — remove one guide */
+  removeGuide: (axis: 'v' | 'h', index: number) => void
+  /** popover target — remove all guides */
+  clearGuides: () => void
   /** which card group is open inside the AI panel (deep-link target) */
   aiSubTab: AiSubTab
   setAiSubTab: (tab: AiSubTab) => void
@@ -476,6 +496,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
   monitorSafe: false,
   monitorThirds: false,
   monitorRulers: false,
+  monitorZebra: false,
+  zebraThreshold: 1,
+  monitorFalseColor: false,
+  monitorGuides: false,
+  guides: { v: [], h: [] },
   aiSubTab: 'assistant',
   activeDialog: null,
   exportState: { phase: 'idle', progress: 0 },
@@ -2088,15 +2113,53 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
   toggleShowBeatMarkers: () => set((s) => ({ showBeatMarkers: !s.showBeatMarkers })),
   setPanelTab: (tab) => set({ panelTab: tab }),
-  setMonitor: (key, on) => set(key === 'safe' ? { monitorSafe: on } : key === 'thirds' ? { monitorThirds: on } : { monitorRulers: on }),
-  toggleMonitor: (key) =>
-    set((s) =>
-      key === 'safe'
-        ? { monitorSafe: !s.monitorSafe }
-        : key === 'thirds'
-          ? { monitorThirds: !s.monitorThirds }
-          : { monitorRulers: !s.monitorRulers },
+  setMonitor: (key, on) =>
+    set(
+      key === 'safe' ? { monitorSafe: on }
+      : key === 'thirds' ? { monitorThirds: on }
+      : key === 'rulers' ? { monitorRulers: on }
+      : key === 'zebra' ? { monitorZebra: on }
+      : key === 'falsecolor' ? { monitorFalseColor: on }
+      : // guides deep link — seed one vertical + one horizontal on first enable
+        on && !useEditor.getState().monitorGuides && useEditor.getState().guides.v.length === 0 && useEditor.getState().guides.h.length === 0
+        ? { monitorGuides: true, guides: { v: [1 / 3], h: [1 / 3] } }
+        : { monitorGuides: on },
     ),
+  toggleMonitor: (key) =>
+    set((s) => {
+      if (key === 'safe') return { monitorSafe: !s.monitorSafe }
+      if (key === 'thirds') return { monitorThirds: !s.monitorThirds }
+      if (key === 'rulers') return { monitorRulers: !s.monitorRulers }
+      if (key === 'zebra') return { monitorZebra: !s.monitorZebra }
+      if (key === 'falsecolor') return { monitorFalseColor: !s.monitorFalseColor }
+      // guides — seed one vertical + one horizontal on first enable so the tool is visible immediately
+      if (s.guides.v.length === 0 && s.guides.h.length === 0)
+        return { monitorGuides: !s.monitorGuides, guides: { v: [1 / 3], h: [1 / 3] } }
+      return { monitorGuides: !s.monitorGuides }
+    }),
+  setZebraThreshold: (v) => set({ zebraThreshold: clamp(v, 0.5, 1) }),
+  addGuide: (axis, pos) =>
+    set((s) => ({
+      guides:
+        axis === 'v'
+          ? { ...s.guides, v: [...s.guides.v, clamp(pos ?? 0.5, 0.02, 0.98)] }
+          : { ...s.guides, h: [...s.guides.h, clamp(pos ?? 0.5, 0.02, 0.98)] },
+    })),
+  moveGuide: (axis, index, pos) =>
+    set((s) => ({
+      guides:
+        axis === 'v'
+          ? { ...s.guides, v: s.guides.v.map((p, i) => (i === index ? clamp(pos, 0.02, 0.98) : p)) }
+          : { ...s.guides, h: s.guides.h.map((p, i) => (i === index ? clamp(pos, 0.02, 0.98) : p)) },
+    })),
+  removeGuide: (axis, index) =>
+    set((s) => ({
+      guides:
+        axis === 'v'
+          ? { ...s.guides, v: s.guides.v.filter((_, i) => i !== index) }
+          : { ...s.guides, h: s.guides.h.filter((_, i) => i !== index) },
+    })),
+  clearGuides: () => set({ guides: { v: [], h: [] } }),
   setAiSubTab: (tab) => set({ aiSubTab: tab }),
   openDialog: (d) => set({ activeDialog: d }),
 

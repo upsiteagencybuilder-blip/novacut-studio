@@ -80,8 +80,8 @@ export const COLOR_TOOLS: ProTool[] = [
   { id: 'color-parade-monitor', name: 'Parade Monitor (RGB)', section: 'color', group: 'Scopes & monitoring', status: 'planned', desc: 'Side-by-side RGB waveforms for channel balancing' },
   { id: 'color-histogram', name: 'Histogram', section: 'color', group: 'Scopes & monitoring', status: 'live', desc: 'Live RGB histogram of the playhead frame in clip properties', action: 'open-properties-scopes' },
   { id: 'color-cie-chromaticity-diagram', name: 'CIE Chromaticity Diagram', section: 'color', group: 'Scopes & monitoring', status: 'planned', desc: 'Visualize gamut coverage on the CIE chromaticity plane' },
-  { id: 'color-false-color-overlay', name: 'False Color Overlay', section: 'color', group: 'Scopes & monitoring', status: 'planned', desc: 'Paint exposure bands as colors over the monitor' },
-  { id: 'color-zebra-strips-overlay', name: 'Zebra Strips Overlay', section: 'color', group: 'Scopes & monitoring', status: 'planned', desc: 'Stripe the image wherever luma crosses a threshold' },
+  { id: 'color-false-color-overlay', name: 'False Color Overlay', section: 'color', group: 'Scopes & monitoring', status: 'live', desc: 'Monitor menu paints exposure bands over the preview — clip red, near-clip amber, skin pink, mid-grey green, crushed blue', action: 'open-monitor-falsecolor' },
+  { id: 'color-zebra-strips-overlay', name: 'Zebra Strips Overlay', section: 'color', group: 'Scopes & monitoring', status: 'live', desc: 'Monitor menu stripes every pixel whose luma crosses the threshold — 50–100 IRE slider, sampled live off the composited frame', action: 'open-monitor-zebra' },
   { id: 'color-skin-tone-indicator', name: 'Skin Tone Indicator Line', section: 'color', group: 'Scopes & monitoring', status: 'planned', desc: 'Vectorscope guide line for healthy skin tones' },
   { id: 'color-broadcast-safe-filter', name: 'Broadcast Safe Filter', section: 'color', group: 'Scopes & monitoring', status: 'planned', desc: 'Clamp luma and chroma inside legal broadcast ranges' },
 ]

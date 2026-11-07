@@ -50,6 +50,10 @@ export type ToolAction =
   | 'open-monitor-safe'
   | 'open-monitor-thirds'
   | 'open-monitor-rulers'
+  | 'open-monitor-zebra'
+  | 'open-monitor-falsecolor'
+  | 'open-monitor-guides'
+  | 'open-transport-meter'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

@@ -151,6 +151,22 @@ function useToolAction() {
         useEditor.getState().setMonitor('rulers', true)
         toast('Pixel rulers on — canvas-edge rulers in project pixels')
       },
+      'open-monitor-zebra': () => {
+        useEditor.getState().setMonitor('zebra', true)
+        toast('Zebra stripes on — threshold adjustable in the Monitor menu')
+      },
+      'open-monitor-falsecolor': () => {
+        useEditor.getState().setMonitor('falsecolor', true)
+        toast('False color on — exposure bands painted over the preview')
+      },
+      'open-monitor-guides': () => {
+        useEditor.getState().setMonitor('guides', true)
+        toast('Guides on — drag the amber lines, double-click removes one')
+      },
+      'open-transport-meter': () => {
+        window.dispatchEvent(new CustomEvent('nc-pulse-transport-meter'))
+        toast('True-peak meter is live in the transport, beside the volume control')
+      },
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])
