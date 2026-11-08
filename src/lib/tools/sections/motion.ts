@@ -24,7 +24,7 @@ export const MOTION_TOOLS: ProTool[] = [
   { id: 'motion-paragraph-formatting-panel', name: 'Paragraph Formatting Panel', section: 'motion', group: 'Typography controls', status: 'planned', desc: 'Dedicated paragraph panel with indents and justification' },
   { id: 'motion-character-formatting-panel', name: 'Character Formatting Panel', section: 'motion', group: 'Typography controls', status: 'planned', desc: 'Full character sheet beyond the current styling sliders' },
   { id: 'motion-glyphs-panel', name: 'Glyphs Panel', section: 'motion', group: 'Typography controls', status: 'planned', desc: 'Browse and insert every glyph a font provides' },
-  { id: 'motion-text-path-tool', name: 'Text Path Tool', section: 'motion', group: 'Typography controls', status: 'planned', desc: 'Flow type along a drawn bezier path' },
+  { id: 'motion-text-path-tool', name: 'Text Path Tool', section: 'motion', group: 'Typography controls', status: 'live', desc: 'Curve slider bends type along a live arc — −100 sags, +100 crowns — with per-character rotation, gradient-aware; drawn bezier paths stay on the roadmap', action: 'open-properties-text-style' },
 
   // -------- Text styling --------
   { id: 'motion-faux-bold-toggle', name: 'Faux Bold Toggle', section: 'motion', group: 'Text styling', status: 'live', desc: 'Bold toggle synthesizes a heavier weight even for fonts without one' },
@@ -39,6 +39,7 @@ export const MOTION_TOOLS: ProTool[] = [
   { id: 'motion-text-stroke-color-picker', name: 'Text Stroke Color Picker', section: 'motion', group: 'Text styling', status: 'live', desc: 'Stroke color picker pairs with the stroke width slider' },
   { id: 'motion-stroke-width-slider', name: 'Stroke Width Slider', section: 'motion', group: 'Text styling', status: 'live', desc: 'Stroke width slider outlines characters in any color', action: 'open-text' },
   { id: 'motion-text-background-toggle', name: 'Text Background Toggle', section: 'motion', group: 'Text styling', status: 'live', desc: 'Background toggle and color chip pad the text block' },
+  { id: 'motion-gradient-text-fill', name: 'Gradient Text Fill', section: 'motion', group: 'Text styling', status: 'live', desc: 'Two-stop linear gradient fill with angle slider and six preset swatches paints title text — gradient follows the curve on bent type', action: 'open-properties-text-style' },
   { id: 'motion-text-shadow-toggle', name: 'Text Shadow Toggle', section: 'motion', group: 'Text styling', status: 'live', desc: 'Shadow toggle enables the drop shadow with blur control' },
   { id: 'motion-shadow-opacity-slider', name: 'Shadow Opacity Slider', section: 'motion', group: 'Text styling', status: 'live', desc: 'Shadow opacity slider dials shadow strength separately from its color' },
   { id: 'motion-shadow-angle-wheel', name: 'Shadow Angle Wheel', section: 'motion', group: 'Text styling', status: 'live', desc: 'Shadow angle dial aims the drop shadow around the text block' },

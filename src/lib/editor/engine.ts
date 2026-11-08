@@ -94,6 +94,37 @@ function elasticOut(p: number): number {
   return Math.pow(2, -10 * p) * Math.sin((p * 10 - 0.75) * c4) + 1
 }
 
+/* ---------------- text fill helpers (gradient + curve, post-v1.0.0 typography) ---------------- */
+
+/** Parse a css color into channels for gradient sampling (hex / rgb / rgba). */
+function parseFillColor(c: string): [number, number, number, number] {
+  const s = c.trim()
+  if (s.startsWith('#')) {
+    let h = s.slice(1)
+    if (h.length === 3 || h.length === 4) h = h.replace(/./g, (ch) => ch + ch)
+    const n = parseInt(h.slice(0, 6), 16)
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 1]
+  }
+  const m = s.match(/rgba?\(([^)]+)\)/)
+  if (m) {
+    const parts = m[1].split(',').map((v) => parseFloat(v))
+    return [parts[0] ?? 255, parts[1] ?? 255, parts[2] ?? 255, parts[3] ?? 1]
+  }
+  return [255, 255, 255, 1]
+}
+
+/** Two-stop color lerp — samples a linear gradient at projection t in [0,1]. */
+function sampleGradientStop(from: string, to: string, t: number): string {
+  const a = parseFillColor(from)
+  const b = parseFillColor(to)
+  const k = clamp(t, 0, 1)
+  const r = Math.round(a[0] + (b[0] - a[0]) * k)
+  const g = Math.round(a[1] + (b[1] - a[1]) * k)
+  const bl = Math.round(a[2] + (b[2] - a[2]) * k)
+  const al = a[3] + (b[3] - a[3]) * k
+  return al >= 1 ? `rgb(${r},${g},${bl})` : `rgba(${r},${g},${bl},${Math.round(al * 100) / 100})`
+}
+
 /* ---------------- deterministic text loop curves ---------------- */
 
 interface GlitchSlice {
@@ -2232,6 +2263,27 @@ class PreviewEngine {
     for (const line of lines) maxW = Math.max(maxW, ctx.measureText(line).width)
     maxW = Math.max(maxW, style.fontSize * 0.5)
 
+    // gradient fill — one linear gradient spanning the whole block, angle-aware
+    const grad = style.gradient
+    const gradientFill = grad
+      ? (() => {
+          const rad = ((grad.angle ?? 0) * Math.PI) / 180
+          const half = Math.max(1, Math.hypot(maxW, totalH) / 2)
+          const dx = Math.cos(rad) * half
+          const dy = Math.sin(rad) * half
+          const g = ctx.createLinearGradient(-dx, -dy, dx, dy)
+          g.addColorStop(0, grad.from)
+          g.addColorStop(1, grad.to)
+          return g
+        })()
+      : null
+    const curveBend = clamp(style.curve ?? 0, -100, 100)
+    // per-char gradient sampling params for the curved path (projected onto the gradient axis)
+    const gradFrom = grad?.from ?? style.color
+    const gradTo = grad?.to ?? style.color
+    const gradRad = ((grad?.angle ?? 0) * Math.PI) / 180
+    const gradHalf = Math.max(1, Math.hypot(maxW, totalH) / 2)
+
     // roll / crawl — full-clip title scrolls sized off the wrapped text block
     if (style.animation === 'roll' || style.animation === 'crawl') {
       const span = style.animation === 'roll' ? totalH + H : maxW + W
@@ -2310,14 +2362,66 @@ class PreviewEngine {
           ctx.strokeStyle = style.strokeColor
           ctx.strokeText(line, x, y)
         }
-        ctx.fillStyle = fillOverride ?? style.color
+        ctx.fillStyle = fillOverride ?? gradientFill ?? style.color
         ctx.fillText(line, x, y)
       }
     }
-    paintLines(0)
+    if (curveBend !== 0) {
+      // curved flow — per-character placement along a circular arc, per line
+      const track = supportsLetterSpacing ? style.letterSpacing : 0
+      const prevLS = supportsLetterSpacing ? ctxAny.letterSpacing : ''
+      if (supportsLetterSpacing) ctxAny.letterSpacing = '0px'
+      const prevAlign = ctx.textAlign
+      ctx.textAlign = 'center'
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        if (!line) continue
+        const yLine = -totalH / 2 + lineH * (i + 0.5)
+        const chars = [...line]
+        const widths = chars.map((ch) => ctx.measureText(ch).width)
+        const totalW = widths.reduce((a, b) => a + b, 0) + track * Math.max(0, chars.length - 1)
+        if (totalW <= 0) continue
+        const span = (Math.abs(curveBend) / 100) * Math.PI // up to 180°
+        const R = Math.max(totalW / span, style.fontSize * 0.6, 1)
+        const crown = curveBend > 0
+        let acc = 0
+        for (let c = 0; c < chars.length; c++) {
+          const w = widths[c] ?? 0
+          const midDist = acc + w / 2 - totalW / 2
+          const phi = midDist / R
+          const x = Math.sin(phi) * R
+          const arcY = R * (1 - Math.cos(phi))
+          const y = yLine + (crown ? arcY : -arcY)
+          ctx.save()
+          ctx.translate(x, y)
+          ctx.rotate(crown ? phi : -phi)
+          if (style.strokeWidth > 0) {
+            ctx.lineJoin = 'round'
+            ctx.lineWidth = style.strokeWidth
+            ctx.strokeStyle = style.strokeColor
+            ctx.strokeText(chars[c] ?? '', 0, 0)
+          }
+          // gradient on a curve: sample the block gradient at the char center
+          if (gradientFill) {
+            const gx = (x * Math.cos(gradRad) + y * Math.sin(gradRad)) / gradHalf
+            ctx.fillStyle = sampleGradientStop(gradFrom, gradTo, (gx + 1) / 2)
+          } else {
+            ctx.fillStyle = style.color
+          }
+          ctx.fillText(chars[c] ?? '', 0, 0)
+          ctx.restore()
+          acc += w + track
+        }
+      }
+      ctx.textAlign = prevAlign
+      if (supportsLetterSpacing) ctxAny.letterSpacing = prevLS
+    } else {
+      paintLines(0)
+    }
 
     // underline / strikethrough — drawn per line, mirroring paintLines anchors
-    if (style.underline || style.strike) {
+    // (skipped on curved flow — a straight rule under an arc reads as a bug)
+    if ((style.underline || style.strike) && curveBend === 0) {
       const lw = Math.max(1, style.fontSize * 0.055)
       ctx.save()
       ctx.shadowBlur = 0
@@ -2345,8 +2449,8 @@ class PreviewEngine {
     }
 
     // glitchLoop: during a deterministic window, redraw thin horizontal slices
-    // with an rgb split (two colored passes offset ±dx)
-    if (glitch && glitch.active) {
+    // with an rgb split (two colored passes offset ±dx) — flat flow only
+    if (glitch && glitch.active && curveBend === 0) {
       for (const s of glitch.slices) {
         const sliceY = -totalH / 2 + s.y * totalH * 0.92
         const sliceH = Math.max(3, style.fontSize * s.h)
@@ -2476,8 +2580,17 @@ export function estimateClipRect(clip: Clip, project: Project, mediaMap: Map<str
   if (clip.kind === 'text' && clip.textStyle) {
     const lines = clip.textStyle.content.split('\n')
     const w = Math.min(W * 0.9, Math.max(...lines.map((l) => l.length)) * clip.textStyle.fontSize * 0.55)
-    const h = lines.length * clip.textStyle.fontSize * clip.textStyle.lineHeight
-    return { x: W / 2 + clip.transform.x * W, y: H / 2 + clip.transform.y * H, w, h, rotation: clip.transform.rotation }
+    let h = lines.length * clip.textStyle.fontSize * clip.textStyle.lineHeight
+    let y = H / 2 + clip.transform.y * H
+    // curved flow bulges the block — inflate the selection bounds along the bulge
+    const curve = clip.textStyle.curve ?? 0
+    if (curve) {
+      const span = (Math.min(100, Math.abs(curve)) / 100) * Math.PI
+      const extra = span > 0.01 ? (w / span) * (1 - Math.cos(span / 2)) : 0
+      h += extra
+      y += curve > 0 ? -extra / 2 : extra / 2
+    }
+    return { x: W / 2 + clip.transform.x * W, y, w, h, rotation: clip.transform.rotation }
   }
   if (clip.kind === 'sticker' && clip.sticker) {
     const s = clip.sticker.size * 1.1

@@ -71,6 +71,7 @@ import {
   DEFAULT_FILTERS,
   EASING_OPTIONS,
   TEXT_FONTS,
+  TEXT_GRADIENT_PRESETS,
   TRANSFORM_PRESETS_KEY,
 } from '@/lib/editor/constants'
 import { clamp, computeHistogram, computeLumaWaveform, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, levelToDbfs, normalizeGainFor, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
@@ -205,7 +206,7 @@ const fmtHz = (v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}kHz` : `${
  * (open-properties-*). Requested via the `nc-props-section` event or the
  * `__ncPropsSectionRequest` pending flag (covers the mobile-sheet mount race).
  */
-export type PropsSectionId = 'filters' | 'grade' | 'curves' | 'wheels' | 'lut' | 'scopes' | 'chroma' | 'animation' | 'speed-ramp' | 'audiofx' | 'media' | 'transform' | 'adjustment'
+export type PropsSectionId = 'filters' | 'grade' | 'curves' | 'wheels' | 'lut' | 'scopes' | 'chroma' | 'animation' | 'speed-ramp' | 'audiofx' | 'media' | 'transform' | 'adjustment' | 'text'
 
 /**
  * Focus a section on a properties deep-link: expands (via callback), scrolls
@@ -670,7 +671,7 @@ function TextSection({ clip }: { clip: Clip }) {
     updateClip(clip.id, { textStyle: p }, history)
 
   return (
-    <Section title="Text" icon={Type}>
+    <Section title="Text" icon={Type} sectionId="text">
       <Textarea
         rows={2}
         value={style.content}
@@ -874,6 +875,72 @@ function TextSection({ clip }: { clip: Clip }) {
         onChange={(v) => patch({ lineHeight: v }, 'txt-lh')}
         format={fmtNum}
       />
+
+      {/* arc bend (curved flow) — post-v1.0.0 typography suite */}
+      <SliderRow
+        label="Curve"
+        min={-100}
+        max={100}
+        step={1}
+        value={style.curve ?? 0}
+        onChange={(v) => patch({ curve: v }, 'txt-curve')}
+        format={(v) => (v === 0 ? 'flat' : v > 0 ? `+${v} crown` : `${v} sag`)}
+      />
+
+      {/* two-stop gradient fill — post-v1.0.0 typography suite */}
+      <div className="flex items-center gap-2">
+        <span className="w-14 shrink-0 text-[11px] text-muted-foreground">Gradient</span>
+        <Switch
+          checked={!!style.gradient}
+          onCheckedChange={(on) =>
+            patch({ gradient: on ? { from: '#f7971e', to: '#ffd200', angle: 90 } : null }, true)
+          }
+          className="ml-auto"
+        />
+      </div>
+      {style.gradient && (
+        <div data-nc-gradient-controls className="space-y-3">
+          <div className="flex gap-3">
+            <ColorField
+              label="From"
+              value={style.gradient.from}
+              onChange={(v) => patch({ gradient: { ...style.gradient!, from: v } }, 'txt-grad-from')}
+            />
+            <ColorField
+              label="To"
+              value={style.gradient.to}
+              onChange={(v) => patch({ gradient: { ...style.gradient!, to: v } }, 'txt-grad-to')}
+            />
+          </div>
+          <SliderRow
+            label="Angle"
+            min={0}
+            max={360}
+            step={5}
+            value={style.gradient.angle}
+            onChange={(v) => patch({ gradient: { ...style.gradient!, angle: v } }, 'txt-grad-ang')}
+            format={fmtDeg}
+          />
+          <div className="flex flex-wrap gap-1.5" data-nc-gradient-presets>
+            {TEXT_GRADIENT_PRESETS.map((p) => (
+              <button
+                key={p.name}
+                type="button"
+                title={`Gradient preset: ${p.name}`}
+                data-nc-gradient-preset={p.name}
+                onClick={() => patch({ gradient: { from: p.from, to: p.to, angle: p.angle } }, true)}
+                className={cn(
+                  'h-6 w-9 cursor-pointer rounded-md border transition-transform hover:scale-105',
+                  style.gradient?.from === p.from && style.gradient?.to === p.to
+                    ? 'border-fuchsia-400 ring-1 ring-fuchsia-400/60'
+                    : 'border-(--nc-line)'
+                )}
+                style={{ background: `linear-gradient(${p.angle + 90}deg, ${p.from}, ${p.to})` }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       <SelectRow
         label="Anim"

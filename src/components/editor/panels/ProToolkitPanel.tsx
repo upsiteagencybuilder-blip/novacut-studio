@@ -139,6 +139,7 @@ function useToolAction() {
       'open-properties-curves': () => openPropsSection('curves'),
       'open-properties-wheels': () => openPropsSection('wheels'),
       'open-properties-chroma': () => openPropsSection('chroma'),
+      'open-properties-text-style': () => openPropsSection('text'),
       'open-monitor-safe': () => {
         useEditor.getState().setMonitor('safe', true)
         toast('Safe margins on — action 93% / title 90% over the preview')

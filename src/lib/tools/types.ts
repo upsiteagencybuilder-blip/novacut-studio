@@ -47,6 +47,7 @@ export type ToolAction =
   | 'open-properties-curves'
   | 'open-properties-wheels'
   | 'open-properties-chroma'
+  | 'open-properties-text-style'
   | 'open-monitor-safe'
   | 'open-monitor-thirds'
   | 'open-monitor-rulers'

@@ -125,6 +125,16 @@ export const TEXT_FONTS: FontOption[] = [
 /** Ensure these fonts are loaded before canvas draws text */
 export const CANVAS_FONT_LOAD_LIST = TEXT_FONTS.map((f) => `700 64px "${f.family}"`)
 
+/** Two-stop gradient fill presets for title text (post-v1.0.0 typography suite) */
+export const TEXT_GRADIENT_PRESETS: { name: string; from: string; to: string; angle: number }[] = [
+  { name: 'Gold', from: '#f7971e', to: '#ffd200', angle: 90 },
+  { name: 'Neon', from: '#00e5ff', to: '#ff00e6', angle: 30 },
+  { name: 'Ocean', from: '#2af598', to: '#009efd', angle: 90 },
+  { name: 'Candy', from: '#ff9a9e', to: '#fbc2eb', angle: 60 },
+  { name: 'Fire', from: '#f83600', to: '#fee140', angle: 45 },
+  { name: 'Grape', from: '#7b4397', to: '#ee609c', angle: 120 },
+]
+
 /* ---------------- Text presets ---------------- */
 
 export interface TextPreset {

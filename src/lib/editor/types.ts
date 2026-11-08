@@ -298,6 +298,10 @@ export interface TextStyle {
   underline?: boolean
   /** draw a line through the middle of the text */
   strike?: boolean
+  /** two-stop linear gradient fill across the text block — null/undefined = solid color */
+  gradient?: { from: string; to: string; /** degrees, 0 = left→right, 90 = top→bottom */ angle: number } | null
+  /** arc bend −100..100 (0/undefined = flat) — + crowns the line up, − sags it down */
+  curve?: number
 }
 
 export type StickerFamily = 'emoji' | 'shape' | 'social' | 'vlog'

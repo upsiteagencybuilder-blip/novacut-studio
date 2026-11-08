@@ -2727,3 +2727,26 @@ Counts (auto-computed from catalog): **728 total · live 297→303 · planned 28
 - Mobile 390×844: meter hidden, monitor button right edge 318 px (no regression), no h-scroll, 6 popover items, h-guide drag 0.333→0.632.
 - Zero console/page errors; transient dev-tools "1 Issue" badge during live edits confirmed gone after hard reload (Fast Refresh artifact).
 - lint + tsc clean.
+
+## Post-v1.0.0 — user request: advanced text/titles + 60-day UX plan (Day 1–2 batch)
+**Date:** post-release · **Task ID:** UX60-1
+**Task:** (1) develop text/title features more advanced; (2) create a 60-day plan to make NovaCut the most user-friendly platform vs competitors and start executing it.
+
+### Shipped 1 — Advanced Typography suite (real engine behavior, not presets)
+- **Types** (`types.ts`): `TextStyle.gradient?: { from, to, angle } | null` (two-stop linear fill) + `TextStyle.curve?: number` (arc bend −100..100, 0 = flat) — optional fields, old projects render unchanged (no migration).
+- **Engine** (`engine.ts`):
+  - Gradient fill: one linear gradient spanning the whole block (half-diagonal span, angle-aware) used as fillStyle in `paintLines` (glitch `fillOverride` still wins). New helpers `parseFillColor` + `sampleGradientStop` (hex/rgb/rgba lerp).
+  - Curved flow: per-character placement along a circular arc per line — arc length = R·span, span = |bend|/100·π (up to 180°), crown (+) arcs up / sag (−) arcs down, per-char tangent rotation; letterSpacing zeroed during arc (manual advance), per-char gradient sampled by projecting char center onto the gradient axis (gradient follows the curve); stroke per char; underline/strike + glitch rgb-split skipped on curved flow (straight rules over an arc read as bugs).
+  - `estimateClipRect`: curved text inflates selection bounds by the bulge (R(1−cos(span/2))), center shifts toward the bulge.
+- **Properties** (`PropertiesPanel.tsx`): Text section gains Curve slider (−100..100, "flat / +N crown / −N sag") + Gradient switch (From/To color fields + Angle slider + six preset swatches Gold/Neon/Ocean/Candy/Fire/Grape with active ring); `PropsSectionId` extended with `'text'` + `sectionId="text"` → deep-linkable for the first time. Presets live in `constants.ts` (`TEXT_GRADIENT_PRESETS`).
+- **Catalog**: `motion-text-path-tool` planned→live (honest desc: arc ships, drawn bezier stays roadmap) + NEW `motion-gradient-text-fill` live + ToolAction `open-properties-text-style`. Counts auto: **729 total · live 307→309 · planned 273→272**.
+
+### Shipped 2 — 60-day UX plan created and started
+- **`docs/UX-60-DAYS.md`**: 8 phases / 60 days — first-cut speed, smart assistance, guided workflows, progressive disclosure, forgiveness, accessibility + Bangla localization, perceived performance, delight → v1.1.0 "UX edition". Every phase has day-ranged deliverables, exit criteria, and the standing verification protocol. Honesty ledger: ⬜ rows are plan, only ✅ rows carry commits.
+- Day 1–2 row ✅ = this typography batch (first executed slice of Phase 1).
+
+### E2E receipts
+- Desktop: Text section shows Curve + Gradient; curve=60 → crown arc rendered (screenshot: per-char rotation + inflated bounds 66px); curve=−55 → sag arc (screenshot); gradient switch UI-click → defaults appear → Neon swatch click → store `{from:#00e5ff,to:#ff00e6,angle:30}` and canvas shows cyan→magenta arc (per-char gradient proof); deep link "Gradient Text Fill" card → Text section flash (`.nc-section-flash` on "Text") with clip selection retained.
+- Pro wall: "729 tools catalogued · 309 live now", chips All·729 / Live·309 / Roadmap·272; Text Path Tool card renders LIVE with arc-honest desc.
+- Mobile 390×844: curve+gradient render on demo title, no horizontal scroll, 0 console errors.
+- lint + tsc clean; flat text regression: demo's un-curved clips render unchanged.
