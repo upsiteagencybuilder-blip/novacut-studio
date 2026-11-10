@@ -387,6 +387,8 @@ export function ExportDialog() {
         sizeBytes: result.blob.size,
         durationMs: result.durationMs,
       })
+      // UX60 Day 7-8 — the checklist's "exported once" step flips here
+      useEditor.getState().markExported()
       // Day 54 — honest disclosure when the audio engine could not start
       if (!result.audioIncluded) {
         toast.warning('Exported WITHOUT audio — the audio engine could not start in this environment', {

@@ -5,15 +5,16 @@
  * "demo project" or "start from scratch". Choice is persisted in IndexedDB.
  */
 import { useEffect, useState } from 'react'
-import { Loader2, Scissors, ShieldCheck, Zap } from 'lucide-react'
+import { ArrowLeft, Loader2, Scissors, ShieldCheck, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { getKV, setKV } from '@/lib/editor/db'
 import { useEditor } from '@/lib/editor/store'
+import { CANVAS_INTENTS, CanvasIntentPicker, startProjectFromIntent } from './CanvasIntentPicker'
 
-type OverlayState = 'open' | 'closed' | 'loading'
+type OverlayState = 'open' | 'canvas' | 'closed' | 'loading'
 
 interface Feature {
   icon: LucideIcon
@@ -52,7 +53,6 @@ export function OnboardingOverlay() {
   const [state, setState] = useState<OverlayState>('closed')
   const ready = useEditor((s) => s.ready)
   const loadDemoProject = useEditor((s) => s.loadDemoProject)
-  const newProject = useEditor((s) => s.newProject)
 
   /* show once the store finished restoring AND we were never onboarded */
   useEffect(() => {
@@ -84,7 +84,16 @@ export function OnboardingOverlay() {
   }
 
   const handleScratch = async () => {
-    newProject()
+    // UX60 Day 3-4 — "start from scratch" now asks WHAT you're making first:
+    // the use-case canvas picker sets canvas + a target-length pin.
+    setState('canvas')
+  }
+
+  const handleIntentPick = async (intentId: string) => {
+    const intent = CANVAS_INTENTS.find((i) => i.id === intentId)
+    if (!intent) return
+    setState('loading')
+    startProjectFromIntent(intent)
     await setKV('onboarded', true)
     setState('closed')
   }
@@ -98,57 +107,78 @@ export function OnboardingOverlay() {
         </div>
 
         <h2 className="mt-4 text-xl font-bold">
-          {t('title')}
+          {state === 'canvas' ? 'What are you making?' : t('title')}
         </h2>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          {t('subtitle')}
+          {state === 'canvas'
+            ? 'Pick a canvas — we set the size and drop a target-length pin on the timeline'
+            : t('subtitle')}
         </p>
 
-        {/* features */}
-        <div className="mt-5 space-y-2.5">
-          {FEATURES.map((f) => {
-            const Icon = f.icon
-            return (
-              <div key={f.text} className="flex items-center gap-2.5 text-left text-xs">
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: f.bg, color: f.color }}
-                >
-                  <Icon className="size-4" />
-                </span>
-                <span className="text-foreground/85">{t('features.' + f.key)}</span>
-              </div>
-            )
-          })}
-        </div>
+        {/* UX60 Day 3-4 — use-case canvas picker step */}
+        {state === 'canvas' ? (
+          <div className="mt-5" data-nc-onboard-picker>
+            <CanvasIntentPicker onPick={(i) => void handleIntentPick(i.id)} />
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={loading}
+              onClick={() => setState('open')}
+              className="mt-3 h-9 w-full rounded-xl text-xs text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="size-3.5" />
+              Back
+            </Button>
+          </div>
+        ) : (
+          <>
+            {/* features */}
+            <div className="mt-5 space-y-2.5">
+              {FEATURES.map((f) => {
+                const Icon = f.icon
+                return (
+                  <div key={f.text} className="flex items-center gap-2.5 text-left text-xs">
+                    <span
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                      style={{ backgroundColor: f.bg, color: f.color }}
+                    >
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="text-foreground/85">{t('features.' + f.key)}</span>
+                  </div>
+                )
+              })}
+            </div>
 
-        {/* actions */}
-        <div className="mt-6 flex flex-col gap-2">
-          <Button
-            type="button"
-            disabled={loading}
-            onClick={() => void handleDemo()}
-            className="nc-gradient h-11 w-full rounded-xl font-semibold text-white"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                {t('loading')}
-              </>
-            ) : (
-              t('startDemo')
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={loading}
-            onClick={() => void handleScratch()}
-            className="h-11 w-full rounded-xl border border-(--nc-line-strong) bg-transparent text-foreground/90 hover:bg-(--nc-panel)"
-          >
-            {t('startFresh')}
-          </Button>
-        </div>
+            {/* actions */}
+            <div className="mt-6 flex flex-col gap-2">
+              <Button
+                type="button"
+                disabled={loading}
+                onClick={() => void handleDemo()}
+                className="nc-gradient h-11 w-full rounded-xl font-semibold text-white"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    {t('loading')}
+                  </>
+                ) : (
+                  t('startDemo')
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={() => void handleScratch()}
+                className="h-11 w-full rounded-xl border border-(--nc-line-strong) bg-transparent text-foreground/90 hover:bg-(--nc-panel)"
+              >
+                {t('startFresh')}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

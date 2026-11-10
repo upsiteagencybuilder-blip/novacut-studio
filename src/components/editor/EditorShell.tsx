@@ -39,6 +39,7 @@ const HistoryPanelDialog = lazy(() => import('@/components/editor/dialogs/Histor
 import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
+import { CoachMarks } from '@/components/editor/panels/CoachMarks'
 import { startCloudAutosave } from '@/lib/cloud/autosave'
 import { CrashRecoveryWatcher } from '@/components/editor/ErrorBoundary'
 import { installTelemetry } from '@/lib/telemetry'
@@ -653,6 +654,7 @@ export function EditorShell() {
         {dialog === 'history' && <HistoryPanelDialog />}
       </Suspense>
       <OnboardingOverlay />
+      <CoachMarks />
       <CrashRecoveryWatcher />
       <ContextualTips />
       <CommandPalette />

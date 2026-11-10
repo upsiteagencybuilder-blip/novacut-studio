@@ -68,4 +68,9 @@ export const PANELS_TOOLS: ProTool[] = [
   { id: 'panel-smart-bins', name: 'Smart Bins', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'Auto-collecting bins driven by metadata search rules' },
   { id: 'panel-power-bins', name: 'Power Bins', section: 'panels', group: 'Project & metadata', status: 'planned', desc: 'Global bins shared across every project in the vault' },
   { id: 'panel-project-settings-panel', name: 'Project Settings Panel', section: 'panels', group: 'Project & metadata', status: 'beta', desc: 'Canvas size and fps change through dialogs and presets today' },
+
+  // -------- Onboarding & guidance (UX60 Phase 1) --------
+  { id: 'panel-canvas-intent-picker', name: 'Use-Case Canvas Picker', section: 'panels', group: 'Onboarding & guidance', status: 'live', desc: 'Onboarding and Projects → New project ask Reels / YouTube / Square first, set the canvas and drop a target-length pin on the timeline' },
+  { id: 'panel-guided-tour', name: 'Interactive Coach Tour', section: 'panels', group: 'Onboarding & guidance', status: 'live', desc: 'Skippable 5-step first-run tour across import, timeline, preview, effects and export — remembered per device, restartable here', action: 'start-guided-tour' },
+  { id: 'panel-quickstart-checklist', name: 'Quick-Start Checklist', section: 'panels', group: 'Onboarding & guidance', status: 'live', desc: 'Media-panel card auto-checks imported media, first timeline clip, a styled title and the first local export', action: 'open-quickstart-checklist' },
 ]

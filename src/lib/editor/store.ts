@@ -51,6 +51,17 @@ import { detectAutoKey, autoKeyPatch } from './bg-detect'
 import { baseValueForProperty, clamp, formatTimecode, landingTime, normalizeColorGrade, normalizeFilters, projectDuration, round2, uid } from './utils'
 import * as db from './db'
 
+/**
+ * UX60 Day 3-4 — options for a brand-new project from the use-case canvas
+ * picker: canvas size + a target-length marker pin dropped on the timeline.
+ */
+export interface NewProjectOpts {
+  width?: number
+  height?: number
+  /** drops an amber "Ns target" marker pin at this timeline second */
+  targetDuration?: number
+}
+
 /** Panel-friendly patch type: nested objects accept partials */
 export type ClipPatch = Partial<Omit<Clip, 'transform' | 'filters' | 'textStyle' | 'sticker' | 'chromaKey' | 'colorGrade'>> & {
   transform?: Partial<Transform>
@@ -89,6 +100,8 @@ interface EditorStore {
   past: Project[]
   future: Project[]
   importing: boolean
+  /** UX60 Day 7-8 — true once a video export completed on this device (checklist step, persisted) */
+  hasExported: boolean
   /** true once copy/cut has stashed at least one clip (enables Paste UI) */
   hasClipboard: boolean
   /** stashed look/feel of a source clip for Paste Attributes (Day 09) — null until copied */
@@ -107,7 +120,9 @@ interface EditorStore {
 
   /* ---------- lifecycle ---------- */
   init: () => Promise<void>
-  newProject: (name?: string) => void
+  newProject: (name?: string, opts?: NewProjectOpts) => void
+  /** UX60 Day 7-8 — flip the checklist's "exported once" step (persisted per device) */
+  markExported: () => void
   openProject: (id: string) => Promise<void>
   loadDemoProject: () => Promise<void>
   saveNow: () => Promise<void>
@@ -512,15 +527,17 @@ export const useEditor = create<EditorStore>((set, get) => ({
   hasClipboard: false,
   copiedAttributes: null,
   importing: false,
+  hasExported: false,
 
   /* ================= lifecycle ================= */
 
   init: async () => {
     try {
-      const [assets, lastId, projects] = await Promise.all([
+      const [assets, lastId, projects, exportedKV] = await Promise.all([
         db.listAssets(),
         db.getKV<string>('lastProjectId'),
         db.listProjects(),
+        db.getKV<boolean>('hasExported'),
       ])
       const media: MediaAssetRuntime[] = assets.map(({ meta, blob }) => ({
         ...meta,
@@ -535,7 +552,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
       suppressSave = true
       // land on a frame that actually shows content (never greet with a black canvas)
       const land = landingTime(project)
-      set({ media, project, ready: true, currentTime: land })
+      set({ media, project, ready: true, currentTime: land, hasExported: exportedKV === true })
       setTimeout(() => (suppressSave = false), 0)
       // Day 63 — startup budget probe: measure from navigation start to the
       // moment the editor is fully hydrated (project + media restored).
@@ -591,8 +608,16 @@ export const useEditor = create<EditorStore>((set, get) => ({
     }
   },
 
-  newProject: (name) => {
+  newProject: (name, opts) => {
     const p = createDefaultProject(name)
+    // UX60 Day 3-4 — use-case canvas picker: apply the intent's canvas + target pin
+    if (opts?.width) p.canvasWidth = opts.width
+    if (opts?.height) p.canvasHeight = opts.height
+    if (opts?.targetDuration && opts.targetDuration > 0) {
+      p.markers = [
+        { id: uid('mkr_'), t: opts.targetDuration, label: `${opts.targetDuration}s target`, color: '#f59e0b' },
+      ]
+    }
     suppressSave = true
     set({
       project: p,
@@ -603,6 +628,12 @@ export const useEditor = create<EditorStore>((set, get) => ({
       isPlaying: false,
     })
     db.saveProject(p).then(() => db.setKV('lastProjectId', p.id)).finally(() => (suppressSave = false))
+  },
+
+  markExported: () => {
+    if (get().hasExported) return
+    set({ hasExported: true })
+    void db.setKV('hasExported', true).catch(() => undefined)
   },
 
   openProject: async (id) => {

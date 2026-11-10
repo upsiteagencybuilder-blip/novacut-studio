@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
+  ArrowLeft,
   CloudUpload,
   Copy,
   Download,
@@ -42,6 +43,7 @@ import { useEditor } from '@/lib/editor/store'
 import { BUILTIN_TEMPLATES, templateDuration, type EditTemplate } from '@/lib/templates'
 import * as db from '@/lib/editor/db'
 import { StoragePanel } from '@/components/editor/dialogs/StorageDialog'
+import { CanvasIntentPicker, startProjectFromIntent } from '@/components/editor/panels/CanvasIntentPicker'
 import {
   cloudDeleteProject,
   cloudDuplicateProject,
@@ -1017,6 +1019,8 @@ function DeviceTab() {
 
   const [list, setList] = useState<Project[] | null>(null)
   const [backingUpId, setBackingUpId] = useState<string | null>(null)
+  // UX60 Day 3-4 — new-project asks the use-case canvas picker first
+  const [picking, setPicking] = useState(false)
 
   const refreshList = useCallback(async () => {
     const projects = await db.listProjects()
@@ -1028,9 +1032,7 @@ function DeviceTab() {
   }, [refreshList])
 
   const handleNew = () => {
-    newProject()
-    toast.success('New project created')
-    openDialog(null)
+    setPicking(true)
   }
 
   const handleOpen = async (id: string) => {
@@ -1075,6 +1077,30 @@ function DeviceTab() {
         <FilePlus2 className="size-4" />
         New project
       </Button>
+
+      {/* UX60 Day 3-4 — use-case canvas picker for new projects */}
+      {picking && (
+        <div className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3" data-nc-dialog-picker>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Start with a canvas
+          </p>
+          <CanvasIntentPicker
+            onPick={(i) => {
+              startProjectFromIntent(i)
+              openDialog(null)
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2 h-7 w-full rounded-lg text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={() => setPicking(false)}
+          >
+            <ArrowLeft className="size-3" />
+            Back to projects
+          </Button>
+        </div>
+      )}
 
       {list === null ? (
         <div className="space-y-2">

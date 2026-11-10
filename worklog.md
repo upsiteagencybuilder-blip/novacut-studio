@@ -2750,3 +2750,33 @@ Counts (auto-computed from catalog): **728 total · live 297→303 · planned 28
 - Pro wall: "729 tools catalogued · 309 live now", chips All·729 / Live·309 / Roadmap·272; Text Path Tool card renders LIVE with arc-honest desc.
 - Mobile 390×844: curve+gradient render on demo title, no horizontal scroll, 0 console errors.
 - lint + tsc clean; flat text regression: demo's un-curved clips render unchanged.
+
+## Post-v1.0.0 — UX60 Phase 1 completion: Days 3–8 (canvas picker + coach tour + quick-start checklist)
+**Date:** post-release · **Task ID:** UX60-2
+**Task:** user instruction "complete ১–৮" — finish the 60-day plan's Days 1–8 (Phase 1 "First-cut speed"); Days 1–2 shipped in UX60-1. All three remaining day-rows implemented and verified together.
+
+### Shipped 1 — Use-case canvas picker (Days 3–4)
+- `CanvasIntentPicker.tsx` (new): Reels & TikTok (1080×1920 · 30s target) / YouTube (1920×1080 · 60s) / Square post (1080×1080 · 30s) intent cards; `startProjectFromIntent()` applies the choice with a receipt toast.
+- `store.newProject(name?, opts?: NewProjectOpts)`: applies width/height and drops an amber "Ns target" marker pin (`markers[0]`, t = targetDuration) — a new project starts with a visible finish line.
+- Two entry points: OnboardingOverlay "Start from scratch" → picker step ("What are you making?" + Back); ProjectsDialog DeviceTab "New project" → inline picker above the project list.
+
+### Shipped 2 — Interactive coach tour (Days 5–6)
+- `CoachMarks.tsx` (new): 5 steps (import → timeline → preview → effects → export), amber ring highlight + dimmed page via inset box-shadow, overlay is pointer-events-none so the app stays usable mid-tour; tooltip with progress dots + Back/Next/Skip (X button or Esc); finish/skip remembered in KV `tourDoneV1`.
+- Auto-starts once per device after the onboarding choice resolves (desktop-only guard ≥1024 px — the mobile layout keeps panels in a bottom sheet, honest scope note); deep-link event `nc-start-tour` restarts it anytime.
+- Targets: `data-nc-tour` attributes on MediaPanel import zone, Timeline root, PreviewPane stage, EffectsPanel root, TopBar Export button.
+
+### Shipped 3 — Quick-start checklist (Days 7–8)
+- Store: `hasExported` (hydrated from KV during `init`) + `markExported()`; ExportDialog calls it when the video export lands `phase: 'done'`.
+- `QuickStartChecklist` in MediaPanel: 4 auto-derived items — Import media (media.length), Add a clip (clips.length), Style a title (a text clip whose style left `DEFAULT_TEXT_STYLE`, null/curve-0-normalized compare so untouched optional fields don't count), Export your video (hasExported) — plus n/4 progress, collapse chevron, dismiss-X (KV `checklistDismissed`), emerald "complete!" state, amber pulse on `nc-pulse-checklist`.
+- ProToolkitPanel deep links: `start-guided-tour` (event + toast) and `open-quickstart-checklist` (media tab + 200 ms-delayed pulse — v1 raced the card mount and missed; fixed and re-verified).
+- Catalog: 3 new live entries (panels → "Onboarding & guidance": Use-Case Canvas Picker, Interactive Coach Tour, Quick-Start Checklist). Counts auto: **732 total · live 309→312 · planned 272** (Pro wall verified: chips All·732 / Live·312 / Roadmap·272).
+
+### E2E receipts
+- Desktop 1280×800, fresh IndexedDB: overlay → "Start from scratch" → picker (3 cards) → Reels → canvas 1080×1920, marker "30s target" @30, toast, overlay closed; tour auto-started within seconds, all 5 steps highlighted their real targets (import 249×145 · timeline 1292×303 · preview 212×368 · effects 249×1764 after tab switch · export 98×44), Finish closed it.
+- Remembered: reload → tour did NOT auto-restart and no welcome overlay. Deep link "Interactive Coach Tour" → restarts at 1/5 + toast; Esc skips.
+- Deep link "Quick-Start Checklist" → media tab + amber pulse ring (post-fix) + toast.
+- **Golden path (Phase 1 exit criteria)**: `/?action=demo` → checklist 3/4 (media 4 ✓, clip ✓, styled text ✓, export ✗) → Export dialog → trusted "Start export" click → recording 48% → **done, a real 4,315,140-byte video file** → checklist live-updated to 4/4 "complete!" → reload → still 4/4 (KV persistence proven).
+- Projects dialog: New project → picker → YouTube → canvas 1920×1080 + "60s target" @60, dialog closed.
+- Checklist collapse hides items (header stays); dismiss-X removes the card; the test restored the KV to false so the card shows again (also proving the exact KV key/store the app reads).
+- Mobile 390×844: no horizontal scroll (390 px), tour does NOT auto-start (desktop guard), Media sheet shows checklist 2/4 (honest after a new-project: media ✓ + export ✓ persisted, clips/text reset) + import zone reachable.
+- 0 console/page errors; dev.log clean apart from the pre-existing next-auth NEXTAUTH_URL warning. lint + tsc clean.

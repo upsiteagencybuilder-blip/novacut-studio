@@ -55,6 +55,8 @@ export type ToolAction =
   | 'open-monitor-falsecolor'
   | 'open-monitor-guides'
   | 'open-transport-meter'
+  | 'start-guided-tour'
+  | 'open-quickstart-checklist'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

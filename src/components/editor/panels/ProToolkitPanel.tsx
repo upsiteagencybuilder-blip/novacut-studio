@@ -168,6 +168,16 @@ function useToolAction() {
         window.dispatchEvent(new CustomEvent('nc-pulse-transport-meter'))
         toast('True-peak meter is live in the transport, beside the volume control')
       },
+      'start-guided-tour': () => {
+        window.dispatchEvent(new CustomEvent('nc-start-tour'))
+        toast('Coach tour starting — follow the amber highlights, Esc skips')
+      },
+      'open-quickstart-checklist': () => {
+        setPanelTab('media')
+        // the card mounts with the media tab — pulse AFTER it can listen
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent('nc-pulse-checklist')), 200)
+        toast('Quick-start checklist lives at the top of the Media panel')
+      },
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])

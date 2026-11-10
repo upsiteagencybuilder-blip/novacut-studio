@@ -1446,7 +1446,7 @@ export function EffectsPanel() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-nc-tour="effects">
       {/* ---------- header: counter + search ---------- */}
       <div className="flex items-center gap-2">
         {TOTAL_EFFECTS >= 1000 ? (

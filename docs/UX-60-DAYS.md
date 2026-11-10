@@ -19,11 +19,12 @@
 | Day | Deliverable | Status |
 | --- | --- | --- |
 | 1–2 | **Advanced Typography suite** — gradient text fill (2-stop + angle + 6 presets), curve/arc bend slider (−100 sag…+100 crown, per-char rotation, gradient-aware), text-style deep link | ✅ Day-1 batch (this commit) |
-| 3–4 | Use-case canvas picker: "Reels / YouTube / Square" intent cards with duration presets on project create | ⬜ |
-| 5–6 | Interactive coach marks: first-run 5-step tour (import → timeline → preview → effects → export), skippable, remembered | ⬜ |
-| 7–8 | Quick-start checklist card in the Media tab (auto-checks off: imported media, added clip, styled text, exported once) | ⬜ |
+| 3–4 | Use-case canvas picker: "Reels / YouTube / Square" intent cards with duration presets on project create | ✅ (this commit) |
+| 5–6 | Interactive coach marks: first-run 5-step tour (import → timeline → preview → effects → export), skippable, remembered | ✅ (this commit) |
+| 7–8 | Quick-start checklist card in the Media tab (auto-checks off: imported media, added clip, styled text, exported once) | ✅ (this commit) |
 
 **Exit criteria:** new visitor can go empty project → exported MP4 without reading any docs; tour completion tracked locally.
+> ✅ **Phase 1 complete** (this commit): picker + tour + checklist shipped together; receipts in `worklog.md` (Task UX60-2).
 
 ## Phase 2 — Smart assistance (Days 9–16)
 **Goal:** the editor does the boring parts; the user stays the director.

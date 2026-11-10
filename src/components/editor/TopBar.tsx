@@ -238,6 +238,7 @@ export function TopBar() {
         <Button
           variant="ghost"
           size="sm"
+          data-nc-tour="export"
           className="nc-gradient nc-glow-hover h-8 rounded-lg px-3.5 text-xs font-semibold text-white"
           onClick={() => {
             useEditor.getState().pause()
