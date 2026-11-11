@@ -31,12 +31,13 @@
 
 | Day | Deliverable | Status |
 | --- | --- | --- |
-| 9–10 | One-click **auto-cut to beat**: music track → cuts every beat/downbeat with the existing BPM detector | ⬜ |
-| 11–12 | **Highlight reel suggest**: motion/silence analysis proposes trimmed keep-ranges, one tap to apply | ⬜ |
-| 13–14 | Smart trim hints: snap-to-silence ghost handles on video clips with speech | ⬜ |
-| 15–16 | Context toolbar: selection-aware quick actions (text selected → style controls inline on canvas) | ⬜ |
+| 9–10 | One-click **auto-cut to beat**: music track → cuts every beat/downbeat with the existing BPM detector | ✅ (this commit) |
+| 11–12 | **Highlight reel suggest**: motion/silence analysis proposes trimmed keep-ranges, one tap to apply | ✅ (this commit) |
+| 13–14 | Smart trim hints: snap-to-silence ghost handles on video clips with speech | ✅ (this commit) |
+| 15–16 | Context toolbar: selection-aware quick actions (text selected → style controls inline on canvas) | ✅ (this commit) |
 
 **Exit criteria:** demo project → auto-cut to the beat track in ≤3 clicks; every suggestion is one-tap dismissible.
+> ✅ **Phase 2 complete** (this commit): beat cut + highlight suggest + silence trim hints + context toolbar shipped together; receipts in `worklog.md` (Task UX60-3).
 
 ## Phase 3 — Guided workflows (Days 17–24)
 **Goal:** templates that do 80% of the work for named jobs-to-be-done.

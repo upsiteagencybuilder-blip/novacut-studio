@@ -2780,3 +2780,49 @@ Counts (auto-computed from catalog): **728 total · live 297→303 · planned 28
 - Checklist collapse hides items (header stays); dismiss-X removes the card; the test restored the KV to false so the card shows again (also proving the exact KV key/store the app reads).
 - Mobile 390×844: no horizontal scroll (390 px), tour does NOT auto-start (desktop guard), Media sheet shows checklist 2/4 (honest after a new-project: media ✓ + export ✓ persisted, clips/text reset) + import zone reachable.
 - 0 console/page errors; dev.log clean apart from the pre-existing next-auth NEXTAUTH_URL warning. lint + tsc clean.
+
+## Post-v1.0.0 — UX60 Phase 2 completion: Days 9–16 (Smart assistance) + whole-design polish sweep
+**Date:** post-release · **Task ID:** UX60-3
+**Task:** user instruction "Phase 2 — Smart assistance (Days 9–16) and find fix and polish the hole design" — implement all four Phase 2 deliverables of docs/UX-60-DAYS.md, then a genuine find-fix-polish pass over the whole design (issues found in E2E were fixed at the root, re-verified).
+
+### Shipped 1 — One-click Auto-Cut to Beat (Days 9–10)
+- `store.splitClipsAtBeats(stride 1|2|4)`: rebuilds every targeted video/image clip as beat-aligned pieces in ONE undo step; interior pieces drop fades (music stays tight), first/last keep their outer fades; slivers (< MIN_CLIP_DURATION) merge forward; new pieces re-join an open compound session.
+- CapCut-flow semantics: visual clips selected → cut exactly those; **music (audio) selected → cut every visual clip on the music grid**; nothing selected → cut all visuals; text-only selection → honest 0.
+- TimelineToolbar beat menu: new "Auto-cut to beat" group (every beat / every 2nd / downbeats only, `data-nc-auto-cut`); one click detects the music bed first (reuses `detectBeats` + source→timeline beat mapping) when no grid exists, then cuts.
+- Exit criteria PROVEN: demo → 2 clicks (menu open + item) → detect 19 beats @161.5 BPM → 6→23 clips, pieces start exactly on the grid (0.14/0.53/1.02/1.37/2.02/2.6/3.02…); one undo restores 6; stride 4 → 3 cuts. Pro-wall deep link `auto-cut-to-beat` fires the same runner via `nc-auto-cut-beat` (verified: card click → 19 visual pieces).
+
+### Shipped 2 — Highlight Reel Suggest (Days 11–12)
+- `lib/effects/highlight.ts` (new): on-device decode → 120 ms mono RMS envelope → adaptive silence threshold (max(0.018, 20th-percentile floor × 2.8)) → merged silence ranges (≥0.35 s); `analyzeHighlights` walks the 6 longest audio-carrying clips, derives padded keep-ranges (≥0.5 s), skips clips where nothing meaningful is removable — honest skip, never a fake proposal.
+- Store: `analyzeHighlightsForTimeline` (bounded, rehydration-aware), `applyHighlightSuggestions` (replaces each suggested clip with contiguous keep-pieces, ONE undo step, returns changed count), `dismissHighlightSuggestions`.
+- `SmartSuggestCard.tsx` (new): floating review card at the timeline bottom-right — analyzing spinner, keep/cut summary with one-decimal sub-60s formatting (0.8s, not 0:00), per-clip list, emerald Apply (one tap) and ✕ dismiss (one tap).
+- Toolbar Sparkles button (`data-nc-suggest-highlights`) + Pro-wall deep link `suggest-highlights` (`nc-suggest-highlights`).
+- PROVEN with real audio: a synthesized speech-pattern WAV (real blob, real decode) → card "Keep 6.8s · cut 1.2s of dead air across 1 clip (2 scanned)" → Apply → clip split into 8 contiguous keep-pieces 8s→6.84s, card cleared; undo restores the 8s clip; dismiss clears the card. Demo music bed honestly reports 0 suggestions (wall-to-wall audio — no card).
+
+### Shipped 3 — Snap-to-Silence Trim Hints (Days 13–14)
+- `store.computeSilenceHints(clipId)`: cached per clip in **SOURCE time** — mapped to timeline time live by consumers, so hints stay truthful through moves AND trims (no invalidation needed — a timeline-time cache broke mid-drag and was redesigned).
+- Auto-trigger: Timeline effect — selecting exactly one video/audio clip (debounced 350 ms) scans once; Pro-wall deep link `detect-trim-hints` re-runs (`nc-detect-trim-hints`).
+- `ClipBlock`: amber ghost notches (`data-nc-silence-hint`) at silence boundaries within 2.5 s of the trim zones; trim-start and trim-end drags snap to the mapped edges (8 px tolerance) and the drag tooltip announces "· silence".
+- PROVEN with a real trusted pointer drag: unsnapped end would be 15.34 → actual end 15.36 (snapped to the detected silence boundary), duration 7.56; notches visible on the clip in desktop screenshots.
+
+### Shipped 4 — Selection-aware Context Toolbar (Days 15–16)
+- `ContextToolbar.tsx` (new): floating pill over the preview when exactly one clip is selected and not playing. text → font size −/+ (live value shown), bold toggle, 6 quick color swatches with active ring; sticker → size −/+; video/image → split-at-playhead (enabled only when the playhead straddles); audio → volume −/+ steps + mute; always: duplicate + delete (rose). All actions run real undoable store actions.
+- Hidden during playback and multi-selection; Pro-wall deep link `pulse-context-toolbar` flashes an amber ring (`nc-pulse-context-toolbar`).
+- PROVEN: text 120→138 px (+15%) and back, bold toggle, color #34d399 applied; audio volume 0.8→0.9, mute/unmute.
+
+### Catalog + plan doc
+- 4 new live entries (timeline → new group "Smart assistance": Auto-Cut to Beat, Highlight Reel Suggest, Snap-to-Silence Trim Hints, Context Toolbar) — all deep-linked from the Pro wall. Counts auto: **736 total · live 316** (Pro wall verified).
+- `docs/UX-60-DAYS.md`: Phase 2 rows 9–16 marked ✅ + "Phase 2 complete" note (receipts = Task UX60-3).
+
+### Find-fix-polish (issues FOUND in E2E, fixed at the root)
+1. **Rapid double-click stale toggle**: context toolbar mute/bold/volume read the render closure — two clicks in one tick applied the same stale value twice. Fixed: toggles now read live store state (`liveClip()`); re-verified rapid-click mute false→true→false.
+2. **Beat-cut selection semantics**: initial design ignored an audio-only selection (returned 0). Redesigned to the CapCut flow — selecting the music cuts every visual clip. Catalog desc updated to match.
+3. **Silence window too coarse**: 250 ms windows caught a 0.45 s pause in a single 0.25 s window (< 0.4 s minimum) → zero ranges ever found. Fixed: 120 ms windows + MIN_SILENCE_S 0.35 + MIN_KEEP_S 0.5; keep floor re-balanced so sub-second bursts still produce suggestions.
+4. **Hint cache broke mid-drag**: timeline-time hints were invalidated on every trimClip pointermove. Redesigned to source-time ranges + live mapping (hints now valid through moves/trims by construction).
+5. **Sub-second display**: suggestion card showed "cut 0:00" for 0.84 s (formatShortTime floors). Card-local formatter keeps one decimal below 60 s.
+6. **Mobile overflow**: text context toolbar was 428 px wide on a 390 px viewport (left −19 / right 409) and swatch touch targets were 24 px. Fixed: max-w wrap (max-sm:flex-wrap rounded-2xl, justify-center) + swatches max-sm:size-8 → fits viewport (98–293 px), min touch target 32 px, matches the app's mobile button scale.
+
+### E2E receipts
+- Desktop 1280×800: all four features exercised above; Pro wall shows the new "Smart assistance" group with 4 actionable live cards; suggestion card renders bottom-right (fits, readable); ghost notches visible on the audio clip; toolbar not overflowed (scrollWidth == clientWidth).
+- Mobile 390×844: no horizontal scroll (390 px); context toolbar fits + wraps with 32 px touch targets; suggestion card fits (90→378); beat menu auto-cut item reachable and fits; fresh-load screenshot clean.
+- Fresh reload: 0 console errors, 0 page errors (the two transient dev-time console entries were HMR-transition artifacts — an intermediate Fast Refresh state and a stale pre-fix compile error both absent after clean reload).
+- lint + tsc clean; dev.log healthy.

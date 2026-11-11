@@ -57,6 +57,10 @@ export type ToolAction =
   | 'open-transport-meter'
   | 'start-guided-tour'
   | 'open-quickstart-checklist'
+  | 'auto-cut-to-beat'
+  | 'suggest-highlights'
+  | 'detect-trim-hints'
+  | 'pulse-context-toolbar'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

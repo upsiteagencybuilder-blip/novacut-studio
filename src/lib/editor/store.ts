@@ -162,6 +162,26 @@ interface EditorStore {
   trimClip: (id: string, opts: { start?: number; trimStart?: number; duration?: number }, history?: boolean | string) => void
   splitClip: (id: string, time: number) => void
   splitAtPlayhead: () => void
+  /* ---------- smart assistance (UX60 Phase 2) ---------- */
+  /** one-click beat cut — slices video/image clips at the detected beat grid (stride 1 | 2 | 4), ONE undo step; returns cut count */
+  splitClipsAtBeats: (stride?: number) => number
+  /** highlight analysis result — null until analyzed, cleared on apply/dismiss */
+  highlightSuggest: import('../effects/highlight').HighlightAnalysis | null
+  analyzingHighlights: boolean
+  /** on-device silence scan over the timeline's audio-carrying clips → suggestion card */
+  analyzeHighlightsForTimeline: () => Promise<number>
+  /** apply every keep-range in ONE undo step; returns changed clip count */
+  applyHighlightSuggestions: () => number
+  /** one-tap dismiss of the suggestion card */
+  dismissHighlightSuggestions: () => void
+  /** per-clip silence ranges in SOURCE time (seconds) — mapped to timeline live so they survive moves/trims */
+  silenceHints: Record<string, import('../effects/highlight').SilenceRange[]>
+  /** clip ids currently being scanned (spinner/avoid double work) */
+  silenceHintsLoading: string[]
+  /** analyze one clip's audio → silence ranges in SOURCE time (cached per id) */
+  computeSilenceHints: (clipId: string) => Promise<void>
+  /** drop cached hints — all, or one clip's (recompute via computeSilenceHints) */
+  clearSilenceHints: (clipId?: string) => void
   /** swap a clip's media source keeping its timeline slot (position + duration) */
   replaceClipMedia: (clipId: string, mediaId: string) => boolean
   /** capture the current frame as a 3s still and ripple-insert it at the playhead */
@@ -501,6 +521,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
   zoom: 70,
   snapEnabled: true,
   beatMarkers: [],
+  /* smart assistance (UX60 Phase 2) */
+  highlightSuggest: null,
+  analyzingHighlights: false,
+  silenceHints: {},
+  silenceHintsLoading: [],
   beatBpm: null,
   showBeatMarkers: true,
   toolMode: 'select',
@@ -1004,6 +1029,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
   moveClip: (id, start, trackId, history) => {
     if (history === true) get().pushHistory()
     else if (typeof history === 'string') get().pushHistory(history)
+    // UX60 Phase 2 — silence hints live in SOURCE time and are mapped live by
+    // consumers, so they stay truthful through moves AND trims (no invalidation)
     set((s) => ({
       project: withUpdatedAt({
         ...s.project,
@@ -1017,6 +1044,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
   trimClip: (id, opts, history) => {
     if (history === true) get().pushHistory()
     else if (typeof history === 'string') get().pushHistory(history)
+    // UX60 Phase 2 — source-time hints survive geometry changes (mapped live)
     set((s) => ({
       project: withUpdatedAt({
         ...s.project,
@@ -1069,6 +1097,194 @@ export const useEditor = create<EditorStore>((set, get) => ({
       : s.project.clips.filter((c) => t > c.start + 0.08 && t < c.start + c.duration - 0.08)
     for (const c of targets) s.splitClip(c.id, t)
   },
+
+  /* ================= smart assistance (UX60 Phase 2) ================= */
+
+  // Days 9–10 — one-click beat cut: rebuild every targeted video/image clip as
+  // beat-aligned pieces in ONE undo step. Semantics mirror CapCut's flow:
+  //   visual clips selected  → cut exactly those
+  //   music (audio) selected → cut every visual clip ON the music grid
+  //   nothing selected       → cut every visual clip
+  // Interior pieces drop their fades so the music stays tight; first/last
+  // keep their outer fade.
+  splitClipsAtBeats: (stride = 1) => {
+    const s = get()
+    const step = Math.max(1, Math.floor(stride))
+    const beats = s.beatMarkers.filter((_, i) => i % step === 0)
+    if (!beats.length) return 0
+    const selected = s.selectedClipIds
+    const selectedVisual = selected.length
+      ? s.project.clips.filter((c) => selected.includes(c.id) && (c.kind === 'video' || c.kind === 'image'))
+      : []
+    const selectionHasMusic = selected.some((id) => s.project.clips.find((c) => c.id === id)?.kind === 'audio')
+    const targets =
+      selectedVisual.length > 0
+        ? selectedVisual
+        : selected.length === 0 || selectionHasMusic
+          ? s.project.clips.filter((c) => c.kind === 'video' || c.kind === 'image')
+          : []
+    if (!targets.length) return 0
+    const EPS = 0.08
+    const newClips: Clip[] = []
+    const joinedIds: string[] = []
+    let cuts = 0
+    for (const clip of s.project.clips) {
+      if (!targets.some((t) => t.id === clip.id)) {
+        newClips.push(clip)
+        continue
+      }
+      const inner = beats.filter((b) => b > clip.start + EPS && b < clip.start + clip.duration - EPS)
+      if (inner.length === 0) {
+        newClips.push(clip)
+        continue
+      }
+      let pieceStart = clip.start
+      let pieceTrim = clip.trimStart
+      let pieces = 0
+      for (let i = 0; i <= inner.length; i++) {
+        const cutAt = i < inner.length ? inner[i]! : clip.start + clip.duration
+        const dur = round2(cutAt - pieceStart)
+        if (dur < MIN_CLIP_DURATION) {
+          // sliver — merge into the next piece by advancing the window
+          pieceStart = cutAt
+          pieceTrim = round2(clip.trimStart + (pieceStart - clip.start) * clip.speed)
+          continue
+        }
+        const isFirst = pieces === 0 && Math.abs(pieceStart - clip.start) < 1e-6
+        const isLast = i === inner.length
+        const piece: Clip = {
+          ...JSON.parse(JSON.stringify(clip)),
+          id: isFirst ? clip.id : uid('clip_'),
+          start: round2(pieceStart),
+          duration: dur,
+          trimStart: pieceTrim,
+          fadeIn: isFirst ? clip.fadeIn : 0,
+          fadeOut: isLast ? clip.fadeOut : 0,
+        }
+        if (!isFirst) joinedIds.push(piece.id)
+        newClips.push(piece)
+        pieces++
+        pieceStart = cutAt
+        pieceTrim = round2(clip.trimStart + (pieceStart - clip.start) * clip.speed)
+      }
+      cuts += Math.max(0, pieces - 1)
+    }
+    if (cuts === 0) return 0
+    s.pushHistory('beat-cut')
+    set((st) => ({ project: withUpdatedAt({ ...st.project, clips: newClips }) }))
+    if (joinedIds.length) get().joinSession(joinedIds)
+    return cuts
+  },
+
+  // Days 11–12 — on-device silence scan → highlight suggestions (bounded work)
+  analyzeHighlightsForTimeline: async () => {
+    const s = get()
+    if (s.analyzingHighlights) return 0
+    set({ analyzingHighlights: true, highlightSuggest: null })
+    try {
+      const { analyzeHighlights } = await import('../effects/highlight')
+      const { ensureAssetReady } = await import('./memory-manager')
+      const resolveBlob = async (clip: Clip): Promise<Blob | null> => {
+        if (clip.kind !== 'video' && clip.kind !== 'audio') return null
+        const asset = get().media.find((m) => m.id === clip.mediaId)
+        if (!asset) return null
+        const ready = await ensureAssetReady(asset.id)
+        return ready?.rawBlob ?? null
+      }
+      const res = await analyzeHighlights(s.project.clips, resolveBlob)
+      set({ highlightSuggest: res, analyzingHighlights: false })
+      return res.suggestions.length
+    } catch {
+      set({ analyzingHighlights: false })
+      return 0
+    }
+  },
+
+  // one undo step — replaces each suggested clip with its keep-range pieces
+  applyHighlightSuggestions: () => {
+    const s = get()
+    const sug = s.highlightSuggest
+    if (!sug || sug.suggestions.length === 0) return 0
+    const newClips: Clip[] = []
+    const joinedIds: string[] = []
+    let changed = 0
+    for (const clip of s.project.clips) {
+      const cs = sug.suggestions.find((x) => x.clipId === clip.id)
+      if (!cs || cs.ranges.length === 0) {
+        newClips.push(clip)
+        continue
+      }
+      const speed = clip.speed || 1
+      let pieceStart = clip.start
+      let pieces = 0
+      for (let i = 0; i < cs.ranges.length; i++) {
+        const r = cs.ranges[i]!
+        const dur = round2((r.end - r.start) / speed)
+        if (dur < MIN_CLIP_DURATION) continue
+        const isFirst = pieces === 0
+        const isLast = i === cs.ranges.length - 1
+        const piece: Clip = {
+          ...JSON.parse(JSON.stringify(clip)),
+          id: isFirst ? clip.id : uid('clip_'),
+          start: round2(pieceStart),
+          duration: dur,
+          trimStart: round2(r.start),
+          fadeIn: isFirst ? clip.fadeIn : 0,
+          fadeOut: isLast ? clip.fadeOut : 0,
+        }
+        if (!isFirst) joinedIds.push(piece.id)
+        newClips.push(piece)
+        pieces++
+        pieceStart += dur
+      }
+      if (pieces > 0) changed++
+      else newClips.push(clip) // every range was a sliver — keep the original
+    }
+    if (changed === 0) return 0
+    s.pushHistory('highlight-apply')
+    set((st) => ({
+      project: withUpdatedAt({ ...st.project, clips: newClips }),
+      highlightSuggest: null,
+      silenceHints: {}, // geometry changed across the board — hints recompute on selection
+    }))
+    if (joinedIds.length) get().joinSession(joinedIds)
+    return changed
+  },
+
+  dismissHighlightSuggestions: () => set({ highlightSuggest: null }),
+
+  // Days 13–14 — silence ranges for one clip, cached in SOURCE time (mapped
+  // to timeline time live by consumers so trims/moves never invalidate them)
+  computeSilenceHints: async (clipId) => {
+    const s = get()
+    const clip = s.project.clips.find((c) => c.id === clipId)
+    if (!clip || (clip.kind !== 'video' && clip.kind !== 'audio')) return
+    if (s.silenceHints[clipId] || s.silenceHintsLoading.includes(clipId)) return
+    set((st) => ({ silenceHintsLoading: [...st.silenceHintsLoading, clipId] }))
+    try {
+      const { detectSilenceRanges } = await import('../effects/highlight')
+      const { ensureAssetReady } = await import('./memory-manager')
+      const asset = get().media.find((m) => m.id === clip.mediaId)
+      if (!asset) return
+      const ready = await ensureAssetReady(asset.id)
+      if (!ready?.rawBlob) return
+      const ranges = await detectSilenceRanges(ready.rawBlob)
+      if (ranges.length > 0) set((st) => ({ silenceHints: { ...st.silenceHints, [clipId]: ranges } }))
+    } catch {
+      // honest fallback: no hints — trimming still works exactly as before
+    } finally {
+      set((st) => ({ silenceHintsLoading: st.silenceHintsLoading.filter((id) => id !== clipId) }))
+    }
+  },
+
+  clearSilenceHints: (clipId) =>
+    set((st) => {
+      if (!clipId) return { silenceHints: {} }
+      if (!st.silenceHints[clipId]) return st
+      const next = { ...st.silenceHints }
+      delete next[clipId]
+      return { silenceHints: next }
+    }),
 
   replaceClipMedia: (clipId, mediaId) => {
     const s = get()

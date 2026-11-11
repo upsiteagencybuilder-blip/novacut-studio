@@ -150,6 +150,17 @@ export function ClipBlock({
   const asset = useEditor((s) => (clip.mediaId ? s.media.find((m) => m.id === clip.mediaId) : undefined))
   const razorMode = useEditor((s) => s.toolMode === 'razor')
   const toolMode = useEditor((s) => s.toolMode)
+  // UX60 Phase 2 (Days 13–14) — silence ranges (SOURCE time) for THIS clip,
+  // mapped to timeline time live so moves/trims keep the notches truthful
+  const silenceRanges = useEditor((s) => s.silenceHints[clip.id])
+  const silenceEdges = useMemo(
+    () =>
+      (silenceRanges ?? [])
+        .flatMap((r) => [r.start, r.end])
+        .map((t) => clip.start + (t - clip.trimStart) / (clip.speed || 1))
+        .filter((t) => t > clip.start + 0.02 && t < clip.start + clip.duration - 0.02),
+    [silenceRanges, clip.start, clip.trimStart, clip.speed, clip.duration],
+  )
 
   const isMedia = clip.kind === 'video' || clip.kind === 'audio'
   const widthPx = Math.max(clip.duration * zoom, 8)
@@ -434,17 +445,33 @@ export function ClipBlock({
         ? Math.max(0, orig.start - orig.trimStart / orig.speed)
         : Math.max(0, orig.start - orig.duration + MIN_CLIP_DURATION)
       const newStart = clamp(orig.start + dx, minStart, orig.start + orig.duration - MIN_CLIP_DURATION)
-      const delta = newStart - orig.start
+      // UX60 Phase 2 — snap-to-silence: the head prefers the detected speech gaps
+      let headStart = newStart
+      let headSnapped = false
+      if (st.snapEnabled) {
+        const tol = 8 / zoom
+        const edges = (st.silenceHints[clip.id] ?? [])
+          .flatMap((r) => [r.start, r.end])
+          .map((t) => clip.start + (t - clip.trimStart) / (clip.speed || 1))
+        const hit = edges.find((e) => Math.abs(newStart - e) < tol)
+        if (hit !== undefined) {
+          headStart = Math.max(minStart, hit)
+          headSnapped = headStart !== newStart
+        }
+      }
+      const delta = headStart - orig.start
       const newDuration = orig.duration - delta
       const newTrimStart = Math.max(0, orig.trimStart + delta * orig.speed)
       st.trimClip(
         clip.id,
         isMedia
-          ? { start: newStart, trimStart: newTrimStart, duration: newDuration }
-          : { start: newStart, duration: newDuration },
+          ? { start: headStart, trimStart: newTrimStart, duration: newDuration }
+          : { start: headStart, duration: newDuration },
         `trim-${clip.id}`,
       )
-      setTip(`${formatTimecode(newStart, fps)} · ${formatShortTime(newDuration)}`)
+      setTip(
+        `${formatTimecode(headStart, fps)} · ${formatShortTime(newDuration)}${headSnapped ? ' · silence' : ''}`,
+      )
       return
     }
 
@@ -488,9 +515,23 @@ export function ClipBlock({
       return
     }
     const maxDuration = isMedia ? (orig.sourceDuration - orig.trimStart) / orig.speed : 3600
-    const newDuration = clamp(orig.duration + dx, MIN_CLIP_DURATION, maxDuration)
+    let newDuration = clamp(orig.duration + dx, MIN_CLIP_DURATION, maxDuration)
+    // UX60 Phase 2 — snap-to-silence: the tail prefers the detected speech gaps
+    let tailSnapped = false
+    if (st.snapEnabled) {
+      const tol = 8 / zoom
+      const endT = orig.start + newDuration
+      const edges = (st.silenceHints[clip.id] ?? [])
+        .flatMap((r) => [r.start, r.end])
+        .map((t) => clip.start + (t - clip.trimStart) / (clip.speed || 1))
+      const hit = edges.find((e) => Math.abs(endT - e) < tol)
+      if (hit !== undefined) {
+        newDuration = clamp(hit - orig.start, MIN_CLIP_DURATION, maxDuration)
+        tailSnapped = newDuration !== clamp(orig.duration + dx, MIN_CLIP_DURATION, maxDuration)
+      }
+    }
     st.trimClip(clip.id, { duration: newDuration }, `trim-${clip.id}`)
-    setTip(`${formatTimecode(clip.start, fps)} · ${formatShortTime(newDuration)}`)
+    setTip(`${formatTimecode(clip.start, fps)} · ${formatShortTime(newDuration)}${tailSnapped ? ' · silence' : ''}`)
   }
 
   const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -614,6 +655,25 @@ function templatePlaceholderOf(clip: Clip): string | null {
         {clip.kind === 'video' && asset?.peaks && asset.peaks.length > 0 && (
           <Waveform peaks={asset.peaks} rms={asset.rms} clip={clip} widthPx={widthPx} slim />
         )}
+
+        {/* UX60 Phase 2 (Days 13–14) — snap-to-silence ghost handles: amber
+            notches at detected speech gaps near the trim zones. Trim handles
+            snap to these edges (also announced in the drag tooltip). */}
+        {(silenceEdges ?? []).map((edge) => {
+          const frac = ((edge - clip.start) / clip.duration) * 100
+          if (!Number.isFinite(frac) || frac < 0.5 || frac > 99.5) return null
+          const near = Math.min(Math.abs(edge - clip.start), Math.abs(edge - (clip.start + clip.duration)))
+          if (near > 2.5) return null // ghost handles live near the trim zones only
+          return (
+            <div
+              key={edge}
+              data-nc-silence-hint={edge}
+              className="pointer-events-none absolute inset-y-1 z-[3] w-[3px] -translate-x-1/2 rounded-full bg-amber-400/85 shadow-[0_0_5px_rgba(251,191,36,0.55)]"
+              style={{ left: `${frac}%` }}
+              aria-hidden
+            />
+          )
+        })}
 
         {/* label row */}
         {clip.kind === 'adjustment' ? (

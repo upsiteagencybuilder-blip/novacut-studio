@@ -178,6 +178,22 @@ function useToolAction() {
         window.setTimeout(() => window.dispatchEvent(new CustomEvent('nc-pulse-checklist')), 200)
         toast('Quick-start checklist lives at the top of the Media panel')
       },
+      /* ---- UX60 Phase 2 — smart assistance ---- */
+      'auto-cut-to-beat': () => {
+        window.dispatchEvent(new CustomEvent('nc-auto-cut-beat'))
+        toast('Auto-cut to beat — detecting the music grid, then cutting on it')
+      },
+      'suggest-highlights': () => {
+        window.dispatchEvent(new CustomEvent('nc-suggest-highlights'))
+        toast('Scanning the timeline for dead air — the suggestion card appears bottom-right')
+      },
+      'detect-trim-hints': () => {
+        window.dispatchEvent(new CustomEvent('nc-detect-trim-hints'))
+      },
+      'pulse-context-toolbar': () => {
+        window.dispatchEvent(new CustomEvent('nc-pulse-context-toolbar'))
+        toast('Context toolbar appears over the preview when exactly one clip is selected')
+      },
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])

@@ -27,6 +27,7 @@ import { clamp, formatTimecode, projectDuration } from '@/lib/editor/utils'
 import { toast } from 'sonner'
 import { useEngineBridge } from '@/hooks/useEngineBridge'
 import { Button } from '@/components/ui/button'
+import { ContextToolbar } from './ContextToolbar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
@@ -452,6 +453,8 @@ export function PreviewPane() {
     <div ref={rootRef} className="flex h-full min-w-0 flex-col">
       {/* ---------------- canvas stage ---------------- */}
       <div className="nc-checker relative flex min-h-0 flex-1 items-center justify-center p-4">
+        {/* UX60 Phase 2 — selection-aware quick actions, floating over the canvas */}
+        <ContextToolbar />
         <div ref={stageRef} className="flex h-full w-full items-center justify-center">
           <div
             ref={wrapperRef}

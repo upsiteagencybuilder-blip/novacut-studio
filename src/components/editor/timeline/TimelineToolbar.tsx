@@ -5,7 +5,7 @@
  * Edit actions (split / duplicate / delete), snap toggle, beat-sync markers
  * (detect / show-hide / clear), project duration chip and the zoom group.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeftRight,
   AudioLines,
@@ -32,6 +32,7 @@ import {
   Scissors,
   SlidersHorizontal,
   Snowflake,
+  Sparkles,
   StepBack,
   StepForward,
   Trash2,
@@ -79,6 +80,32 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
   const inPoint = useEditor((s) => s.inPoint)
   const outPoint = useEditor((s) => s.outPoint)
   const [detecting, setDetecting] = useState(false)
+  const analyzing = useEditor((s) => s.analyzingHighlights)
+
+  /* UX60 Phase 2 — Pro-wall deep links land here as window events */
+  useEffect(() => {
+    const onAutoCut = () => void runAutoCutToBeat(1, setDetecting)
+    const onSuggest = () => void runSuggestHighlights()
+    const onTrimHints = () => {
+      const st = useEditor.getState()
+      const id = st.selectedClipIds[0]
+      if (!id) {
+        toast('Select a clip with audio first — hints mark its silence boundaries')
+        return
+      }
+      st.clearSilenceHints(id)
+      void st.computeSilenceHints(id)
+      toast('Scanning the selected clip for silence boundaries…')
+    }
+    window.addEventListener('nc-auto-cut-beat', onAutoCut)
+    window.addEventListener('nc-suggest-highlights', onSuggest)
+    window.addEventListener('nc-detect-trim-hints', onTrimHints)
+    return () => {
+      window.removeEventListener('nc-auto-cut-beat', onAutoCut)
+      window.removeEventListener('nc-suggest-highlights', onSuggest)
+      window.removeEventListener('nc-detect-trim-hints', onTrimHints)
+    }
+  }, [])
 
   const duration = projectDuration(project)
   const fps = project.fps
@@ -469,10 +496,33 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             <Magnet className="mr-2 size-3.5" />
             Align selected clips to beats
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={beatMarkers.length === 0} onClick={() => useEditor.getState().toggleShowBeatMarkers()}>
+          <DropdownMenuItem
+            disabled={beatMarkers.length === 0}
+            onClick={() => useEditor.getState().toggleShowBeatMarkers()}
+          >
             {showBeatMarkers ? <EyeOff className="mr-2 size-3.5" /> : <Eye className="mr-2 size-3.5" />}
             {showBeatMarkers ? 'Hide beat markers' : 'Show beat markers'}
           </DropdownMenuItem>
+          {/* UX60 Phase 2 (Days 9–10) — one-click auto-cut: detect if needed, then slice */}
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Auto-cut to beat
+          </DropdownMenuLabel>
+          {[
+            { stride: 1, label: 'Cut clips at every beat' },
+            { stride: 2, label: 'Cut at every 2nd beat' },
+            { stride: 4, label: 'Cut at downbeats only' },
+          ].map(({ stride, label }) => (
+            <DropdownMenuItem
+              key={stride}
+              disabled={detecting}
+              data-nc-auto-cut={stride}
+              onClick={() => void runAutoCutToBeat(stride, setDetecting)}
+            >
+              <Scissors className="mr-2 size-3.5" />
+              {label}
+            </DropdownMenuItem>
+          ))}
           {/* Day 26 — detected beats become real timeline marker pins */}
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -511,6 +561,24 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* UX60 Phase 2 (Days 11–12) — smart highlight suggestions */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(TOOL_BTN, 'w-9', analyzing && 'text-amber-300 hover:text-amber-200')}
+            disabled={analyzing}
+            data-nc-suggest-highlights
+            onClick={() => void runSuggestHighlights()}
+            aria-label="Suggest highlights — find and trim dead air"
+          >
+            {analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Smart highlights — find dead air, one-tap tighten</TooltipContent>
+      </Tooltip>
 
       {/* ---- pro cluster: blade tool / in-out / edit-point navigation ---- */}
 
@@ -867,6 +935,36 @@ async function detectBeatsFromSelection(setDetecting: (v: boolean) => void): Pro
   } finally {
     setDetecting(false)
   }
+}
+
+/**
+ * UX60 Phase 2 (Days 9–10) — ONE-CLICK auto-cut to beat: when no beat grid
+ * exists yet it is detected from the music bed first, then every video/image
+ * clip straddling the grid is sliced on the beat (one undo step). Exit
+ * criteria: demo project → cut ≤3 clicks.
+ */
+async function runAutoCutToBeat(stride: number, setDetecting: (v: boolean) => void): Promise<void> {
+  if (useEditor.getState().beatMarkers.length === 0) {
+    await detectBeatsFromSelection(setDetecting)
+    // detection failed / found nothing — it already toasted; don't cut blind
+    if (useEditor.getState().beatMarkers.length === 0) return
+  }
+  const cuts = useEditor.getState().splitClipsAtBeats(stride)
+  if (cuts > 0) toast.success(`Beat cut — ${cuts} cut${cuts === 1 ? '' : 's'} landed on the music`)
+  else toast('No video/image clips straddle the beat grid — nothing to cut')
+}
+
+/**
+ * UX60 Phase 2 (Days 11–12) — smart highlight suggestion runner. On-device
+ * silence analysis; the suggestion card (one-tap apply / dismiss) appears at
+ * the timeline's bottom-right.
+ */
+async function runSuggestHighlights(): Promise<void> {
+  const st = useEditor.getState()
+  if (st.analyzingHighlights) return
+  const n = await st.analyzeHighlightsForTimeline()
+  if (n > 0) toast.success(`${n} clip${n === 1 ? '' : 's'} could be tighter — review the suggestion card`)
+  else toast('No obvious dead air found — the timeline stays as it is')
 }
 
 /**

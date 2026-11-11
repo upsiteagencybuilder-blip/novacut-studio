@@ -26,6 +26,7 @@ import { clamp, clipsOnTrack, formatShortTime, formatTimecode, projectDuration }
 import type { Clip, ClipKind, TimelineMarker, Track } from '@/lib/editor/types'
 import { cn } from '@/lib/utils'
 import { ClipBlock, type ClipDragInfo } from './ClipBlock'
+import { SmartSuggestCard } from './SmartSuggestCard'
 import { TimelineToolbar } from './TimelineToolbar'
 
 const RULER_STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60]
@@ -133,6 +134,19 @@ export function Timeline() {
       el.scrollLeft = Math.max(0, x - el.clientWidth * 0.3)
     }
   }, [currentTime, isPlaying, zoom])
+
+  /* UX60 Phase 2 (Days 13–14) — smart trim hints: when exactly one clip with
+     audio is selected, analyze its silence boundaries once (debounced, cached
+     per clip id) so the amber ghost handles + snap-to-silence exist */
+  useEffect(() => {
+    if (selectedIds.length !== 1) return
+    const clip = project.clips.find((c) => c.id === selectedIds[0])
+    if (!clip || (clip.kind !== 'video' && clip.kind !== 'audio')) return
+    const st = useEditor.getState()
+    if (st.silenceHints[clip.id] || st.silenceHintsLoading.includes(clip.id)) return
+    const t = window.setTimeout(() => void st.computeSilenceHints(clip.id), 350)
+    return () => window.clearTimeout(t)
+  }, [selectedIds, project.clips])
 
   const registerLane = useCallback((trackId: string, el: HTMLDivElement | null) => {
     if (el) laneEls.current.set(trackId, el)
@@ -508,6 +522,9 @@ export function Timeline() {
               style={{ left: marqueeRect.l, top: marqueeRect.t, width: marqueeRect.w, height: marqueeRect.h }}
             />
           )}
+
+          {/* UX60 Phase 2 — highlight-reel suggestion card (one-tap apply / dismiss) */}
+          <SmartSuggestCard />
         </div>
       </div>
     </TooltipProvider>
