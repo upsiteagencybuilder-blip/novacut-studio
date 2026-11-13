@@ -152,7 +152,7 @@ interface EditorStore {
   applyTaskTemplate: (t: TaskTemplate) => boolean
   /* ---------- guided workflows (UX60 Phase 3, Days 19-20) ---------- */
   /** active step-by-step walkthrough — null when not guiding */
-  guided: { templateId: string; templateName: string; step: number } | null
+  guided: { templateId: string; templateName: string; step: number; clipIds: string[] } | null
   /** (re)start the guided walkthrough for a task template */
   startGuided: (templateId: string) => void
   setGuidedStep: (step: number) => void
@@ -1067,8 +1067,10 @@ export const useEditor = create<EditorStore>((set, get) => ({
       historyPast: [...st.historyPast.slice(-HISTORY_LIMIT + 1), { label: 'task-template-apply', at: Date.now() }],
       future: [],
       historyFuture: [],
-      // guided walkthrough starts with the apply — the banner appears instantly
-      guided: { templateId: t.id, templateName: t.name, step: 0 },
+      // guided walkthrough starts with the apply — the banner appears instantly.
+      // clipIds anchor the walkthrough to the applied clips: when NONE of them
+      // remain (undo of the apply, new project) the banner ends itself honestly.
+      guided: { templateId: t.id, templateName: t.name, step: 0, clipIds: clips.map((c) => c.id) },
     }))
     setTimeout(() => (suppressSave = false), 0)
     return true
@@ -1079,7 +1081,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
   startGuided: (templateId) => {
     const t = getTaskTemplate(templateId)
     if (!t) return
-    set({ guided: { templateId, templateName: t.name, step: 0 } })
+    // manual restart walks the CURRENT project state — if every clip it anchored
+    // to disappears later (undo, new project) the banner ends itself honestly
+    set({ guided: { templateId, templateName: t.name, step: 0, clipIds: get().project.clips.map((c) => c.id) } })
   },
 
   setGuidedStep: (step) => {

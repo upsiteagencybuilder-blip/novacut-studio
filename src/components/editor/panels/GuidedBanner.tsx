@@ -144,6 +144,15 @@ export function GuidedBanner() {
     let advancing = false
     const unsub = useEditor.subscribe((state) => {
       if (advancing) return
+      // template liveness first: when NONE of the anchored clips remain on the
+      // timeline (undo of the apply, new project) the walkthrough ends honestly
+      // instead of "advancing" on clips the user just restored
+      if (guided.clipIds.length > 0 && !state.project.clips.some((c) => guided.clipIds.includes(c.id))) {
+        advancing = true
+        useEditor.getState().endGuided()
+        toast('Walkthrough ended — the template is no longer on the timeline')
+        return
+      }
       const snap = { isPlaying: state.isPlaying, phase: state.exportState.phase, time: state.currentTime }
       let done = false
       try {

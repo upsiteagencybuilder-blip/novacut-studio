@@ -44,12 +44,14 @@
 
 | Day | Deliverable | Status |
 | --- | --- | --- |
-| 17–18 | Task template gallery: "Reels hook", "YouTube intro", "Product promo", "End screen" — full pre-cut projects | ⬜ |
-| 19–20 | Step-by-step mode: guided banner walks a template's 5 steps with live "next" highlighting | ⬜ |
-| 21–22 | Natural-language command palette: "make my title bigger and gold", "cut at the chorus" | ⬜ |
-| 23–24 | Smart defaults engine: remembers per-user panel tab, canvas size, font choice, export preset | ⬜ |
+| 17–18 | Task template gallery: "Reels hook", "YouTube intro", "Product promo", "End screen" — full pre-cut projects | ✅ |
+| 19–20 | Step-by-step mode: guided banner walks a template's 5 steps with live "next" highlighting | ✅ |
+| 21–22 | Natural-language command palette: "make my title bigger and gold", "cut at the chorus" | ✅ |
+| 23–24 | Smart defaults engine: remembers per-user panel tab, canvas size, font choice, export preset | ✅ |
 
 **Exit criteria:** template → personalized video in ≤5 edits; command palette parses ≥20 phrasings per intent.
+
+> ✅ **Phase 3 complete** (this commit): task templates + step-by-step walkthrough + NL palette + smart defaults shipped together; receipts in `worklog.md` (Task UX60-4). Golden path proven end-to-end: apply Reels hook → real import swap → restyle → real audio → trusted play → real export → walkthrough auto-completed on `phase: done`; census 133/133 phrasings (6 intents × ≥21).
 
 ## Phase 4 — Progressive disclosure (Days 25–32)
 **Goal:** beginners see less; pros lose nothing.

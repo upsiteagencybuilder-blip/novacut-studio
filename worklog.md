@@ -2826,3 +2826,46 @@ Counts (auto-computed from catalog): **728 total · live 297→303 · planned 28
 - Mobile 390×844: no horizontal scroll (390 px); context toolbar fits + wraps with 32 px touch targets; suggestion card fits (90→378); beat menu auto-cut item reachable and fits; fresh-load screenshot clean.
 - Fresh reload: 0 console errors, 0 page errors (the two transient dev-time console entries were HMR-transition artifacts — an intermediate Fast Refresh state and a stale pre-fix compile error both absent after clean reload).
 - lint + tsc clean; dev.log healthy.
+
+## Post-v1.0.0 — UX60 Phase 3 completion: Days 17–24 (Guided workflows)
+**Date:** post-release · **Task ID:** UX60-4
+**Task:** user instruction "Next: Phase 3 — Guided workflows (Day ১৭–২৪)" then "complete unfinished work" — the four Phase 3 deliverables were found already implemented on commit `22e07b4` (gateway auto-commit) but UNFINISHED as work: no E2E verification, plan rows still ⬜, no worklog entry, unpushed. This session verified everything end-to-end, found and root-fixed one real bug, then completed the protocol.
+
+### Shipped 1 — Task Template Gallery (Days 17–18)
+- `lib/task-templates.ts` (new): 4 FULL PRE-CUT projects for named jobs-to-be-done — Reels hook / YouTube intro / Product promo / End screen. Each ships pre-timed slots with motion + fades + tuned filters, fully styled titles (gradient fill + pop/slideUp animations, background pills), a timed+faded music slot, canvas/fps, and the 5-step walkthrough spec.
+- `store.applyTaskTemplate(t)`: rebuilds the project in ONE undo step — placeholder slots (honest ▶/🖼 text clips), styled overlay titles, music slot on the audio track, canvas + fps applied; returns false on an open compound session.
+- Projects dialog Templates tab: new mode switch "Structures | Task projects · pre-cut" (`data-nc-template-mode`), 4 task cards (`data-nc-task-card`) with category + "5 guided steps" badges and a "Use & get guided" apply button.
+- PROVEN: apply Reels hook → 9 clips (5 slots + 3 styled titles + music), canvas 1080×1920 @30fps; one undo restores the previous project exactly (6 clips · 1280×720); apply End screen → 1920×1080 @30; one undo restores again.
+
+### Shipped 2 — Step-by-Step Mode (Days 19–20)
+- `GuidedBanner.tsx` (new): glass banner under the header ("Reels hook · Step 2/5 — Restyle the title"), progress dots (done emerald / current amber w-4), Back/Next/Finish/Skip always available, Esc ends, deep-link pulse ring.
+- Amber ring (`data-nc-guided-ring`) wraps the CURRENT step's REAL UI target via `data-nc-guided` attributes on timeline / preview stage / left-panel audio tab / export button; ring follows resize/scroll/layout with 120/600ms settle + 900ms interval re-locate. Measured: ring [-6,503,1292,303] wraps timeline [0,509,1280,291] exactly (+6px); preview ring [534,66,212,368] wraps [540,72,200,356].
+- LIVE completion watcher with per-step baseline checks: swap footage (new visual clip w/ mediaId vs baseline), restyle title (text style JSON changed vs baseline), add music (new audio w/ mediaId), play ≥0.6s, export `phase: 'done'` — auto-advances with an honest toast ("Step 1 done — next: Restyle the title").
+- PROVEN end-to-end golden path: real PNG import → swap → auto-advance 0→1 (ring moved to preview); real title restyle 170px/#fbbf24 → 1→2 (tab auto-switched to audio); the earlier real audio add honestly completed 2→3; trusted Play/Pause → 3→4 ("Step 4 done — next: Export your video"); NL "export the video" → real export (recording→done) → `phase: 'done'` completed the walkthrough automatically: guided=null + "Walkthrough complete — template personalized, ready to export" + hasExported=true. Template → personalized video in ≤5 edits: exit criterion PROVEN.
+- Escape semantics: Esc ends the walkthrough (documented) — discovered during E2E when Esc meant for the tour overlay also ended the banner; both behaviors verified as intended.
+
+### Shipped 3 — Natural-Language Command Palette (Days 21–22)
+- `lib/editor/nl-commands.ts` (new): deterministic on-device parser — 12 intents (title bigger/smaller/color/bold/outline/shadow, mute/unmute, split-here, cut-at-beat/chorus, volume ±, speed, delete/duplicate, add-title, fades, canvas formats, export, play/pause). Compound sentences chain: "make my title bigger and gold" runs size then color in one undo step via `alsoColor`.
+- CommandPalette: typed sentences ≥3 chars show ONE interpreted smart action row (`data-nc-nl-action`, amber) above the command list with the exact effect shown before Enter; Enter runs it; placeholder now invites plain sentences.
+- `lib/effects/beat-detect.ts` (new): `findChorusStart` — ~2s highest-sustained-energy window via prefix sums + strongest transient snap; silence guard; plus `detectBeats` energy-flux onset detection (used by beat markers).
+- PROVEN: "make my title bigger and gold" → smart row "Title font size +20% (up to 220px) then recolor gold (#ffd700)" → Enter → fontSize 170→204, color #ffd700, gradient null, palette closed, toast "Title 204px and recolored gold". "cut at the chorus" on the real demo WAV → chorus found at 21.01s → playhead moved + split → 11→12 clips, toast honest. "export the video" → export dialog opened.
+- EXIT CRITERION census (parseNL over NL_PHRASING_EXAMPLES, honest counts): title-bigger 24/24 · title-smaller 22/22 · title-color 21/21 · cut-at-beat 22/22 · mute-all 22/22 · split-here 22/22 = **133/133**, every intent ≥21 ≥ 20. PROVEN.
+
+### Shipped 4 — Smart Defaults Engine (Days 23–24)
+- `lib/editor/smart-defaults.ts` (new): per-device memory in the existing IndexedDB KV (`sd.*` keys, debounced 500ms) — panel tab, text font, canvas size, export platform preset. Explicit choices always win: intent-picker canvas and text-preset fonts override; the engine only fills gaps (new projects/new text clips/preset pre-highlight — never forced onto an open project).
+- Wiring: `setPanelTab`→recordPanelTab; `newProject` (picker choice records; absent choice re-applies last canvas); `setCanvasSize`→recordCanvas; Properties Font select→recordFontFamily; ExportDialog preset click→recordExportPreset + reopen pre-highlights the remembered preset WITHOUT auto-applying its canvas.
+- PROVEN: setPanelTab('color') + canvas 1080×1080 → reload → panelTab restored 'color' (KV→cache→store). Real Font select → "Bangers" recorded; NEW text clip inherits Bangers. TikTok preset click → `sd.exportPreset:'tiktok'`; after reload the export dialog pre-highlights TikTok (resized-note rendered, no canvas forced). Deep-link "Smart Defaults Engine" toast shows the honest summary incl. named-empty parts ("export preset: default" before one was ever chosen).
+
+### Catalog + plan doc
+- 4 new live entries (panels → "Onboarding & guidance": Task Template Gallery, Step-by-Step Mode, Natural-Language Command Palette, Smart Defaults Engine) — all deep-linked from the Pro wall and all four deep links E2E-clicked (templates dialog opens on Task mode; palette opens with NL placeholder; step-by-step pulses banner or honestly asks to apply a template first; summary toast fires).
+- Counts auto: **740 total · live 320 · beta 8 · roadmap 272** (Pro wall chips verified).
+- `docs/UX-60-DAYS.md`: Phase 3 rows 17–24 marked ✅ + "Phase 3 complete" note (receipts = Task UX60-4).
+
+### Bug FOUND in E2E, fixed at the root
+- **Undo of a template apply left a ghost walkthrough + false auto-advance**: after one undo restored the pre-template project, the guided banner stayed alive and the restored demo clips (ids unknown to the walkthrough baseline) falsely triggered "swap footage" → step 0→1 on a template that no longer existed. Root fix: `guided` now anchors to `clipIds` (the applied clips; manual restart anchors to the whole current timeline) and the banner's live watcher FIRST checks template liveness — when none of the anchored clips remain it ends itself with the honest toast "Walkthrough ended — the template is no longer on the timeline". Re-verified: apply Product promo (10 anchors) → one undo → 6 clips, guided=null, honest toast; no false advance.
+
+### E2E receipts
+- Desktop 1280×800: all four features exercised above incl. real PNG import, real WAV chorus analysis, trusted play/pause, real export render; Pro wall 740/320 with 4 new actionable cards; amber rings measured on real targets; screenshots taken (guided banner, NL palette smart row, mobile banner).
+- Mobile 390×844: no horizontal scroll (390px) on editor + projects dialog; task cards fit (dialog 0..390); applying Reels hook starts the walkthrough — banner fits (8..382, width 374) and the amber ring lands on the timeline (top 565, h 229).
+- Fresh reloads (desktop + mobile): 0 console errors, 0 page errors; demo golden path intact (6 clips).
+- lint + tsc clean; dev.log healthy.
