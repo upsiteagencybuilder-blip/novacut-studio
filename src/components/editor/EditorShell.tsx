@@ -40,6 +40,7 @@ import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
 import { CoachMarks } from '@/components/editor/panels/CoachMarks'
+import { GuidedBanner } from '@/components/editor/panels/GuidedBanner'
 import { startCloudAutosave } from '@/lib/cloud/autosave'
 import { CrashRecoveryWatcher } from '@/components/editor/ErrorBoundary'
 import { installTelemetry } from '@/lib/telemetry'
@@ -655,6 +656,7 @@ export function EditorShell() {
       </Suspense>
       <OnboardingOverlay />
       <CoachMarks />
+      <GuidedBanner />
       <CrashRecoveryWatcher />
       <ContextualTips />
       <CommandPalette />

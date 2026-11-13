@@ -61,6 +61,10 @@ export type ToolAction =
   | 'suggest-highlights'
   | 'detect-trim-hints'
   | 'pulse-context-toolbar'
+  | 'open-task-templates'
+  | 'start-step-by-step'
+  | 'open-nl-palette'
+  | 'show-smart-defaults'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

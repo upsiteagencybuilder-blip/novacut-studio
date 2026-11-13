@@ -74,6 +74,7 @@ import {
   TEXT_GRADIENT_PRESETS,
   TRANSFORM_PRESETS_KEY,
 } from '@/lib/editor/constants'
+import { recordFontFamily } from '@/lib/editor/smart-defaults'
 import { clamp, computeHistogram, computeLumaWaveform, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, levelToDbfs, normalizeGainFor, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
 import { BUILTIN_LUTS } from '@/lib/editor/builtin-luts'
 import { VOICE_FX_PRESETS, matchVoicePreset, type VoiceFxPreset } from '@/lib/editor/voice-presets'
@@ -680,7 +681,7 @@ function TextSection({ clip }: { clip: Clip }) {
         className="min-h-0 resize-none bg-(--nc-panel) text-xs"
       />
 
-      <SelectRow label="Font" value={style.fontFamily} onChange={(v) => patch({ fontFamily: v }, true)}>
+      <SelectRow label="Font" value={style.fontFamily} onChange={(v) => { recordFontFamily(v); patch({ fontFamily: v }, true) }}>
         {TEXT_FONTS.map((f) => (
           <SelectItem key={f.family} value={f.family} className="text-xs" style={{ fontFamily: f.family }}>
             {f.label}

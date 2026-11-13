@@ -6,9 +6,10 @@
  * Only real, live commands are listed (see lib/command-palette.ts).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CornerDownLeft, Search } from 'lucide-react'
+import { CornerDownLeft, Search, Sparkles } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
 import { buildCommands, filterCommands } from '@/lib/editor/command-palette'
+import { executeNL, parseNL, type NLMatch } from '@/lib/editor/nl-commands'
 import { cn } from '@/lib/utils'
 
 /** Remounts on open so query/index reset without effects */
@@ -27,6 +28,8 @@ function CommandPaletteInner() {
 
   const commands = useMemo(() => (open ? buildCommands() : []), [open])
   const filtered = useMemo(() => filterCommands(commands, query), [commands, query])
+  /** UX60 Phase 3 — natural-language interpretation of the typed sentence */
+  const nl: NLMatch | null = useMemo(() => (open && query.trim().length >= 3 ? parseNL(query) : null), [open, query])
 
   // reset + focus when the palette opens (mounted/unmounted by `open` anyway)
   useEffect(() => {
@@ -45,6 +48,12 @@ function CommandPaletteInner() {
     if (!cmd) return
     useEditor.getState().openDialog(null)
     cmd.run()
+  }
+
+  const runNL = () => {
+    if (!nl) return
+    useEditor.getState().openDialog(null)
+    void executeNL(nl)
   }
 
   return (
@@ -72,13 +81,14 @@ function CommandPaletteInner() {
                 setIndex((i) => Math.max(i - 1, 0))
               } else if (e.key === 'Enter') {
                 e.preventDefault()
-                runAt(index)
+                if (nl) runNL()
+                else runAt(index)
               } else if (e.key === 'Escape') {
                 e.preventDefault()
                 useEditor.getState().openDialog(null)
               }
             }}
-            placeholder="Type a command — dialogs, panels, tools, canvas…"
+            placeholder="Type a command — or just ask: “make my title bigger and gold”"
             aria-label="Command palette search"
             className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/75"
             data-nc-palette-input
@@ -89,7 +99,24 @@ function CommandPaletteInner() {
         </div>
 
         <div ref={listRef} className="max-h-[46vh] overflow-y-auto p-1.5" data-nc-palette-list>
-          {filtered.length === 0 && (
+          {/* UX60 Phase 3 — the interpreted smart action, Enter runs it */}
+          {nl && (
+            <button
+              type="button"
+              data-nc-nl-action
+              onClick={runNL}
+              className="mb-1 flex w-full items-start gap-2.5 rounded-lg border border-amber-300/30 bg-amber-300/10 px-2.5 py-2 text-left transition hover:bg-amber-300/15"
+            >
+              <Sparkles className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-bold text-foreground">{nl.label}</span>
+                <span className="mt-0.5 block text-[10px] leading-snug text-muted-foreground">{nl.detail}</span>
+              </span>
+              <span className="mt-0.5 shrink-0 rounded border border-amber-300/40 px-1 text-[9px] font-semibold text-amber-300">Enter</span>
+            </button>
+          )}
+          {nl && <p className="px-2 pb-1 pt-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">All commands</p>}
+          {filtered.length === 0 && !nl && (
             <p className="px-3 py-8 text-center text-xs text-muted-foreground">
               No command matches “{query}” — the palette only lists features that actually run.
             </p>
@@ -117,7 +144,7 @@ function CommandPaletteInner() {
           <span>
             {filtered.length} of {commands.length} commands — all live features
           </span>
-          <span>↑↓ move · Enter run</span>
+          <span>↑↓ move · Enter run · plain sentences work</span>
         </div>
       </div>
     </div>

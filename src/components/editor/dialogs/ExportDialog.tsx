@@ -45,6 +45,7 @@ import {
   supportedExportMimeTypes,
 } from '@/lib/editor/exporter'
 import { EXPORT_PRESETS, EXPORT_QUALITY_PRESETS } from '@/lib/editor/constants'
+import { getSmartDefaultExportPreset, recordExportPreset } from '@/lib/editor/smart-defaults'
 import {
   applyBundleToProject,
   bundleNameTaken,
@@ -108,7 +109,12 @@ export function ExportDialog() {
   const openDialog = useEditor((s) => s.openDialog)
   const project = useEditor((s) => s.project)
 
-  const [presetId, setPresetId] = useState<string | null>(null)
+  // UX60 Phase 3 — smart defaults: the last-used platform preset is
+  // re-highlighted (NOT auto-applied — canvas changes stay explicit)
+  const [presetId, setPresetId] = useState<string | null>(() => {
+    const remembered = getSmartDefaultExportPreset()
+    return remembered && EXPORT_PRESETS.some((p) => p.id === remembered) ? remembered : null
+  })
   const [bitrate, setBitrate] = useState<number>(12_000_000)
   const [format, setFormat] = useState<ExportFormat>('webm')
   const [showCustom, setShowCustom] = useState(false)
@@ -312,6 +318,7 @@ export function ExportDialog() {
     if (!preset) return
     const store = useEditor.getState()
     setPresetId(preset.id)
+    recordExportPreset(preset.id)
     setAppliedBundleId(null)
     setBitrate(preset.bitrate)
     store.setCanvasSize(preset.width, preset.height)

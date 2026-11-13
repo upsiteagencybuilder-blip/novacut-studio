@@ -50,6 +50,8 @@ interface PoolEntry {
   /** passive level tap for per-track meters */
   analyser?: AnalyserNode
   analyserData?: Uint8Array
+  /** the entry's summed output node — reconnected to each export's fresh destination */
+  outNode?: AudioNode
 }
 
 // AudioFxChain / ModNodes types + chain builders live in ./audio-mix — the SAME
@@ -540,11 +542,37 @@ class PreviewEngine {
       this.preloadFormantModule()
       this.preloadGateModule()
       this.preloadDenoiseModule()
-      if (!this.exportDest) this.exportDest = this.audioCtx.createMediaStreamDestination()
+      // UX60 Phase 3 fix — create a FRESH destination per export. A long-lived
+      // MediaStreamAudioDestinationNode can go stale across recorder sessions
+      // (its track stays "live" but feeds MediaRecorder zero frames, stalling
+      // the muxer into a 0-byte file). Rebuilding the node per export is cheap
+      // and the entries below re-route into it right after.
+      this.exportDest = this.audioCtx.createMediaStreamDestination()
       // route existing + future elements through their FX chains
       this.ensureAnalyser()
       const project = this.snapshotFn?.().project
       const clipOf = (clipId: string) => project?.clips.find((c) => c.id === clipId)
+      // already-routed entries keep their graphs (routeEntry early-returns) —
+      // reconnect their summed outputs into the fresh destination so audio
+      // reaches the recorder
+      for (const [, entry] of this.videos) {
+        if (entry.outNode) {
+          try {
+            entry.outNode.connect(this.exportDest)
+          } catch {
+            /* already connected */
+          }
+        }
+      }
+      for (const [, entry] of this.audios) {
+        if (entry.outNode) {
+          try {
+            entry.outNode.connect(this.exportDest)
+          } catch {
+            /* already connected */
+          }
+        }
+      }
       for (const [id, entry] of this.videos) {
         const clip = clipOf(id)
         if (clip) this.routeEntry(clip, entry)
@@ -726,6 +754,7 @@ class PreviewEngine {
       // Day 23 — every routed clip flows through its track's 3-band EQ stage
       const teq = this.ensureTrackEqChain(clip.trackId)
       const out: AudioNode = teq ? teq.chain.output : gain
+      entry.outNode = out
       if (teq) gain.connect(teq.chain.input)
       if (this.masterAnalyser) out.connect(this.masterAnalyser)
       else out.connect(this.audioCtx.destination)

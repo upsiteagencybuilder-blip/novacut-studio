@@ -116,3 +116,53 @@ export async function detectBeats(source: Blob): Promise<BeatDetection> {
 
   return { times: times.map((t) => Math.round(t * 1000) / 1000), bpm, duration: buffer.duration }
 }
+
+/**
+ * UX60 Phase 3 — find the "chorus": the ~2s window with the highest sustained
+ * energy in the track. Deterministic and on-device — the NL command
+ * "cut at the chorus" splits the timeline at this moment. Returns the window
+ * START in seconds (relative to the decoded source), or null for silence.
+ */
+export async function findChorusStart(source: Blob): Promise<number | null> {
+  const buffer = await decodeSource(source)
+  const HOP2 = 2048 // ~46ms frames at 44.1kHz
+  const frames = Math.floor(buffer.length / HOP2)
+  if (frames < 4) return null
+
+  /* mono RMS energy envelope */
+  const energy = new Float32Array(frames)
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const data = buffer.getChannelData(c)
+    for (let f = 0; f < frames; f++) {
+      let sum = 0
+      const base = f * HOP2
+      const end = Math.min(base + HOP2, buffer.length)
+      for (let i = base; i < end; i++) sum += data[i] * data[i]
+      energy[f] += sum / (end - base)
+    }
+  }
+  for (let f = 0; f < frames; f++) energy[f] = Math.sqrt(energy[f] / buffer.numberOfChannels)
+
+  /* global silence guard — a near-empty track has no chorus */
+  let peak = 0
+  for (let f = 0; f < frames; f++) peak = Math.max(peak, energy[f])
+  if (peak < 0.005) return null
+
+  /* sliding ~2s window via prefix sums, pick the loudest window start */
+  const winFrames = Math.max(1, Math.round((2 * buffer.sampleRate) / HOP2))
+  const prefix = new Float64Array(frames + 1)
+  for (let f = 0; f < frames; f++) prefix[f + 1] = prefix[f] + energy[f]
+  let best = 0
+  let bestSum = -1
+  for (let f = 0; f + winFrames <= frames; f++) {
+    const s = prefix[f + winFrames] - prefix[f]
+    if (s > bestSum) {
+      bestSum = s
+      best = f
+    }
+  }
+  // snap to the strongest frame inside the winning window (the transient itself)
+  let bestFrame = best
+  for (let f = best; f < best + winFrames; f++) if (energy[f] > energy[bestFrame]) bestFrame = f
+  return Math.round(((bestFrame * HOP2) / buffer.sampleRate) * 100) / 100
+}

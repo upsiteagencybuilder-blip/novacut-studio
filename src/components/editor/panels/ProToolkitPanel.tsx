@@ -15,6 +15,7 @@ import { useMemo, useState } from 'react'
 import { ArrowUpRight, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
+import { getSmartDefaultsSummary } from '@/lib/editor/smart-defaults'
 import {
   PRO_CATALOG,
   PRO_SECTIONS,
@@ -193,6 +194,40 @@ function useToolAction() {
       'pulse-context-toolbar': () => {
         window.dispatchEvent(new CustomEvent('nc-pulse-context-toolbar'))
         toast('Context toolbar appears over the preview when exactly one clip is selected')
+      },
+      /* ---- UX60 Phase 3 — guided workflows ---- */
+      'open-task-templates': () => {
+        try {
+          sessionStorage.setItem('nc.projectsTab', 'templates')
+          sessionStorage.setItem('nc.templatesMode', 'task')
+        } catch {
+          /* private mode — dialog still opens */
+        }
+        openDialog('projects')
+      },
+      'start-step-by-step': () => {
+        const guided = useEditor.getState().guided
+        if (guided) {
+          window.dispatchEvent(new CustomEvent('nc-pulse-guided-banner'))
+          toast(`Step-by-step is live — step ${guided.step + 1} of “${guided.templateName}”`)
+        } else {
+          try {
+            sessionStorage.setItem('nc.projectsTab', 'templates')
+            sessionStorage.setItem('nc.templatesMode', 'task')
+          } catch {
+            /* private mode */
+          }
+          openDialog('projects')
+          toast('Apply a task project first — the guided banner starts with it')
+        }
+      },
+      'open-nl-palette': () => {
+        openDialog('palette')
+        toast('Type a sentence — “make my title bigger and gold”, “cut at the chorus”')
+      },
+      'show-smart-defaults': () => {
+        const summary = getSmartDefaultsSummary()
+        toast(`Smart defaults — ${summary}`)
       },
     }
     return map

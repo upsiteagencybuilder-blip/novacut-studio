@@ -460,6 +460,7 @@ export function PreviewPane() {
             ref={wrapperRef}
             className="nc-stage relative overflow-hidden rounded-lg"
             data-nc-tour="preview"
+            data-nc-guided="preview"
             style={{ width: fit.w || undefined, height: fit.h || undefined }}
             onDoubleClick={handleStageDoubleClick}
           >

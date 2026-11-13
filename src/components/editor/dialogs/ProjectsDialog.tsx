@@ -27,6 +27,7 @@ import {
   FolderOpen,
   HardDrive,
   History,
+  Clapperboard,
   LayoutTemplate,
   Link2,
   Loader2,
@@ -41,6 +42,7 @@ import {
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
 import { BUILTIN_TEMPLATES, templateDuration, type EditTemplate } from '@/lib/templates'
+import { TASK_TEMPLATES, taskTemplateDuration, type TaskTemplate } from '@/lib/task-templates'
 import * as db from '@/lib/editor/db'
 import { StoragePanel } from '@/components/editor/dialogs/StorageDialog'
 import { CanvasIntentPicker, startProjectFromIntent } from '@/components/editor/panels/CanvasIntentPicker'
@@ -1206,17 +1208,75 @@ function DeviceTab() {
  * Day 67 — template gallery: ready-made edit structures with honest
  * structure previews (slots, overlays, duration, canvas). Applying builds a
  * real timeline scaffold (Day 68 — wired through store.applyTemplate).
+ *
+ * UX60 Phase 3 (Days 17-18) — the same tab now also hosts the TASK TEMPLATE
+ * gallery: full pre-cut projects (styled slots + styled titles + a music
+ * slot) that start the 5-step guided walkthrough on apply.
  */
 function TemplatesTab() {
+  const [mode, setMode] = useState<'structure' | 'task'>(() => {
+    try {
+      if (sessionStorage.getItem('nc.templatesMode') === 'task') {
+        sessionStorage.removeItem('nc.templatesMode')
+        return 'task'
+      }
+    } catch {
+      /* private mode */
+    }
+    return 'structure'
+  })
   const [expanded, setExpanded] = useState<string | null>(null)
   const applying = useEditor((s) => s.applyTemplate)
+  const applyingTask = useEditor((s) => s.applyTaskTemplate)
   const openDialog = useEditor((s) => s.openDialog)
   const [filter, setFilter] = useState<'All' | EditTemplate['category']>('All')
   const cats = ['All', 'Social', 'Vlog', 'Promo', 'Cinematic', 'Tutorial'] as const
   const list = filter === 'All' ? BUILTIN_TEMPLATES : BUILTIN_TEMPLATES.filter((t) => t.category === filter)
 
+  const applyTask = (t: TaskTemplate) => {
+    const ok = applyingTask(t)
+    if (ok) {
+      toast.success(`“${t.name}” applied — pre-cut timeline ready, guided walkthrough started`)
+      openDialog(null)
+    } else {
+      toast.error('Could not apply the template on this project')
+    }
+  }
+
   return (
     <div className="space-y-2" data-nc-templates-tab>
+      {/* gallery mode: honest structures vs full pre-cut task projects */}
+      <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-(--nc-line) bg-(--nc-panel) p-1.5" data-nc-template-mode>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'structure'}
+          data-nc-template-mode-structure
+          onClick={() => setMode('structure')}
+          className={cn(
+            'rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
+            mode === 'structure' ? 'nc-gradient text-white' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          Structures
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'task'}
+          data-nc-template-mode-task
+          onClick={() => setMode('task')}
+          className={cn(
+            'rounded-lg px-2 py-1.5 text-[11px] font-medium transition',
+            mode === 'task' ? 'nc-gradient text-white' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          Task projects · pre-cut
+        </button>
+      </div>
+
+      {mode === 'structure' && (
+      <>
       <div className="flex flex-wrap gap-1">
         {cats.map((c) => (
           <button
@@ -1316,6 +1376,56 @@ function TemplatesTab() {
       <p className="text-[9px] text-muted-foreground/70">
         Templates build placeholder clips — nothing pretends to be your footage. Every slot is a real clip you trim, move and swap.
       </p>
+      </>
+      )}
+
+      {mode === 'task' && (
+        <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-1" data-nc-task-list>
+          {TASK_TEMPLATES.map((t) => (
+            <div key={t.id} className="rounded-xl border border-(--nc-line) bg-(--nc-panel) p-2.5" data-nc-task-card={t.id}>
+              <div className="flex items-center gap-2.5">
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
+                  style={{ background: `linear-gradient(135deg, ${t.accent}, ${t.accent}99)` }}
+                >
+                  <Clapperboard className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold">
+                    {t.name}
+                    <Badge variant="outline" className="ml-1.5 border-(--nc-line) px-1 py-0 text-[8px] text-muted-foreground">
+                      {t.category}
+                    </Badge>
+                    <Badge variant="outline" className="ml-1 border-amber-300/40 px-1 py-0 text-[8px] text-amber-300/90">
+                      5 guided steps
+                    </Badge>
+                  </p>
+                  <p className="line-clamp-2 text-[10px] leading-snug text-muted-foreground">{t.tagline}</p>
+                </div>
+                <span className="shrink-0 font-mono text-[9px] text-muted-foreground">{taskTemplateDuration(t).toFixed(0)}s</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-[9px] text-muted-foreground/80">
+                  {t.canvas.width}×{t.canvas.height} · {t.fps}fps · {t.slots.length} pre-cut slots · {t.overlays.length} styled titles{t.music ? ' · music slot' : ''}
+                </p>
+                <Button
+                  size="sm"
+                  data-nc-task-apply={t.id}
+                  className="nc-gradient h-7 shrink-0 rounded-lg px-2.5 text-[11px] font-semibold text-white"
+                  onClick={() => applyTask(t)}
+                >
+                  Use &amp; get guided
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {mode === 'task' && (
+        <p className="text-[9px] text-muted-foreground/70">
+          Task projects ship a full pre-cut timeline — motion, fades, styled titles and a music slot are already set. Applying starts the 5-step guided banner; placeholders stay honest until you drop your media.
+        </p>
+      )}
     </div>
   )
 }

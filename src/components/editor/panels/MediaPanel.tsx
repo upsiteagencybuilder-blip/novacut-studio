@@ -332,6 +332,7 @@ export function MediaPanel() {
         role="button"
         tabIndex={0}
         data-nc-tour="import"
+        data-nc-guided="media"
         onClick={() => inputRef.current?.click()}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click()

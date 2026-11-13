@@ -260,7 +260,7 @@ export function Timeline() {
 
   return (
     <TooltipProvider delayDuration={350}>
-      <div data-nc-tour="timeline" role="region" aria-label="Timeline — multi-track clip editor" className="flex h-full min-h-0 flex-col">
+      <div data-nc-tour="timeline" data-nc-guided="timeline" role="region" aria-label="Timeline — multi-track clip editor" className="flex h-full min-h-0 flex-col">
         <TimelineToolbar />
 
         {/* compound session breadcrumb — "inside the compound" indicator + exit */}

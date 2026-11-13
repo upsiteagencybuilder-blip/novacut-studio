@@ -6,6 +6,8 @@
  * All components read/write through this store.
  */
 import type { EditTemplate } from '../templates'
+import { getTaskTemplate, type TaskTemplate } from '../task-templates'
+import { getSmartDefaultCanvas, getSmartDefaultFont, getSmartDefaultPanelTab, loadSmartDefaults, recordCanvas, recordPanelTab } from './smart-defaults'
 import { create } from 'zustand'
 import { toast } from 'sonner'
 import type {
@@ -146,6 +148,15 @@ interface EditorStore {
   addTextClip: (preset?: TextPreset, at?: { x: number; y: number }) => void
   /** Day 68 — rebuild the timeline from a built-in template scaffold (undoable in ONE step) */
   applyTemplate: (t: EditTemplate) => boolean
+  /** UX60 Phase 3 — apply a FULL PRE-CUT task template (styled slots + styled titles + guided steps) and start the step-by-step walkthrough; ONE undo step */
+  applyTaskTemplate: (t: TaskTemplate) => boolean
+  /* ---------- guided workflows (UX60 Phase 3, Days 19-20) ---------- */
+  /** active step-by-step walkthrough — null when not guiding */
+  guided: { templateId: string; templateName: string; step: number } | null
+  /** (re)start the guided walkthrough for a task template */
+  startGuided: (templateId: string) => void
+  setGuidedStep: (step: number) => void
+  endGuided: () => void
   addStickerClip: (req: StickerRequest) => void
   /** Day 11 — insert an adjustment layer (invisible FX carrier) at the playhead on the top overlay track */
   addAdjustmentLayer: () => boolean
@@ -533,6 +544,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
   inPoint: null,
   outPoint: null,
   panelTab: 'media',
+  guided: null,
   monitorSafe: false,
   monitorThirds: false,
   monitorRulers: false,
@@ -579,6 +591,16 @@ export const useEditor = create<EditorStore>((set, get) => ({
       const land = landingTime(project)
       set({ media, project, ready: true, currentTime: land, hasExported: exportedKV === true })
       setTimeout(() => (suppressSave = false), 0)
+      // UX60 Phase 3 (Days 23-24) — smart defaults: load remembered prefs from
+      // KV and restore the last panel tab. Canvas/font/preset defaults are read
+      // synchronously from the engine cache when they're needed (newProject /
+      // addTextClip / export dialog) — never forced onto an open project.
+      void loadSmartDefaults().then(() => {
+        const tab = getSmartDefaultPanelTab()
+        if (tab && useEditor.getState().ready) {
+          set({ panelTab: tab as PanelTab })
+        }
+      })
       // Day 63 — startup budget probe: measure from navigation start to the
       // moment the editor is fully hydrated (project + media restored).
       // The number is honest: measured on THIS device, kept for the Storage
@@ -638,6 +660,17 @@ export const useEditor = create<EditorStore>((set, get) => ({
     // UX60 Day 3-4 — use-case canvas picker: apply the intent's canvas + target pin
     if (opts?.width) p.canvasWidth = opts.width
     if (opts?.height) p.canvasHeight = opts.height
+    if (opts?.width && opts?.height) {
+      // explicit picker choice becomes the remembered default
+      recordCanvas(opts.width, opts.height)
+    } else {
+      // UX60 Phase 3 — smart defaults: no explicit choice → last canvas wins
+      const c = getSmartDefaultCanvas()
+      if (c) {
+        p.canvasWidth = c.width
+        p.canvasHeight = c.height
+      }
+    }
     if (opts?.targetDuration && opts.targetDuration > 0) {
       p.markers = [
         { id: uid('mkr_'), t: opts.targetDuration, label: `${opts.targetDuration}s target`, color: '#f59e0b' },
@@ -716,6 +749,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
 
   setCanvasSize: (width, height) => {
+    // UX60 Phase 3 — smart defaults: remember the canvas the user chose
+    recordCanvas(width, height)
     get().pushHistory('canvas-size')
     set((s) => ({ project: withUpdatedAt({ ...s.project, canvasWidth: width, canvasHeight: height }) }))
   },
@@ -814,6 +849,12 @@ export const useEditor = create<EditorStore>((set, get) => ({
         }
       : preset
     const clip = createTextClip(s.project, merged, undefined, round2(s.currentTime))
+    // UX60 Phase 3 — smart defaults: a remembered font becomes the default for
+    // NEW text clips. An explicit preset font always wins over the memory.
+    if (!merged?.style?.fontFamily) {
+      const sdFont = getSmartDefaultFont()
+      if (sdFont) clip.textStyle = { ...clip.textStyle!, fontFamily: sdFont }
+    }
     s.addClip(clip)
   },
 
@@ -920,6 +961,132 @@ export const useEditor = create<EditorStore>((set, get) => ({
     setTimeout(() => (suppressSave = false), 0)
     return true
   },
+
+  /**
+   * UX60 Phase 3 (Days 17-18) — apply a FULL PRE-CUT task template. Unlike
+   * applyTemplate (honest bare structure), every slot arrives pre-timed with
+   * motion, fades and a tuned look, titles arrive pre-styled (gradient fills,
+   * animations, background pills), and applying starts the step-by-step
+   * guided walkthrough automatically. ONE undo step restores the old edit.
+   */
+  applyTaskTemplate: (t) => {
+    const s = get()
+    if (s.project.clips.some((c) => c.kind === 'nested' && c.nested?.open)) return false
+    s.pushHistory('task-template-apply')
+
+    let tracks = [...s.project.tracks]
+    const videoTrack = tracks.find((tr) => tr.kind === 'video') ?? tracks[0]
+    let overlayTrack = tracks.find((tr) => tr.kind === 'overlay')
+    if (!overlayTrack) {
+      overlayTrack = { id: uid('track_'), name: 'Overlay', kind: 'overlay', muted: false, locked: false, hidden: false }
+      tracks = [overlayTrack, ...tracks]
+    }
+    const audioTrack = tracks.find((tr) => tr.kind === 'audio')
+
+    const clips: Clip[] = []
+    let cursor = 0
+
+    // media slots — pre-cut placeholders: motion, fades, look and timing set
+    for (const slot of t.slots) {
+      const clip = createTextClip(s.project, undefined, videoTrack.id, round2(cursor))
+      clips.push({
+        ...clip,
+        name: slot.name,
+        duration: slot.duration,
+        start: round2(cursor),
+        motion: slot.motion,
+        motionIntensity: slot.motionIntensity,
+        fadeIn: slot.fadeIn,
+        fadeOut: slot.fadeOut,
+        filters: { ...DEFAULT_FILTERS, ...(slot.filters ?? {}) },
+        color: t.accent,
+        textStyle: {
+          ...clip.textStyle!,
+          content: (slot.kind === 'image' ? '\u{1F5BC} ' : '\u25B6 ') + slot.name,
+          fontSize: Math.max(18, Math.round(t.canvas.height * 0.035)),
+          align: 'center',
+        },
+      })
+      cursor += slot.duration
+    }
+
+    // titles — fully styled text clips (gradient, animation, pills…)
+    for (const o of t.overlays) {
+      const clip = createTextClip(s.project, undefined, overlayTrack.id, round2(o.start))
+      clips.push({
+        ...clip,
+        name: o.text.slice(0, 24),
+        duration: o.duration,
+        start: round2(o.start),
+        textStyle: {
+          ...clip.textStyle!,
+          ...o.style,
+          content: o.text,
+          fontSize: o.style.fontSize ?? Math.max(24, Math.round(t.canvas.height * 0.07)),
+        },
+      })
+    }
+
+    // music slot — silent audio clip awaiting the user's track (timed + faded)
+    if (t.music && audioTrack) {
+      clips.push({
+        id: uid('clip_'),
+        trackId: audioTrack.id,
+        kind: 'audio',
+        name: t.music.name,
+        start: 0,
+        duration: t.music.duration,
+        trimStart: 0,
+        sourceDuration: 3600,
+        speed: 1,
+        volume: 0.8,
+        muted: false,
+        fadeIn: 0.5,
+        fadeOut: 1,
+        transform: { ...DEFAULT_TRANSFORM },
+        filters: { ...DEFAULT_FILTERS },
+        motion: 'none',
+        motionIntensity: 0.35,
+        color: '#10b981',
+      })
+    }
+
+    suppressSave = true
+    set((st) => ({
+      project: withUpdatedAt({
+        ...st.project,
+        tracks,
+        clips,
+        canvasWidth: t.canvas.width,
+        canvasHeight: t.canvas.height,
+        fps: t.fps,
+      }),
+      currentTime: 0,
+      selectedClipIds: [],
+      past: [...st.past.slice(-HISTORY_LIMIT + 1), cloneProject(st.project)],
+      historyPast: [...st.historyPast.slice(-HISTORY_LIMIT + 1), { label: 'task-template-apply', at: Date.now() }],
+      future: [],
+      historyFuture: [],
+      // guided walkthrough starts with the apply — the banner appears instantly
+      guided: { templateId: t.id, templateName: t.name, step: 0 },
+    }))
+    setTimeout(() => (suppressSave = false), 0)
+    return true
+  },
+
+  /* ---------- guided workflows (UX60 Phase 3, Days 19-20) ---------- */
+
+  startGuided: (templateId) => {
+    const t = getTaskTemplate(templateId)
+    if (!t) return
+    set({ guided: { templateId, templateName: t.name, step: 0 } })
+  },
+
+  setGuidedStep: (step) => {
+    set((st) => (st.guided ? { guided: { ...st.guided, step: Math.max(0, Math.min(4, step)) } } : {}))
+  },
+
+  endGuided: () => set({ guided: null }),
 
   addStickerClip: (req) => {
     const s = get()
@@ -2359,7 +2526,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
     return added.length
   },
   toggleShowBeatMarkers: () => set((s) => ({ showBeatMarkers: !s.showBeatMarkers })),
-  setPanelTab: (tab) => set({ panelTab: tab }),
+  setPanelTab: (tab) => {
+    // UX60 Phase 3 — smart defaults: remember the tab the user actually works in
+    recordPanelTab(tab)
+    set({ panelTab: tab })
+  },
   setMonitor: (key, on) =>
     set(
       key === 'safe' ? { monitorSafe: on }

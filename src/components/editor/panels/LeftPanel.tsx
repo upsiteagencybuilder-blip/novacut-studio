@@ -71,6 +71,7 @@ export function LeftPanel() {
               type="button"
               title={`${tab.label} panel`}
               aria-pressed={active}
+              data-nc-guided={`panel-${tab.id}`}
               onClick={() => setPanelTab(tab.id)}
               className={
                 active
