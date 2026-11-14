@@ -75,6 +75,7 @@ import {
   TRANSFORM_PRESETS_KEY,
 } from '@/lib/editor/constants'
 import { recordFontFamily } from '@/lib/editor/smart-defaults'
+import { looksLikeSolidBackdrop } from '@/lib/editor/bg-detect'
 import { clamp, computeHistogram, computeLumaWaveform, defaultSpeedRamp, evalCurveAt, formatTimecode, KEYFRAME_PROPERTIES, levelToDbfs, normalizeGainFor, rampMultAt, round2, SPEED_RAMP_PRESETS, uid } from '@/lib/editor/utils'
 import { BUILTIN_LUTS } from '@/lib/editor/builtin-luts'
 import { VOICE_FX_PRESETS, matchVoicePreset, type VoiceFxPreset } from '@/lib/editor/voice-presets'
@@ -273,6 +274,56 @@ function toHexInput(v: string): string {
   return '#000000'
 }
 
+/**
+ * UX60 Phase 4 (Days 29-30) — contextual advanced tools. When Simple mode
+ * hides the Green Screen panel, this hook samples the composited frame ONCE
+ * per clip (through the same engine sampler the one-tap auto key uses) and
+ * answers: does this shot look like a solid backdrop? Only then does the
+ * panel surface itself — beginners with real green screens get the tool
+ * automatically, everyone else never sees a wall of keying sliders.
+ */
+function useGreenScreenLike(
+  clip: Clip | undefined,
+  enabled: boolean
+): { checked: boolean; likely: boolean; confidence: number } {
+  // derived reset — the verdict is keyed to the clip: a stale result for a
+  // different clip simply doesn't apply (no effect-body setState needed)
+  const key = enabled && clip?.id ? clip.id : ''
+  const [result, setResult] = useState<{ key: string; checked: boolean; likely: boolean; confidence: number }>({
+    key: '',
+    checked: false,
+    likely: false,
+    confidence: 0,
+  })
+  const mediaId = clip?.mediaId
+  const chromaOn = clip?.chromaKey?.enabled
+  useEffect(() => {
+    if (!key) return
+    let cancelled = false
+    // settle delay: let the engine render the selected clip at the playhead first
+    const t = window.setTimeout(() => {
+      const engine = (
+        window as unknown as { __ncEngineInstance?: { sampleFrame: (n: number) => Uint8ClampedArray | null } | undefined }
+      ).__ncEngineInstance
+      const px = engine?.sampleFrame?.(128)
+      if (cancelled) return
+      if (!px || px.length < 64) {
+        setResult({ key, checked: true, likely: false, confidence: 0 })
+        return
+      }
+      const res = looksLikeSolidBackdrop(px, 128)
+      setResult({ key, checked: true, likely: res.likely, confidence: res.confidence })
+    }, 320)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [key, mediaId, chromaOn])
+  return result.key === key && key !== ''
+    ? result
+    : { checked: false, likely: false, confidence: 0 }
+}
+
 /** parse hex/rgb/rgba css colors into channels (alpha defaults to 1) */
 function parseColorChannels(v: string): { r: number; g: number; b: number; a: number } {
   const s = v.trim()
@@ -433,7 +484,7 @@ function Section({
 }) {
   const ref = usePropsSectionFocus(sectionId)
   return (
-    <section ref={ref} className="space-y-3 rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
+    <section ref={ref} data-nc-section="flat" className="space-y-3 rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
       <div className="flex items-center gap-1.5">
         <Icon className="h-[13px] w-[13px] text-muted-foreground" />
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
@@ -1055,8 +1106,8 @@ function CollapsibleSection({
   const ref = usePropsSectionFocus(sectionId, () => onOpenChange(true))
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
-      <section ref={ref} className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft)">
-        <div className="flex items-center gap-1.5 px-3 py-2.5">
+      <section ref={ref} data-nc-section="collapsible" className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft)">
+        <div className="flex items-center gap-1.5 px-3 py-2.5" data-nc-section-head>
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
             <Icon className="h-[13px] w-[13px] shrink-0 text-muted-foreground" />
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
@@ -1079,7 +1130,7 @@ function CollapsibleSection({
           )}
         </div>
         <CollapsibleContent>
-          <div className="space-y-3 px-3 pb-3">
+          <div className="space-y-3 px-3 pb-3" data-nc-section-body>
             {hint && <p className="text-[10px] leading-snug text-muted-foreground/75">{hint}</p>}
             {children}
           </div>
@@ -3638,6 +3689,30 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
   const beatMarkers = useEditor((s) => s.beatMarkers)
   const [beatDetecting, setBeatDetecting] = useState(false)
 
+  /* ---------- UX60 Phase 4 (Days 25-30) — progressive disclosure ---------- */
+  // Simple mode hides pro-only surfaces; contextual tools (chroma, keyframes)
+  // surface themselves when the clip actually needs them.
+  const simpleMode = useEditor((s) => s.simpleMode)
+  // deep-link reveal: the Pro wall's Green Screen card still works in Simple
+  // mode — asking for the tool IS the context. Reveal is keyed to the clip so
+  // a fresh selection gets a fresh contextual decision (derived comparison,
+  // no effect-body setState).
+  const [chromaRevealFor, setChromaRevealFor] = useState<string | null>(null)
+  const chromaRevealed = chromaRevealFor === clip.id
+  useEffect(() => {
+    const onEvt = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === 'chroma') setChromaRevealFor(clip.id)
+    }
+    window.addEventListener('nc-props-section', onEvt)
+    return () => window.removeEventListener('nc-props-section', onEvt)
+  }, [clip.id])
+  const greenLike = useGreenScreenLike(clip, simpleMode)
+  const hasAnyKeys = (clip.keyframes ?? []).length > 0
+  // Green Screen visibility: expert always · Simple only when keying already,
+  // the frame looks like a solid backdrop, or the user explicitly asked
+  const chromaVisible =
+    !simpleMode || !!clip.chromaKey?.enabled || greenLike.likely || chromaRevealed
+
   /** Day 26 — woven beat sync: detect (if needed) then convert to markers. */
   const detectAndConvertBeats = async () => {
     if (clip.kind !== 'audio' && clip.kind !== 'video') return
@@ -3719,6 +3794,9 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
   const kfDiamond = (prop: KeyframeProperty) => {
     const kf = keyAtPlayhead(prop)
     const anyKeys = (clip.keyframes ?? []).some((k) => k.property === prop)
+    // UX60 Phase 4 (Days 29-30) — keyframe UI only when animation is active:
+    // in Simple mode the diamond appears once the property actually has keys
+    if (simpleMode && !anyKeys) return null
     return (
       <button
         type="button"
@@ -3884,11 +3962,14 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             </Button>
           </div>
 
-          {/* keyframe legend — the diamonds next to X/Y/Scale/Rotate/Opacity */}
-          <p className="flex items-center gap-1 text-[10px] leading-snug text-muted-foreground/75">
-            <Diamond className="size-2.5 fill-current text-amber-400" />
-            tap a diamond to key that property at the playhead — values animate between keys (Animation section below)
-          </p>
+          {/* keyframe legend — only when the keyframe UI is visible (Simple mode
+              hides it until a property is animated, UX60 Phase 4) */}
+          {(!simpleMode || hasAnyKeys) && (
+            <p className="flex items-center gap-1 text-[10px] leading-snug text-muted-foreground/75">
+              <Diamond className="size-2.5 fill-current text-amber-400" />
+              tap a diamond to key that property at the playhead — values animate between keys (Animation section below)
+            </p>
+          )}
 
           {/* fit mode — how the source fills the canvas (video / image) */}
           {(clip.kind === 'video' || clip.kind === 'image') && (
@@ -3915,11 +3996,15 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
       {/* crop — video / image */}
       {(clip.kind === 'video' || clip.kind === 'image') && <CropSection clip={clip} />}
 
-      {/* shape mask — every visual kind (Day 16) */}
-      {(clip.kind === 'video' || clip.kind === 'image' || clip.kind === 'text' || clip.kind === 'sticker') && <MaskSection clip={clip} />}
+      {/* shape mask — pro-only surface (Day 16; hidden in Simple mode, UX60 Phase 4) */}
+      {!simpleMode &&
+        (clip.kind === 'video' || clip.kind === 'image' || clip.kind === 'text' || clip.kind === 'sticker') && (
+          <MaskSection clip={clip} />
+        )}
 
-      {/* animation keyframes — every clip kind */}
-      <AnimationSection clip={clip} fps={project.fps} />
+      {/* animation keyframes — contextual: Simple mode surfaces the keyframe UI
+          only once a property is actually animated (UX60 Phase 4, Days 29-30) */}
+      {(!simpleMode || hasAnyKeys) && <AnimationSection clip={clip} fps={project.fps} />}
 
       {/* media — video / audio */}
       {(clip.kind === 'video' || clip.kind === 'audio') && (
@@ -3933,8 +4018,9 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             onChange={changeSpeed}
             format={fmtX}
           />
-          {/* speed ramping — video only (audio export uses uniform rate) */}
-          {clip.kind === 'video' && (
+          {/* speed ramping — pro-only surface (hidden in Simple mode; the plain
+              Speed slider above still works, UX60 Phase 4) */}
+          {!simpleMode && clip.kind === 'video' && (
             <div className="flex items-center gap-2">
               <span className="flex flex-1 items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Activity className="h-3 w-3" />
@@ -3949,7 +4035,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
               />
             </div>
           )}
-          {clip.kind === 'video' && <SpeedRampSection clip={clip} />}
+          {!simpleMode && clip.kind === 'video' && <SpeedRampSection clip={clip} />}
           <SliderRow
             label="Volume"
             min={0}
@@ -4120,8 +4206,8 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
         </Section>
       )}
 
-      {/* per-clip audio FX chain — video / audio */}
-      {(clip.kind === 'video' || clip.kind === 'audio') && <AudioFxSection clip={clip} />}
+      {/* per-clip audio FX chain — pro-only surface (hidden in Simple mode) */}
+      {!simpleMode && (clip.kind === 'video' || clip.kind === 'audio') && <AudioFxSection clip={clip} />}
 
       {/* filters — CSS layer renders on every visual clip kind */}
       {clip.kind !== 'audio' && (
@@ -4206,17 +4292,23 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
         </Section>
       )}
 
-      {/* pro color pipeline — video / image */}
-      {(clip.kind === 'video' || clip.kind === 'image') && (
-        <>
-          <GradeSection clip={clip} />
-          <CurvesSection clip={clip} />
-          <WheelsSection clip={clip} />
-          <LutSection clip={clip} />
-          <ChromaSection clip={clip} />
-          <ScopesSection />
-        </>
-      )}
+      {/* pro color pipeline — video / image. Simple mode (UX60 Phase 4) hides
+          grade/curves/wheels/LUT/scopes entirely and shows Green Screen only
+          CONTEXTUALLY: the clip is already keyed, the frame looks like a solid
+          backdrop, or the user explicitly asked via deep link. */}
+      {(clip.kind === 'video' || clip.kind === 'image') &&
+        (!simpleMode ? (
+          <>
+            <GradeSection clip={clip} />
+            <CurvesSection clip={clip} />
+            <WheelsSection clip={clip} />
+            <LutSection clip={clip} />
+            <ChromaSection clip={clip} />
+            <ScopesSection />
+          </>
+        ) : (
+          chromaVisible && <ChromaSection clip={clip} />
+        ))}
 
       {/* text style */}
       {clip.kind === 'text' && clip.textStyle && <TextSection clip={clip} />}
@@ -4224,8 +4316,8 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
       {/* sticker style */}
       {clip.kind === 'sticker' && clip.sticker && <StickerSection clip={clip} />}
 
-      {/* blend mode — visual kinds */}
-      {isVisual && <BlendSection clip={clip} />}
+      {/* blend mode — pro-only surface (hidden in Simple mode) */}
+      {isVisual && !simpleMode && <BlendSection clip={clip} />}
 
       {/* fade */}
       <Section title="Fade" icon={Sun}>
@@ -4506,6 +4598,7 @@ function ProjectPanel() {
 export function PropertiesPanel() {
   const project = useEditor((s) => s.project)
   const selectedIds = useEditor((s) => s.selectedClipIds)
+  const panelDensity = useEditor((s) => s.panelDensity)
 
   const clip = selectedIds.length === 1 ? project.clips.find((c) => c.id === selectedIds[0]) : undefined
 
@@ -4520,7 +4613,10 @@ export function PropertiesPanel() {
         )}
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+      <div
+        className={cn('flex-1 space-y-3 overflow-y-auto p-3', panelDensity === 'compact' && 'nc-density-compact')}
+        data-nc-props-body
+      >
         {clip ? (
           <SingleClipEditor clip={clip} />
         ) : selectedIds.length > 1 ? (

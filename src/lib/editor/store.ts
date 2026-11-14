@@ -313,6 +313,16 @@ interface EditorStore {
   toggleShowBeatMarkers: () => void
   setPanelTab: (tab: PanelTab) => void
 
+  /* ---------- progressive disclosure (UX60 Phase 4, Days 25-32) ---------- */
+  /** Simple mode — hides pro-only surfaces (curves/wheels/LUT/scopes/speed-ramp/audio-FX/mask/blend + contextual chroma/keyframes) behind one switch; persisted per device */
+  simpleMode: boolean
+  /** panel density — comfortable (default) or compact; persisted per device */
+  panelDensity: 'comfortable' | 'compact'
+  /** one-switch target — also falls back from the Pro tab to Media when hiding the pro rail */
+  setSimpleMode: (on: boolean) => void
+  /** density switch — layout only, never touch-target sizes */
+  setPanelDensity: (d: 'comfortable' | 'compact') => void
+
   /* ---------- preview monitor overlays (guides & grids suite) ---------- */
   /** SMPTE action-safe (93%) + title-safe (90%) rectangles over the preview */
   monitorSafe: boolean
@@ -545,6 +555,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
   outPoint: null,
   panelTab: 'media',
   guided: null,
+  simpleMode: false,
+  panelDensity: 'comfortable',
   monitorSafe: false,
   monitorThirds: false,
   monitorRulers: false,
@@ -570,11 +582,13 @@ export const useEditor = create<EditorStore>((set, get) => ({
 
   init: async () => {
     try {
-      const [assets, lastId, projects, exportedKV] = await Promise.all([
+      const [assets, lastId, projects, exportedKV, simpleKV, densityKV] = await Promise.all([
         db.listAssets(),
         db.getKV<string>('lastProjectId'),
         db.listProjects(),
         db.getKV<boolean>('hasExported'),
+        db.getKV<boolean>('ui.simpleMode'),
+        db.getKV<'comfortable' | 'compact'>('ui.panelDensity'),
       ])
       const media: MediaAssetRuntime[] = assets.map(({ meta, blob }) => ({
         ...meta,
@@ -589,7 +603,16 @@ export const useEditor = create<EditorStore>((set, get) => ({
       suppressSave = true
       // land on a frame that actually shows content (never greet with a black canvas)
       const land = landingTime(project)
-      set({ media, project, ready: true, currentTime: land, hasExported: exportedKV === true })
+      set({
+        media,
+        project,
+        ready: true,
+        currentTime: land,
+        hasExported: exportedKV === true,
+        // UX60 Phase 4 — per-device progressive-disclosure prefs restore here
+        simpleMode: simpleKV === true,
+        panelDensity: densityKV === 'compact' ? 'compact' : 'comfortable',
+      })
       setTimeout(() => (suppressSave = false), 0)
       // UX60 Phase 3 (Days 23-24) — smart defaults: load remembered prefs from
       // KV and restore the last panel tab. Canvas/font/preset defaults are read
@@ -2534,6 +2557,20 @@ export const useEditor = create<EditorStore>((set, get) => ({
     // UX60 Phase 3 — smart defaults: remember the tab the user actually works in
     recordPanelTab(tab)
     set({ panelTab: tab })
+  },
+  /* ---------- progressive disclosure (UX60 Phase 4, Days 25-32) ---------- */
+  setSimpleMode: (on) => {
+    set({ simpleMode: on })
+    // per-device persistence — restored by init() on the next session
+    void db.setKV('ui.simpleMode', on).catch(() => undefined)
+    // the Pro rail is pro-only — never strand the user on a hidden tab
+    // (direct set, NOT setPanelTab — a forced fallback must not clobber the
+    // smart-defaults remembered tab)
+    if (on && get().panelTab === 'pro') set({ panelTab: 'media' })
+  },
+  setPanelDensity: (d) => {
+    set({ panelDensity: d })
+    void db.setKV('ui.panelDensity', d).catch(() => undefined)
   },
   setMonitor: (key, on) =>
     set(

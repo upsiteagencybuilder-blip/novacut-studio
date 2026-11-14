@@ -460,9 +460,13 @@ const MOBILE_TABS = [
 
 function MobileBar({ onOpenPanel, onOpenProps, propsActive }: { onOpenPanel: () => void; onOpenProps: () => void; propsActive: boolean }) {
   const panelTab = useEditor((s) => s.panelTab)
+  // UX60 Phase 4 (Days 27-28) — Simple mode declutters the mobile bottom bar
+  // exactly like the desktop rail: the Pro wall is a pro-only surface.
+  const simpleMode = useEditor((s) => s.simpleMode)
+  const tabs = simpleMode ? MOBILE_TABS.filter((t) => t.id !== 'pro') : MOBILE_TABS
   return (
     <nav className="flex h-14 shrink-0 items-stretch justify-around border-t border-(--nc-line) bg-(--nc-chrome) px-0.5 pb-[env(safe-area-inset-bottom)] lg:hidden">
-      {MOBILE_TABS.map((tab) => {
+      {tabs.map((tab) => {
         const Icon = tab.icon
         const active = propsActive === false && panelTab === tab.id
         return (

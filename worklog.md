@@ -2869,3 +2869,43 @@ Counts (auto-computed from catalog): **728 total · live 297→303 · planned 28
 - Mobile 390×844: no horizontal scroll (390px) on editor + projects dialog; task cards fit (dialog 0..390); applying Reels hook starts the walkthrough — banner fits (8..382, width 374) and the amber ring lands on the timeline (top 565, h 229).
 - Fresh reloads (desktop + mobile): 0 console errors, 0 page errors; demo golden path intact (6 clips).
 - lint + tsc clean; dev.log healthy.
+
+## Post-v1.0.0 — UX60 Phase 4 completion: Days 25–32 (Progressive disclosure)
+**Date:** post-release · **Task ID:** UX60-5
+**Task:** user instruction "Phase 4 — Progressive disclosure (Days 25–32) go ahead". All four Phase 4 deliverables implemented fresh in this session (nothing pre-existing to verify — Phase 3 was the last shipped batch), then verified end-to-end with the full daily protocol. Two real bugs were FOUND in E2E and root-fixed (see below), plus one pre-existing mobile defect caught by the no-regression matrix and fixed at the root.
+
+### Shipped 1 — Simple Mode Toggle (Days 25–26)
+- Store: `simpleMode` + `setSimpleMode` persisted per device (IndexedDB KV `ui.simpleMode`, restored in `init()`); forcing simple never strands the user — a direct `set({panelTab:'media'})` fallback (NOT setPanelTab, so the smart-defaults remembered tab is never clobbered) fires when the Pro tab is active. PROVEN live: applying Simple from the Pro wall flipped the stranded Pro tab to Media instantly.
+- The one switch: header pill (`data-nc-simple-toggle`, Wand2 icon, emerald when on, aria-pressed, honest toast) + a Simple switch inside the new Display popover + the Pro-wall deep link — three entrances, one store action.
+
+### Shipped 2 — Decluttered transport/panel defaults (Days 27–28)
+- PropertiesPanel (Simple mode hides pro-only surfaces, expert unchanged — verified by census): Color Grade, Curves, Color Wheels, LUT, Scopes, Audio FX, Shape Mask, Blend Mode, speed-ramp toggle+editor hidden; Media keeps plain Speed/Volume/Mute; Filters/Transform/Crop/Fade/Duration/Text/Sticker stay. Expert census: 14 sections + 5 keyframe diamonds + monitor/compare/Pro-tab present; Simple census: 5 beginner sections, 0 diamonds, monitor/compare/Pro-tab gone.
+- Transport: Monitor-overlays popover + Compare split hidden in Simple (both pro suites); left rail Pro tab hidden (desktop `LeftPanel` filter + NEW mobile `MobileBar` filter); golden path (select → real keyboard slider 1→1.01 → trusted ref-click Play 0.5→1.64s playing → real export recording→done 100% `hasExported:true`) completed entirely in Simple mode — first-session task success parity PROVEN with a real 7.24s render.
+
+### Shipped 3 — Contextual advanced tools (Days 29–30)
+- `bg-detect.looksLikeSolidBackdrop()`: reuses the SAME border-ring analysis as one-tap auto-key (single source of truth) — confidence (dominant-bucket border share) ≥ 0.55 ⇒ solid-backdrop shot. Honest heuristic, no second detector to drift.
+- `useGreenScreenLike` hook in PropertiesPanel: samples the composited frame ONCE per clip via engine `sampleFrame(128)` (320ms settle, keyed by clipId/mediaId/chromaOn, derived reset — no effect-body setState, lint-clean). Green Screen visibility in Simple mode = keying already enabled OR solid-backdrop detected OR explicit deep-link reveal (asking IS the context; reveal keyed to clip so decisions never leak across selections).
+- PROVEN through the real engine: swapped a generated #00b140 PNG into a clip (no key, no reveal) → Green Screen auto-appeared; swapped busy neon-city back → honestly hidden. Enabled-key path: chroma on → section persists across selection changes; disabled → busy clip stays hidden. Deep-link reveal from the actual Pro-wall card: flash ring + focus measured. Unit discriminator: real demo footage hides it, synthetic green shows it — both directions honest.
+- Keyframe contextuality: in Simple mode the transform diamonds render only for properties that HAVE keys (`kfDiamond` guard), the legend and the whole Animation section appear only once `keyframes.length > 0`. PROVEN: expert-added scale key → Simple shows exactly 1 diamond (scale) + Animation section; key removed → all gone again.
+
+### Shipped 4 — Panel density (Days 31–32)
+- Store `panelDensity: 'comfortable'|'compact'` + `setPanelDensity` persisted per device (KV `ui.panelDensity`, restored in init — PROVEN across reload on both desktop and mobile).
+- UI: Display popover in the header (`data-nc-density-btn` → Comfortable/Compact segmented buttons with aria-pressed + the Simple switch; compact state tints the trigger amber). Pro-wall deep link toggles it too.
+- CSS: `nc-density-compact` on both panel scroll bodies (`data-nc-props-body` / `data-nc-panel-body`) + `data-nc-section="flat|collapsible"` / `-head` / `-body` attributes on the section primitives; compact tightens paddings (12→10px body, section 12→8px) and gaps (12→8px) and NEVER touches control heights (44px keyboard / 32px mobile floors intact).
+
+### Catalog + plan doc
+- 3 new live entries (panels → new group "Progressive disclosure": Simple Mode Toggle, Contextual Advanced Tools, Panel Density Setting) — all deep-linked and all three cards E2E-clicked (density toggled both directions, simple flipped with live fallback proof, contextual revealed with measured flash ring). Counts auto: **743 total · 323 live** (Pro wall chips verified).
+- `docs/UX-60-DAYS.md`: Phase 4 rows 25–32 marked ✅ + "Phase 4 complete" note (receipts = Task UX60-5).
+
+### Bugs FOUND in E2E, fixed at the root
+1. **Density CSS corruption + wrong margin axis**: the appended CSS reached disk with `[h` characters stripped (invalid `:not(idden])` selectors — silently dead rules), and the gap override targeted `margin-block-start` while Tailwind v4's space-y emits `margin-block-end` (an override there would ADD to the gap). First E2E measure caught it: compact shrank only padding (274→266px) and computed gap stayed 12px while marginTop read 8px. Root fix: block rewritten cleanly (no bracket-h tokens) overriding `margin-block-end` on `:not(:last-child)`; re-measured: Filters section 274px comfortable → 234px compact (gap 12→8, body pad 12→10) on desktop AND inside the mobile sheet (234px, no h-scroll).
+2. **Mobile bottom bar ignored Simple mode**: `MobileBar` had its own `MOBILE_TABS` copy — the Pro tab stayed reachable in Simple mode on phones. Root fix: same filter as the desktop rail; re-verified mobile tabs become Media/Text/Stickers/Effects/Audio/AI/Edit.
+3. **PRE-EXISTING mobile header overflow (caught by the no-regression matrix, fixed)**: at 390px the header content overflowed to 792px — Export's right edge sat at ~662px even BEFORE this phase's buttons (masked by the shell's overflow-hidden; earlier receipts only measured documentElement scroll). Root fix (mobile-first, <640px): brand block hidden (logo stays), project input 176→80px, InstallApp + Display + Theme/Shortcuts/Feedback/Account hidden (mobile reaches density via the Pro-wall card), Simple pill keeps its label. Measured after: header scrollWidth 388 ≤ 388, Export fully visible (right 377), no page h-scroll.
+
+### E2E receipts
+- Desktop 1280×800: full expert↔simple census matrix (14 sections/5 diamonds vs 5 sections/0 diamonds + monitor/compare/Pro-tab states), contextual chroma both directions through the real engine, keyframe contextuality round-trip, density measured pair, Display popover states (aria-pressed + switch), 3 deep-link cards clicked, golden path in Simple incl. REAL export (recording→done, hasExported true), screenshots (desktop simple + expert).
+- Mobile 390×844: no horizontal scroll anywhere; header fits (388px) with Export reachable; Simple mode: bottom bar Pro gone, monitor gone, props sheet census 5 beginner sections fitting at right-edge 390; compact density inside the sheet (234px Filters); screenshots (mobile simple + expert).
+- Persistence: Simple mode AND density both restored from KV after full reloads on desktop and mobile; defaults left expert/comfortable at the end.
+- Fresh reloads (desktop + mobile): 0 console errors, 0 page errors; dev.log healthy; demo golden path intact (6 clips).
+- Test-driver note (honesty): an initial "trusted Play click didn't work" was a locator artifact — `find role button --name "Play"` fuzzy-matched the NEW "Di**play** settings" button; exact ref/aria-label clicks work. Product playback verified with real user activation via ref click (0.5→1.64s playing).
+- lint + tsc clean.

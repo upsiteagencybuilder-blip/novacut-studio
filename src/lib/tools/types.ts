@@ -65,6 +65,9 @@ export type ToolAction =
   | 'start-step-by-step'
   | 'open-nl-palette'
   | 'show-smart-defaults'
+  | 'toggle-simple-mode'
+  | 'show-contextual-tools'
+  | 'toggle-panel-density'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

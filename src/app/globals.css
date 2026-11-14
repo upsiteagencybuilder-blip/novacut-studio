@@ -1011,4 +1011,38 @@ input[type="range"].nc-range::-webkit-slider-thumb {
     animation: none !important;
   }
 }
-
+/* ================================================================
+ * UX60 Phase 4 (Days 31-32) - panel density.
+ * Compact tightens PADDINGS and GAPS only; control heights / touch
+ * targets are never touched (44px keyboard, 32px mobile floor stays).
+ * The class lives on the panel scroll bodies (props + left panel);
+ * sections carry data attributes so the overrides stay surgical.
+ * Note: Tailwind v4 compiles space-y-* as margin-block-END on every
+ * child except the last (inside :where(), zero specificity), so the
+ * compact overrides target the SAME margin-block-end property - a
+ * margin-block-start override would ADD to the gap, not shrink it.
+ * ================================================================ */
+.nc-density-compact[data-nc-props-body],
+.nc-density-compact[data-nc-panel-body] {
+  padding: 0.625rem;
+}
+.nc-density-compact[data-nc-props-body] > :not(:last-child),
+.nc-density-compact[data-nc-panel-body] > :not(:last-child) {
+  margin-block-end: 0.5rem;
+}
+.nc-density-compact [data-nc-section="flat"] {
+  padding: 0.5rem;
+}
+.nc-density-compact [data-nc-section="flat"] > :not(:last-child) {
+  margin-block-end: 0.5rem;
+}
+.nc-density-compact [data-nc-section-head] {
+  padding-inline: 0.5rem;
+  padding-block: 0.4375rem;
+}
+.nc-density-compact [data-nc-section-body] {
+  padding: 0 0.5rem 0.5rem;
+}
+.nc-density-compact [data-nc-section-body] > :not(:last-child) {
+  margin-block-end: 0.5rem;
+}

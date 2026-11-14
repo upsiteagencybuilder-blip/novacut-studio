@@ -111,3 +111,39 @@ export function autoKeyPatch(result: AutoKeyResult): ChromaKey {
     edge: 0.5,
   }
 }
+
+/* ================================================================
+ * UX60 Phase 4 (Days 29-30) — contextual advanced tools.
+ * Progressive disclosure: the Green Screen panel only surfaces when the
+ * clip actually looks like a solid-backdrop shot. This reuses the SAME
+ * border-ring analysis as the one-tap auto key (single source of truth —
+ * no second detector to drift) and answers one question: does the current
+ * frame look like a green/blue/solid screen?
+ */
+
+export interface BackdropLikelihood {
+  /** dominant border color covers most of the border ring */
+  likely: boolean
+  /** winning border color (hex) when detected */
+  color?: string
+  /** share of border pixels that matched the winning bucket (0..1) */
+  confidence: number
+}
+
+/**
+ * Decide whether a sampled frame looks like a solid backdrop worth keying.
+ * `pixels` is RGBA at `width × height` (engine sampleFrame output — same
+ * input detectAutoKey takes). Honest heuristic: the auto-key confidence is
+ * literally "share of border pixels in the dominant bucket", so a real
+ * green screen scores ≥ 0.8, busy scenery scores well below 0.5. Threshold
+ * 0.55 sits safely between — detection fires on real screens, stays quiet
+ * on normal footage.
+ */
+export function looksLikeSolidBackdrop(pixels: Uint8ClampedArray, width: number): BackdropLikelihood {
+  const result = detectAutoKey(pixels, width)
+  return {
+    likely: result.confidence >= 0.55,
+    color: result.color,
+    confidence: result.confidence,
+  }
+}

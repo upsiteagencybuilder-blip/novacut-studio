@@ -78,6 +78,9 @@ export function PreviewPane() {
   const moveGuide = useEditor((s) => s.moveGuide)
   const removeGuide = useEditor((s) => s.removeGuide)
   const clearGuides = useEditor((s) => s.clearGuides)
+  // UX60 Phase 4 (Days 27-28) — Simple mode declutters the transport: the
+  // monitor-overlay suite and compare split are pro surfaces. Expert layout unchanged.
+  const simpleMode = useEditor((s) => s.simpleMode)
 
   const rootRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
@@ -791,7 +794,9 @@ export function PreviewPane() {
         </div>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-          {/* monitor overlays (guides, grids & exposure suite) */}
+          {/* monitor overlays (guides, grids & exposure suite) — pro-only surface,
+              hidden by Simple mode (UX60 Phase 4) */}
+          {!simpleMode && (
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -886,18 +891,21 @@ export function PreviewPane() {
               )}
             </PopoverContent>
           </Popover>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-8 w-8 ${compare ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'text-muted-foreground hover:text-foreground'}`}
-            title={compare ? 'Exit compare split' : 'Compare split: original ⇔ graded'}
-            aria-label={compare ? 'Exit compare split' : 'Compare split view'}
-            aria-pressed={compare}
-            data-nc-compare-toggle
-            onClick={toggleCompare}
-          >
-            <Columns2 className="h-4 w-4" />
-          </Button>
+          )}
+          {!simpleMode && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${compare ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'text-muted-foreground hover:text-foreground'}`}
+              title={compare ? 'Exit compare split' : 'Compare split: original ⇔ graded'}
+              aria-label={compare ? 'Exit compare split' : 'Compare split view'}
+              aria-pressed={compare}
+              data-nc-compare-toggle
+              onClick={toggleCompare}
+            >
+              <Columns2 className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

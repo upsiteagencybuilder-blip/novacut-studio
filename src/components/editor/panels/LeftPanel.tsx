@@ -57,12 +57,18 @@ export function LeftPanel() {
   const setPanelTab = useEditor((s) => s.setPanelTab)
   const openDialog = useEditor((s) => s.openDialog)
   const mediaCount = useEditor((s) => s.media.length)
+  const simpleMode = useEditor((s) => s.simpleMode)
+  const panelDensity = useEditor((s) => s.panelDensity)
+
+  // UX60 Phase 4 (Days 27-28) — Simple mode declutters the rail: the Pro
+  // toolkit wall is a pro-only surface. Expert layout unchanged.
+  const visibleTabs = simpleMode ? TABS.filter((t) => t.id !== 'pro') : TABS
 
   return (
     <div className="flex h-full min-h-0">
       {/* ------- icon rail ------- */}
       <nav className="flex w-14 shrink-0 flex-col items-center gap-1.5 overflow-x-hidden overflow-y-auto border-r border-(--nc-line) py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {TABS.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon
           const active = panelTab === tab.id
           return (
@@ -114,7 +120,10 @@ export function LeftPanel() {
           )}
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div
+          className={`min-h-0 flex-1 overflow-y-auto p-3 ${panelDensity === 'compact' ? 'nc-density-compact' : ''}`}
+          data-nc-panel-body
+        >
           {panelTab === 'media' && <MediaPanel />}
           {panelTab === 'text' && <TextPanel />}
           {panelTab === 'stickers' && <StickerPanel />}

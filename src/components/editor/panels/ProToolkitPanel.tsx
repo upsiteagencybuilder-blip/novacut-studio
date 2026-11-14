@@ -229,6 +229,28 @@ function useToolAction() {
         const summary = getSmartDefaultsSummary()
         toast(`Smart defaults — ${summary}`)
       },
+      /* ---- UX60 Phase 4 — progressive disclosure ---- */
+      'toggle-simple-mode': () => {
+        const on = !useEditor.getState().simpleMode
+        useEditor.getState().setSimpleMode(on)
+        toast.success(
+          on
+            ? 'Simple mode on — pro-only controls hidden. The header switch (or this card) brings everything back.'
+            : 'Expert mode — every pro control is visible again.'
+        )
+      },
+      'show-contextual-tools': () => {
+        // in Simple mode the Green Screen panel is contextual — asking for it
+        // via this deep link IS the context (SingleClipEditor reveals on the
+        // nc-props-section event); in Expert mode it just focuses the section
+        openPropsSection('chroma')
+        toast('Contextual tools — Green Screen appears for solid-backdrop frames; keyframe controls appear once you animate')
+      },
+      'toggle-panel-density': () => {
+        const next = useEditor.getState().panelDensity === 'compact' ? 'comfortable' : 'compact'
+        useEditor.getState().setPanelDensity(next)
+        toast.success(`Panel density: ${next} — persisted per device`)
+      },
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])

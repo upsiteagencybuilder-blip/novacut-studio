@@ -58,12 +58,14 @@
 
 | Day | Deliverable | Status |
 | --- | --- | --- |
-| 25–26 | **Simple mode** toggle: hides advanced panels (curves, wheels, chroma, keyframes) behind one switch | ⬜ |
-| 27–28 | Decluttered transport/panel defaults for Simple mode; expert layout unchanged | ⬜ |
-| 29–30 | Contextual advanced tools: chroma key appears only on green-screen-like clips (existing bg-detect), keyframe UI only when animation active | ⬜ |
-| 31–32 | Panel density setting (comfortable/compact) persisted per device | ⬜ |
+| 25–26 | **Simple mode** toggle: hides advanced panels (curves, wheels, chroma, keyframes) behind one switch | ✅ |
+| 27–28 | Decluttered transport/panel defaults for Simple mode; expert layout unchanged | ✅ |
+| 29–30 | Contextual advanced tools: chroma key appears only on green-screen-like clips (existing bg-detect), keyframe UI only when animation active | ✅ |
+| 31–32 | Panel density setting (comfortable/compact) persisted per device | ✅ |
 
 **Exit criteria:** Simple mode first-session task success ≥ expert mode; no feature regressed (E2E matrix).
+
+> ✅ **Phase 4 complete** (this commit): Simple mode + decluttered transport/rail defaults + contextual Green Screen/keyframes + panel density shipped together; receipts in `worklog.md` (Task UX60-5). E2E matrix: every pro section verified visible in expert and honestly hidden in Simple; golden path (select → filter → play → export) completed entirely in Simple mode; contextual chroma proven via reveal deep link + enabled-key persistence + detector unit proof; keyframe contextuality proven via expert-added keys appearing in Simple; density measured per section and reload-persisted.
 
 ## Phase 5 — Forgiveness & error-proofing (Days 33–40)
 **Goal:** nothing a user does is ever scary or unrecoverable.
