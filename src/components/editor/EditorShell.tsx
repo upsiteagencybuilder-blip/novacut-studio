@@ -20,7 +20,7 @@ import {
 import { useEditor } from '@/lib/editor/store'
 import { projectDuration, clamp, formatTimecode } from '@/lib/editor/utils'
 import { TopBar } from '@/components/editor/TopBar'
-import { LeftPanel } from '@/components/editor/panels/LeftPanel'
+import { LeftPanel, PANEL_TAB_ORDER } from '@/components/editor/panels/LeftPanel'
 import { PreviewPane } from '@/components/editor/preview/PreviewPane'
 import { PropertiesPanel } from '@/components/editor/preview/PropertiesPanel'
 import { Timeline } from '@/components/editor/timeline/Timeline'
@@ -47,9 +47,22 @@ import { startCloudAutosave } from '@/lib/cloud/autosave'
 import { CrashRecoveryWatcher } from '@/components/editor/ErrorBoundary'
 import { installTelemetry } from '@/lib/telemetry'
 import { runOverrideLayer } from '@/lib/editor/shortcuts'
+import { announce } from '@/lib/editor/announce'
 import { CommandPalette } from '@/components/editor/CommandPalette'
 import { ContextualTips } from '@/lib/tips'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import type { PanelTab } from '@/lib/editor/types'
+
+/** English panel names for the Alt+N toast/announcement (rail renders bn via useLabel) */
+const PANEL_TAB_LABELS: Record<PanelTab, string> = {
+  media: 'Media',
+  text: 'Text',
+  stickers: 'Stickers',
+  effects: 'Effects',
+  audio: 'Audio',
+  ai: 'AI',
+  pro: 'Pro',
+}
 
 function useDesktop(): boolean {
   const [isDesktop, setIsDesktop] = useState(true)
@@ -82,6 +95,22 @@ function useKeyboardShortcuts() {
 
       const mod = e.ctrlKey || e.metaKey
       const key = e.key.toLowerCase()
+
+      // UX60 Phase 6 (Days 41–43) — complete keyboard map, part 1: Alt+1..9
+      // jumps straight to a tool panel (same order as the icon rail, Simple
+      // mode keeps its honest 6-tab subset). Announced for screen readers.
+      if (e.altKey && !mod && /^[1-9]$/.test(e.key)) {
+        e.preventDefault()
+        const tabs = s.simpleMode ? PANEL_TAB_ORDER.filter((t) => t !== 'pro') : PANEL_TAB_ORDER
+        const tab = tabs[Number(e.key) - 1]
+        if (tab && tab !== s.panelTab) {
+          s.setPanelTab(tab)
+          const name = PANEL_TAB_LABELS[tab]
+          announce(`${name} panel`)
+          toast(`${name} panel — Alt+${e.key}`, { duration: 900 })
+        }
+        return
+      }
 
       if (mod && key === 'z') {
         e.preventDefault()
@@ -528,6 +557,14 @@ export function EditorShell() {
   useEffect(() => {
     startCloudAutosave()
   }, [])
+
+  // UX60 Phase 6 (Days 44–45) — live-region announcements for background
+  // autosave transitions (screen-reader-visible without stealing focus)
+  const autosave = useEditor((s) => s.autosave)
+  useEffect(() => {
+    if (autosave === 'saved') announce('Project saved to this device')
+    else if (autosave === 'error') announce('Autosave retrying')
+  }, [autosave])
 
   // manifest app-shortcut: /?action=export opens the export dialog once ready
   useEffect(() => {

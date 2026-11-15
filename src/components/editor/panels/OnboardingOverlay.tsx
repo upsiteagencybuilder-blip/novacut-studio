@@ -99,7 +99,14 @@ export function OnboardingOverlay() {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-(--nc-scrim-strong) p-4 backdrop-blur-md">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-(--nc-scrim-strong) p-4 backdrop-blur-md"
+      /* UX60 Phase 6 (Days 44–45) — the first-run gate is a modal dialog */
+      role="dialog"
+      aria-modal="true"
+      aria-label={state === 'canvas' ? 'What are you making?' : t('title')}
+      data-nc-onboarding
+    >
       <div className="nc-glass-strong nc-fade-up w-full max-w-md rounded-2xl p-8 text-center">
         {/* logo */}
         <div className="nc-gradient nc-glow mx-auto flex h-16 w-16 items-center justify-center rounded-2xl">

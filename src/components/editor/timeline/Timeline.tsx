@@ -20,6 +20,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { HEADER_WIDTH, MARKER_COLORS, RULER_HEIGHT, TRACK_HEIGHT } from '@/lib/editor/constants'
 import { useEditor } from '@/lib/editor/store'
+import { useLabel } from '@/lib/i18n/labels'
 import { openCompound } from '@/lib/editor/nested'
 import { transitionPairsForTrack } from '@/lib/editor/transitionBridge'
 import { clamp, clipsOnTrack, formatShortTime, formatTimecode, projectDuration } from '@/lib/editor/utils'
@@ -534,6 +535,7 @@ export function Timeline() {
 /* ---------------- track header ---------------- */
 
 function TrackHeader({ track, canRemove }: { track: Track; canRemove: boolean }) {
+  const l = useLabel()
   const KindIcon = track.kind === 'video' ? Film : track.kind === 'overlay' ? Layers : AudioLines
   const patch = (p: Partial<Track>) => useEditor.getState().updateTrack(track.id, p, `track-${track.id}`)
   const iconClass = 'size-[13px]'
@@ -551,7 +553,7 @@ function TrackHeader({ track, canRemove }: { track: Track; canRemove: boolean })
 
       <button
         type="button"
-        aria-label={track.muted ? 'Unmute track' : 'Mute track'}
+        aria-label={track.muted ? l('Unmute track') : l('Mute track')}
         onClick={() => patch({ muted: !track.muted })}
         className={cn(HEADER_BTN, track.muted && 'text-rose-400')}
       >

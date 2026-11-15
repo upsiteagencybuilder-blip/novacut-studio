@@ -1046,3 +1046,126 @@ input[type="range"].nc-range::-webkit-slider-thumb {
 .nc-density-compact [data-nc-section-body] > :not(:last-child) {
   margin-block-end: 0.5rem;
 }
+
+/* ================================================================
+ * UX60 Phase 6 (Days 41–43) — PRINTED SHORTCUT SHEET
+ * Hidden everywhere on screen; @media print swaps the whole page for
+ * this sheet (visibility pattern keeps layout intact for printing).
+ * ================================================================ */
+.nc-print-sheet {
+  display: none;
+}
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .nc-print-sheet,
+  .nc-print-sheet * {
+    visibility: visible;
+  }
+  .nc-print-sheet {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #ffffff;
+    color: #111111;
+    padding: 24px 28px;
+    font-size: 12px;
+    line-height: 1.45;
+    overflow: visible;
+  }
+  .nc-print-sheet * {
+    color: #111111 !important;
+    background: transparent !important;
+    border-color: #cccccc !important;
+  }
+  .ncps-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 2px solid #111;
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+  .ncps-brand {
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .nc-print-sheet h1 {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0;
+  }
+  .ncps-sub {
+    font-size: 9px;
+    color: #555 !important;
+    margin: 2px 0 0;
+  }
+  .nc-print-sheet h2 {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 14px 0 4px;
+    page-break-after: avoid;
+  }
+  .ncps-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+  }
+  .ncps-table th {
+    text-align: left;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid #111;
+    padding: 3px 6px;
+  }
+  .ncps-table td {
+    border-bottom: 1px solid #ddd;
+    padding: 3px 6px;
+  }
+  .ncps-keys {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .ncps-custom {
+    color: #92400e !important;
+    font-weight: 700;
+  }
+  .ncps-foot {
+    margin-top: 14px;
+    font-size: 9px;
+    color: #555 !important;
+  }
+}
+
+/* ================================================================
+ * UX60 Phase 6 (Day 48) — REDUCED-MOTION SWEEP
+ * One honest blanket rule: vestibular users get a still editor. The
+ * brand aurora/shimmer/pulse decorations stop animating; functional
+ * spins/flows collapse to their end state instead of strobing.
+ * (The earlier per-class reduce block above keeps nc-section-flash.)
+ * ================================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .nc-shimmer::after,
+  .nc-aurora::before,
+  .nc-aurora::after {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+}

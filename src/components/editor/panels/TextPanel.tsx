@@ -23,6 +23,8 @@ import {
   toggleIdInList,
 } from '@/lib/effects/favorites'
 import { cn } from '@/lib/utils'
+import { rovingGridKeydown } from '@/lib/editor/roving'
+import { useLabel } from '@/lib/i18n/labels'
 
 const PREVIEW_SIZE = 20
 
@@ -53,6 +55,7 @@ function presetPreviewStyle(preset: TextPreset): CSSProperties {
 }
 
 export function TextPanel() {
+  const l = useLabel()
   const addTextClip = useEditor((s) => s.addTextClip)
   const [favorites, setFavorites] = useState<string[]>(() => loadIdList(TEXT_FAVORITES_KEY))
   const [recent, setRecent] = useState<string[]>(() => loadIdList(TEXT_RECENT_KEY, 24))
@@ -111,13 +114,13 @@ export function TextPanel() {
         className="nc-gradient nc-glow-hover h-10 w-full rounded-xl font-semibold text-white"
       >
         <Plus className="size-4" />
-        Add text
+        {l('Add text')}
       </Button>
 
       {/* title presets */}
       <section className="space-y-1.5">
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Title presets
+          {l('Title presets')}
         </h3>
 
         {/* favorites / recents filters */}
@@ -147,7 +150,12 @@ export function TextPanel() {
           })}
         </div>
 
-        <div className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto pr-0.5 nc-scroll">
+        {/* UX60 Phase 6 — arrow-key roving across the preset grid */}
+        <div
+          className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto pr-0.5 nc-scroll"
+          onKeyDown={rovingGridKeydown}
+          data-nc-text-grid
+        >
           {visiblePresets.map((preset) => {
             const faved = favorites.includes(preset.id)
             return (
@@ -155,7 +163,8 @@ export function TextPanel() {
                 <button
                   type="button"
                   data-nc-text-preset={preset.id}
-                  title={`Add "${preset.name}" at playhead`}
+                  data-nc-item
+                  title={`${l('Add')} "${preset.name}" ${l('at playhead')}`}
                   onClick={() => handlePreset(preset)}
                   className="flex w-full cursor-pointer flex-col gap-1 rounded-lg border border-(--nc-line) bg-(--nc-panel) p-3 text-left transition hover:scale-[1.02] hover:border-fuchsia-400/60"
                 >
@@ -192,7 +201,7 @@ export function TextPanel() {
                 {filter === 'favorites' ? 'No starred presets yet — tap the ☆ on a title card.' : 'Nothing used yet.'}
               </p>
               <Button size="sm" variant="outline" className="h-7 px-2.5 text-[10px]" data-nc-empty-text-cta onClick={() => setFilter('all')}>
-                Browse all titles
+                {l('Browse all titles')}
               </Button>
             </div>
           )}

@@ -11,6 +11,7 @@ import { Lightbulb, Search, Star } from 'lucide-react'
 import { toast } from 'sonner'
 import { STICKER_CATEGORIES } from '@/lib/editor/constants'
 import { useEditor } from '@/lib/editor/store'
+import { rovingGridKeydown } from '@/lib/editor/roving'
 import {
   loadIdList,
   pushRecentId,
@@ -254,7 +255,11 @@ export function StickerPanel() {
             </div>
           )}
 
-          <div className="grid max-h-72 grid-cols-5 gap-1.5 overflow-y-auto pr-0.5 nc-scroll">
+          <div
+            className="grid max-h-72 grid-cols-5 gap-1.5 overflow-y-auto pr-0.5 nc-scroll"
+            onKeyDown={rovingGridKeydown}
+            data-nc-sticker-grid
+          >
             {visibleEmojis.map((emoji, i) => {
               const id = `emoji:${emoji}`
               const faved = favorites.includes(id)
@@ -262,6 +267,7 @@ export function StickerPanel() {
                 <div key={`${emoji}-${i}`} className="relative">
                   <button
                     type="button"
+                    data-nc-item
                     title={`Add ${emoji} sticker at playhead`}
                     onClick={() => handleAdd(emoji, emoji, id)}
                     className="flex aspect-square w-full items-center justify-center rounded-lg bg-(--nc-panel) text-2xl transition hover:scale-110 hover:bg-(--nc-panel-strong) active:scale-95"
@@ -313,7 +319,10 @@ export function StickerPanel() {
 
       {/* ---------------- shape / social / vlog tabs ---------------- */}
       {tab !== 'emoji' && (
-        <div className="grid max-h-72 grid-cols-4 gap-1.5 overflow-y-auto pr-0.5 nc-scroll">
+        <div
+          className="grid max-h-72 grid-cols-4 gap-1.5 overflow-y-auto pr-0.5 nc-scroll"
+          onKeyDown={rovingGridKeydown}
+        >
           {visibleDefs.map((def) => {
             const id = `sticker:${def.id}`
             const faved = favorites.includes(id)
@@ -321,6 +330,7 @@ export function StickerPanel() {
               <div key={def.id} className="relative">
                 <button
                   type="button"
+                  data-nc-item
                   title={`Add ${def.name}`}
                   aria-label={`Add ${def.name} sticker`}
                   onClick={() =>

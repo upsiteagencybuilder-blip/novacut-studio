@@ -22,6 +22,7 @@ import {
   catalogCounts,
 } from '@/lib/tools/catalog'
 import type { ProTool, ToolAction, ToolSectionId } from '@/lib/tools/types'
+import { rovingGridKeydown } from '@/lib/editor/roving'
 
 /* ---------------- status styling (token-driven color combos) ---------------- */
 
@@ -274,6 +275,23 @@ function useToolAction() {
         window.setTimeout(() => window.dispatchEvent(new CustomEvent('nc-pulse-empty-ctas')), 200)
         toast('Every empty surface ships its next-best action — the Media panel shows two when empty')
       },
+      /* ---- UX60 Phase 6 — accessibility & language ---- */
+      'open-shortcut-map': () => {
+        openDialog('shortcuts')
+        toast('The complete keyboard map — Alt+1–9 jumps panels, arrows rove grids, Tab reaches every control')
+      },
+      'open-shortcut-sheet': () => {
+        openDialog('shortcuts')
+        toast('Printable sheet — every current binding on one page; opening the print dialog')
+        // the dialog (and its hidden print sheet) mounts after the click
+        window.setTimeout(() => window.print(), 400)
+      },
+      'toggle-bangla': () => {
+        const next = document.cookie.includes('novacut.locale=bn') ? 'en' : 'bn'
+        document.cookie = `novacut.locale=${next}; path=/; max-age=31536000; samesite=lax`
+        toast.success(next === 'bn' ? 'বাংলা UI চালু — প্রধান ইন্টারফেস বাংলায় দেখাবে (deep tooltips English-এ থাকবে)' : 'English UI — the primary chrome is back in English')
+        window.setTimeout(() => window.location.reload(), 700)
+      },
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])
@@ -315,6 +333,7 @@ function ToolCard({
     return (
       <button
         type="button"
+        data-nc-item
         onClick={() => onOpen[tool.action as ToolAction](tool)}
         title={`${tool.name} — open in NovaCut`}
         className="nc-glass block w-full rounded-lg p-2.5 text-left transition hover:border-emerald-400/40 hover:bg-(--nc-panel-strong) focus-visible:outline-2 focus-visible:outline-emerald-400/60 active:scale-[0.98]"
@@ -469,8 +488,13 @@ export function ProToolkitPanel() {
       )}
 
       {/* results — container queries drive the column count so the same panel
-          breathes in the narrow desktop rail AND the wide mobile sheet */}
-      <div className="@container nc-scroll min-h-0 flex-1 space-y-4 overflow-y-auto pb-2 lg:max-h-[calc(100vh-23rem)]">
+          breathes in the narrow desktop rail AND the wide mobile sheet.
+          UX60 Phase 6: the whole wall is arrow-key rovable. */}
+      <div
+        className="@container nc-scroll min-h-0 flex-1 space-y-4 overflow-y-auto pb-2 lg:max-h-[calc(100vh-23rem)]"
+        onKeyDown={rovingGridKeydown}
+        data-nc-pro-wall
+      >
         {groups.length === 0 ? (
           <div className="rounded-xl border border-dashed border-(--nc-line-strong) p-6 text-center">
             <p className="text-xs font-medium text-foreground">No tools match “{query}”</p>

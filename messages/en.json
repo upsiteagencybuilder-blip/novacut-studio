@@ -17,6 +17,6 @@
   },
   "topbar": {
     "language": "Language",
-    "languageSwitched": "Language switched to Bengali — part of the UI is translated so far (i18n scaffold)."
+    "languageSwitched": "ভাষা বাংলায় বদলে গেছে — প্রধান ইন্টারফেস (রেল, টুলবার, প্যানেল, প্রপার্টিজ, ডায়ালগ টাইটেল) এখন বাংলায়; গভীর টুলটিপ ও বর্ণনা এখনো ইংরেজিতে।"
   }
 }

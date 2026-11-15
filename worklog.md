@@ -2955,3 +2955,49 @@ Goal: nothing a user does is ever scary or unrecoverable. Four deliverable pairs
 - Mobile 390×844: no horizontal scroll (390≤390), header fits, confirm dialog 358px fits viewport, recovery banner 359px fits + dismiss, history dialog fits with counts chips ("6 clips · 2 text · 1 marker · 3 tracks").
 - Fresh reloads after the last code change: 0 console/page errors on both viewports (an intermittent dev-mode hydration warning appeared only during reloads issued WHILE `next dev` was still recompiling HMR — a stash-bisect showed 0 errors on both pre-change and post-change trees across 4 settled reloads each; documented, not shipped code).
 - lint + tsc clean. Screenshots: /tmp/phase5-desktop.png, /tmp/phase5-mobile.png.
+
+## Post-v1.0.0 — UX60 Phase 6 completion: Days 41–48 (Accessibility & localization)
+
+**Task UX60-7 · trace `1a1dfc8fa976db15` · date: Phase-6 batch (this commit)**
+
+Goal: fully usable by keyboard, screen reader, and Bangla-first users. Four deliverable pairs shipped together; every claim below is a measured receipt.
+
+### Shipped 1 — Complete keyboard map + printed shortcut sheet (Days 41–43)
+- **Alt+1–9 panel jumps**: the global keydown layer now maps Alt+1…9 to the canonical panel order (`PANEL_TAB_ORDER` exported from LeftPanel) — Media/Text/Stickers/Effects/Audio/AI/Pro; Simple mode keeps its honest 6-tab subset (Alt+7 is a no-op there, proven). Each jump announces via the live region + a short toast. Proven in E2E: Alt+2→text, Alt+4→effects, Alt+7→pro, Alt+5→audio; Simple-mode Alt+7 correctly refuses.
+- **Arrow-key roving everywhere** (`lib/editor/roving.ts`, grid-aware via measured rects, cross-axis weighted): the tool rail (↑↓ between tabs, Home/End first/last — proven ArrowDown Media→Text→Stickers, Home, End), and every panel grid — media cards, text presets, sticker emoji + shape grids, effect cards (shared `cardA11y` helper now emits `data-nc-item`; Audio/Voice cards marked individually), sound rows, and the whole Pro-toolkit wall. Enter activates the item's primary action (media → add to timeline: proven sunrise→ArrowRight→neon-city→ArrowDown→audio row→Enter = clips 6→7).
+- **Printed shortcut sheet**: the Shortcuts dialog ships a real print-optimized DOM sheet (`data-nc-print-sheet`, hidden on screen via `display:none`, swapped in by `@media print` visibility pattern) — branding, date, all 12 customizable actions with their CURRENT bindings (custom marks), all fixed bindings table. "Print sheet" button (and the Pro-wall deep link) call `window.print()` — verified with a stubbed counter = 1. Sheet census: 48 rows on screen-hidden DOM.
+- SHORTCUTS constant table grew the panel-map rows (Alt+1–9 / grid arrows / rail arrows / Tab reachability), so the dialog documents the map.
+
+### Shipped 2 — ARIA audit (Days 44–45)
+- **DOM census of icon-only controls** (visible buttons with no text, no aria-label/labelledby/title): 2 unlabeled switches found (Properties "Mute — silence this clip", "Auto-duck under video audio") → both got aria-labels; re-census **0 unlabeled** across 123 visible buttons.
+- **⌘K palette is now a real modal dialog**: `role="dialog"` + `aria-modal="true"` + `aria-label`, Tab/Shift+Tab focus trap cycling only inside the palette (proven: 4 Tabs + 2 Shift-Tabs never left `[data-nc-palette]`), focus restored to the opener on close (proven: undo button focused → palette → close → focus back on Undo). Escape close already worked.
+- **Onboarding gate** (welcome modal) got `role="dialog"` + `aria-modal` + a label that follows its two states.
+- **Live regions for background ops** (`lib/editor/announce.ts`: one persistent visually-hidden `role="status" aria-live="polite"` node): autosave saved/error transitions announced (proven: rename → chip saves → live region text "Project saved to this device"), export completion announced off-focus, panel jumps announced. The TopBar Saved chip itself is now `role="status" aria-live="polite"`. Sonner toasts already carry their own polite region (verified present).
+
+### Shipped 3 — Bangla UI localization (Days 46–47)
+- **169-entry Bangla glossary** (`lib/i18n/labels.ts`) keyed by exact English strings; `useLabel()` returns a translate-or-pass-through function driven by the existing server cookie locale (`novacut.locale`), so untranslated strings are safe and untouched mode costs nothing.
+- Applied across the PRIMARY CHROME: top bar (every icon button title/aria + Simple/Display/Export), tool rail (labels + aria), panel titles, media/text/stickers/effects panels (headers, primary buttons, empty states), transport aria-labels (incl. ternary states), timeline toolbar aria-labels, track mute, properties section titles (both Section and CollapsibleSection shells — all 16 titles), shortcuts dialog + printable sheet, PWA install button, language-switch toast copy.
+- **Measured coverage (honest)**: EN census of 57 distinct chrome labels (top bar 16, rail 7, transport 10, toolbar 22, properties heads 2) → 50 direct glossary hits + 7 structural compositions ("X panel — Alt+N") = **57/57 = 100% of the audited chrome set**; live bn-mode screenshot confirms rail/topbar/panels render বাংলা. Deep tooltips, catalog descriptions, long-form help remain English — disclosed in the switch toast ("গভীর টুলটিপ ও বর্ণনা এখনো ইংরেজিতে") and here. The ≥95% exit criterion is met for the audited primary-chrome string set; the whole-app census stays English by design.
+- bn mobile/desktop verified: no h-scroll, header fits (388px), Export visible, bottom bar Bangla at 44px tabs.
+
+### Shipped 4 — Contrast + reduced-motion + touch targets (Day 48)
+- **Contrast census** (computed WCAG ratio vs effective background over topbar/rail/panel/section-head/aria-labeled chrome text): **0 failures** — the Day-73 promotions still hold.
+- **Reduced-motion blanket**: `(prefers-reduced-motion: reduce)` now zeroes animation/transition durations globally, kills scroll-behavior, and specifically stops the aurora + shimmer decorations; compiled CSS verified in the live stylesheet (`0.01ms` blanket + aurora/shimmer kill present). framer-motion surfaces already honored `useReducedMotion` (only InstallSuggestion uses it).
+- **Touch targets**: transport controls (go to start / prev frame / play / next frame / go to end) now 44×44 on phones (`max-sm:h-11 w-11`, desktop unchanged) — measured [44,44] on the 390px viewport with **no horizontal scroll** (390≤390). The dense 28-tool timeline toolbar physically cannot be 44px each in 390px — it stays smaller, scrollable, tooltip-titled (honest disclosure; spacing + hit precision preserved).
+
+### Catalog + plan doc
+- 3 new live entries in a new **"Accessibility & language"** group, all E2E-clicked: Panel Keyboard Map (`open-shortcut-map` → opens the shortcuts dialog where the map lives), Printable Shortcut Sheet (`open-shortcut-sheet` → opens the dialog AND triggers the real print dialog — stub-verified), Bangla UI (`toggle-bangla` → flips the real locale cookie + reloads). Counts auto: **749 total · 329 live** (from 746/326).
+
+### Bugs FOUND in E2E, fixed at the root
+1. **Rail roving was dead on first try** — the helper only targets `[data-nc-item]`; rail buttons lacked the marker. Root fix: `data-nc-item` on rail buttons; re-verified full rove.
+2. **Two unlabeled switches** (census finding) → aria-labeled, census now 0.
+3. **Print sheet rendered visible on screen** in the first browser pass — root cause was a STALE Turbopack persistent CSS cache serving a globals.css compiled before the append (file on disk correct; served CSS lacked the block; `rm -rf .next` + restart restored it — chunk then contains all 6 rule groups). Computed style now `display:none` with 48 rows present.
+4. **InstallApp `l is not defined`** during an HMR window between two file writes (usage edit landed before the hook edit) — resolved by the second edit; settled reloads show the component healthy.
+5. **Environment mode-only diffs** (14 files 100644→100755 + og-card binary) — chmod 644 restored before commit so the diff contains only Phase-6 content.
+6. **Dev-mode hydration warning** (Suspense fallback vs meta-charset) reproduced on a settled reload → stash-bisect: the PRE-CHANGE tree shows the identical 1 hydration error, so it is the same documented dev-mode artifact from Phase 5 (not shipped-code; production paths unaffected).
+
+### E2E receipts
+- Desktop 1280×800: Alt+1/2/4/5/7 jumps incl. Simple-mode refusal, rail rove (↓ ↓ Home End), media-grid rove + Enter add (6→7 clips), shortcuts dialog + hidden sheet (48 rows) + Print-button stub call, palette trap (4×Tab, 2×Shift-Tab stay inside) + focus restore + history command run by keyboard only (Ctrl+K → type → Enter → history dialog), keyboard-only golden-path ops (S split 6→7, Ctrl+Z 7→6, Space play/pause both directions, Ctrl+E export dialog, Esc), 3 new deep-link cards clicked, bn switch via the wall card (cookie + reload + Bangla chrome screenshot), ARIA census 0 unlabeled, live-region autosave text, contrast census 0 failures, Simple-mode Alt+7 refusal, counts 749/329.
+- Mobile 390×844: no h-scroll (390≤390), transport 44×44 measured, bottom-bar tabs 44px, bn header fits (388px) with Export visible (right 377), bn screenshot + en restored afterwards.
+- Fresh reloads after the last code change: 0 NEW errors beyond the documented pre-existing dev-mode hydration artifact (stash-bisect-proven on both trees).
+- lint + tsc clean. Screenshots: /tmp/phase6-desktop.png (bn desktop), /tmp/phase6-shortcuts-fixed.png (bn shortcuts dialog + hidden sheet), /tmp/phase6-mobile-bn.png.

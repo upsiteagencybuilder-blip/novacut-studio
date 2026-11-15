@@ -29,6 +29,7 @@ import { useEditor } from '@/lib/editor/store'
 import { importFiles } from '@/lib/editor/importer'
 import { formatShortTime } from '@/lib/editor/utils'
 import { cn } from '@/lib/utils'
+import { rovingGridKeydown } from '@/lib/editor/roving'
 
 type RecState = 'idle' | 'recording' | 'processing'
 type AudioTab = 'library' | 'music' | 'sfx'
@@ -513,13 +514,23 @@ function LibraryTab() {
         )}
 
         {shownAssets.length > 0 ? (
-          <div className='space-y-1.5'>
+          <div className='space-y-1.5' onKeyDown={rovingGridKeydown} data-nc-audio-list>
             {shownAssets.map((asset) => {
               const fav = favIds.includes(asset.id)
               return (
                 <div
                   key={asset.id}
-                  className='flex items-center gap-2 rounded-lg border border-(--nc-line) bg-(--nc-panel) p-2 transition hover:border-emerald-400/50'
+                  data-nc-item
+                  tabIndex={0}
+                  role='button'
+                  aria-label={`${asset.name} — ${asset.duration > 0 ? formatShortTime(asset.duration) : 'audio'}`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addToTimeline(asset.id)
+                    }
+                  }}
+                  className='flex cursor-pointer items-center gap-2 rounded-lg border border-(--nc-line) bg-(--nc-panel) p-2 transition hover:border-emerald-400/50'
                 >
                   <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15'>
                     <Music className='size-4 text-emerald-300' />

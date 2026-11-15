@@ -4,6 +4,10 @@
  * NovaCut Studio — Day 72: the ⌘K command palette UI.
  * Keyboard-first: type to filter, ↑/↓ to move, Enter to run, Esc to close.
  * Only real, live commands are listed (see lib/command-palette.ts).
+ *
+ * UX60 Phase 6 (Days 44–45) — ARIA: role="dialog" + aria-modal, Tab focus
+ * trap (Tab cycles inside, Shift+Tab wraps back), focus restored to the
+ * opener on close.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CornerDownLeft, Search, Sparkles } from 'lucide-react'
@@ -25,6 +29,8 @@ function CommandPaletteInner() {
   const [index, setIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  /** Days 44–45 — remember the opener so closing restores its focus */
+  const restoreRef = useRef<HTMLElement | null>(null)
 
   const commands = useMemo(() => (open ? buildCommands() : []), [open])
   const filtered = useMemo(() => filterCommands(commands, query), [commands, query])
@@ -34,9 +40,18 @@ function CommandPaletteInner() {
   // reset + focus when the palette opens (mounted/unmounted by `open` anyway)
   useEffect(() => {
     if (!open) return
+    restoreRef.current = document.activeElement as HTMLElement | null
     const t = setTimeout(() => inputRef.current?.focus(), 30)
     return () => clearTimeout(t)
   }, [open])
+
+  // Days 44–45 — unmount = close: hand focus back to the opener
+  useEffect(() => {
+    return () => {
+      const prev = restoreRef.current
+      if (prev && document.contains(prev)) prev.focus()
+    }
+  }, [])
 
   useEffect(() => {
     const el = listRef.current?.querySelector(`[data-nc-cmd-index="${index}"]`)
@@ -56,6 +71,32 @@ function CommandPaletteInner() {
     void executeNL(nl)
   }
 
+  /**
+   * Days 44–45 — Tab focus trap: the palette is a modal dialog, so Tab
+   * cycles inside it (input → smart action → commands → … → back) instead
+   * of leaking into the editor behind the backdrop.
+   */
+  const trapTab = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab') return
+    const root = e.currentTarget as HTMLElement
+    const focusables = Array.from(
+      root.querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex]:not([tabindex="-1"])'),
+    ).filter((el) => el.offsetParent !== null)
+    if (!focusables.length) return
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    const active = document.activeElement as HTMLElement | null
+    if (e.shiftKey) {
+      if (!active || active === first || !root.contains(active)) {
+        e.preventDefault()
+        last.focus()
+      }
+    } else if (!active || active === last || !root.contains(active)) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-[95] flex items-start justify-center bg-black/55 p-4 pt-[12vh] backdrop-blur-sm"
@@ -65,6 +106,10 @@ function CommandPaletteInner() {
       <div
         className="nc-glass-strong w-full max-w-lg overflow-hidden rounded-2xl shadow-2xl"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        onKeyDown={trapTab}
       >
         <div className="flex items-center gap-2 border-b border-(--nc-line) px-3.5 py-3">
           <Search className="size-4 shrink-0 text-muted-foreground" />

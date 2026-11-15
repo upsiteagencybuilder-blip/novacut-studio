@@ -46,6 +46,7 @@ import {
 import { OVERLAY_PACKS, getOverlayPack } from '@/lib/effects/packs'
 import { EFFECT_COUNTS, TOTAL_EFFECTS, getEffect, searchEffects } from '@/lib/effects/registry'
 import { previewVoiceEffect, renderVoiceToWav, stopVoicePreview } from '@/lib/effects/voice'
+import { rovingGridKeydown } from '@/lib/editor/roving'
 import type {
   ColorEffect,
   Effect,
@@ -123,6 +124,8 @@ function cardClass(active: boolean): string {
  */
 function cardA11y(onApply: () => void) {
   return {
+    /* UX60 Phase 6 (Days 41–43) — grid roving target (arrows + Home/End) */
+    'data-nc-item': true,
     role: 'button' as const,
     tabIndex: 0,
     onClick: onApply,
@@ -433,7 +436,7 @@ function AudioCard({
   onAdd: () => void
 }) {
   return (
-    <div className={cardClass(false)}>
+    <div className={cardClass(false)} data-nc-item tabIndex={0} title={effect.name} aria-label={`${effect.name} — preview and add`}>
       <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <button
         type="button"
@@ -525,7 +528,7 @@ function VoiceCard({
   onApply: () => void
 }) {
   return (
-    <div className={cardClass(false)}>
+    <div className={cardClass(false)} data-nc-item tabIndex={0} title={effect.name} aria-label={`${effect.name} — preview and apply`}>
       <FavoriteStar active={fav} onToggle={onFav} label={effect.name} />
       <button
         type="button"
@@ -1542,7 +1545,7 @@ export function EffectsPanel() {
                     aria-hidden
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">{openPack.members.map(renderCard)}</div>
+                <div className="grid grid-cols-3 gap-1.5" onKeyDown={rovingGridKeydown} data-nc-effects-grid>{openPack.members.map(renderCard)}</div>
               </>
             ) : (
               <>
@@ -1555,12 +1558,13 @@ export function EffectsPanel() {
                     <p className="mt-1 text-xs text-muted-foreground">Try a different search.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5" onKeyDown={rovingGridKeydown}>
                     {packs.map((pack) => (
                       <button
                         key={pack.id}
                         type="button"
                         data-nc-pack-card={pack.id}
+                        data-nc-item
                         title={pack.desc}
                         onClick={() => setPackId(pack.id)}
                         className="group relative overflow-hidden rounded-lg border border-(--nc-line) bg-(--nc-panel) text-left outline-none transition hover:border-fuchsia-400/60 focus-visible:ring-2 focus-visible:ring-(--nc-accent)"
@@ -1625,7 +1629,7 @@ export function EffectsPanel() {
         </div>
       ) : category !== 'packs' ? (
         <>
-          <div className="grid grid-cols-3 gap-1.5">{visible.map(renderCard)}</div>
+          <div className="grid grid-cols-3 gap-1.5" onKeyDown={rovingGridKeydown} data-nc-effects-grid>{visible.map(renderCard)}</div>
           {visibleCount < results.length && (
             <Button
               variant="ghost"

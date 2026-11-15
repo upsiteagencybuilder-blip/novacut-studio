@@ -30,10 +30,12 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { ConnectionPill, InstallApp, OfflineReadinessBadge, PWAUpdateToast } from '@/components/editor/pwa/PWAStatus'
+import { useLabel } from '@/lib/i18n/labels'
 
 function AutosaveIndicator() {
   const autosave = useEditor((s) => s.autosave)
   const lastSavedAt = useEditor((s) => s.lastSavedAt)
+  const l = useLabel()
   // UX60 Days 37-38 — the Saved chip ticks with real relative time
   const [, tick] = useState(0)
   useEffect(() => {
@@ -42,29 +44,29 @@ function AutosaveIndicator() {
   }, [])
   const savedLabel = lastSavedAt ? relSaved(lastSavedAt) : 'Saved'
   return (
-    <div className="flex w-fit items-center gap-1 text-[10px] text-muted-foreground" data-nc-autosave-chip>
+    <div className="flex w-fit items-center gap-1 text-[10px] text-muted-foreground" data-nc-autosave-chip role="status" aria-live="polite">
       {autosave === 'saving' && (
         <>
           <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Saving…</span>
+          <span>{l('Saving…')}</span>
         </>
       )}
       {autosave === 'saved' && (
         <>
           <CloudCheck className="h-3 w-3 text-emerald-400" />
-          <span>Saved · {savedLabel}</span>
+          <span>{l('Saved')} · {savedLabel}</span>
         </>
       )}
       {autosave === 'error' && (
         <>
           <CloudOff className="h-3 w-3 text-rose-400" />
-          <span>Retrying</span>
+          <span>{l('Retrying')}</span>
         </>
       )}
       {autosave === 'idle' && (
         <>
           <CloudCheck className="h-3 w-3" />
-          <span>Ready</span>
+          <span>{l('Ready')}</span>
         </>
       )}
     </div>
@@ -84,6 +86,7 @@ function relSaved(at: number): string {
 export function TopBar() {
   const locale = useLocale()
   const tLang = useTranslations('topbar')
+  const l = useLabel()
   const projectName = useEditor((s) => s.project.name)
   const pastCount = useEditor((s) => s.past.length)
   const futureCount = useEditor((s) => s.future.length)
@@ -106,8 +109,8 @@ export function TopBar() {
       <button
         type="button"
         onClick={() => openDialog('theme')}
-        title="Theme Studio — change the whole look"
-        aria-label="Open Theme Studio"
+        title={l('Theme Studio — change the whole look')}
+        aria-label={l('Open Theme Studio')}
         className="nc-gradient nc-glow flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform hover:scale-105 active:scale-95"
       >
         <Play className="h-4 w-4 fill-white text-white" />
@@ -126,7 +129,7 @@ export function TopBar() {
       <div className="ml-3 flex flex-col gap-0.5">
         <Input
           value={projectName}
-          aria-label="Project name"
+          aria-label={l('Project name')}
           onChange={(e) => setProjectName(e.target.value)}
           className="h-8 w-20 border-(--nc-line) bg-(--nc-panel) text-xs focus-visible:ring-fuchsia-400/50 sm:w-44"
         />
@@ -143,8 +146,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          title="Undo (Ctrl+Z)"
-          aria-label="Undo"
+          title={`${l('Undo')} (Ctrl+Z)`}
+          aria-label={l('Undo')}
           disabled={pastCount === 0}
           onClick={() => useEditor.getState().undo()}
         >
@@ -154,8 +157,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          title="Redo (Ctrl+Shift+Z)"
-          aria-label="Redo"
+          title={`${l('Redo')} (Ctrl+Shift+Z)`}
+          aria-label={l('Redo')}
           disabled={futureCount === 0}
           onClick={() => useEditor.getState().redo()}
         >
@@ -183,8 +186,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          title="Edit history (undo/redo stack)"
-          aria-label="Edit history"
+          title={l('Edit history (undo/redo stack)')}
+          aria-label={l('Edit history')}
           data-nc-history-btn
           onClick={() => openDialog('history')}
         >
@@ -194,8 +197,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          title="Version history"
-          aria-label="Version history"
+          title={l('Version history')}
+          aria-label={l('Version history')}
           onClick={() => openDialog('versions')}
         >
           <Archive className="h-4 w-4" />
@@ -204,8 +207,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          title="Audio mixer"
-          aria-label="Audio mixer"
+          title={l('Audio mixer')}
+          aria-label={l('Audio mixer')}
           onClick={() => openDialog('mixer')}
         >
           <SlidersVertical className="h-4 w-4" />
@@ -222,14 +225,14 @@ export function TopBar() {
           variant="ghost"
           size="sm"
           className={`h-8 gap-1 rounded-lg px-2 text-xs font-semibold ${simpleMode ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'text-muted-foreground hover:text-foreground'}`}
-          title="Simple mode — hides pro-only controls (curves, wheels, LUTs, keyframes…). One switch brings them back."
-          aria-label="Toggle Simple mode"
+          title={l('Simple mode — hides pro-only controls (curves, wheels, LUTs, keyframes…). One switch brings them back.')}
+          aria-label={l('Toggle Simple mode')}
           aria-pressed={simpleMode}
           data-nc-simple-toggle
           onClick={() => flipSimple(!simpleMode)}
         >
           <Wand2 className="h-3.5 w-3.5" />
-          <span>Simple</span>
+          <span>{l('Simple')}</span>
         </Button>
         {/* UX60 Phase 4 — panel density (Days 31-32), persisted per device;
             desktop header control — mobile toggles via the Pro-wall card */}
@@ -240,8 +243,8 @@ export function TopBar() {
               variant="ghost"
               size="icon"
               className={`h-8 w-8 ${panelDensity === 'compact' ? 'bg-amber-500/15 text-amber-300' : 'text-muted-foreground hover:text-foreground'}`}
-              title="Display: panel density + Simple mode"
-              aria-label="Display settings"
+              title={l('Display: panel density + Simple mode')}
+              aria-label={l('Display settings')}
               data-nc-density-btn
             >
               <AlignJustify className="h-4 w-4" />
@@ -249,10 +252,10 @@ export function TopBar() {
           </PopoverTrigger>
           <PopoverContent align="end" className="w-60 p-2">
             <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Display
+              {l('Display')}
             </p>
             <div className="px-2 pb-2" data-nc-density-controls>
-              <p className="pb-1 text-[11px] font-medium text-foreground/85">Panel density</p>
+              <p className="pb-1 text-[11px] font-medium text-foreground/85">{l('Panel density')}</p>
               <div className="flex gap-1">
                 <button
                   type="button"
@@ -261,7 +264,7 @@ export function TopBar() {
                   onClick={() => useEditor.getState().setPanelDensity('comfortable')}
                   className={`flex-1 rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${panelDensity === 'comfortable' ? 'border-emerald-400/70 bg-emerald-400/10 text-foreground' : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground'}`}
                 >
-                  Comfortable
+                  {l('Comfortable')}
                 </button>
                 <button
                   type="button"
@@ -270,15 +273,15 @@ export function TopBar() {
                   onClick={() => useEditor.getState().setPanelDensity('compact')}
                   className={`flex-1 rounded-md border px-2 py-1.5 text-[11px] font-medium transition-colors ${panelDensity === 'compact' ? 'border-amber-400/70 bg-amber-400/10 text-foreground' : 'border-(--nc-line) bg-(--nc-panel) text-muted-foreground hover:text-foreground'}`}
                 >
-                  Compact
+                  {l('Compact')}
                 </button>
               </div>
               <p className="pt-1.5 text-[9px] leading-snug text-muted-foreground/70">
-                Compact tightens panel paddings — controls keep their touch size. Remembered per device.
+                {l('Compact tightens panel paddings — controls keep their touch size. Remembered per device.')}
               </p>
             </div>
             <div className="flex items-center gap-2 border-t border-(--nc-line) px-2 pt-2">
-              <span className="flex-1 text-[11px] font-medium text-foreground/85">Simple mode</span>
+              <span className="flex-1 text-[11px] font-medium text-foreground/85">{l('Simple mode')}</span>
               <Switch
                 checked={simpleMode}
                 onCheckedChange={flipSimple}
@@ -293,8 +296,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          title="Projects"
-          aria-label="Projects"
+          title={l('Projects')}
+          aria-label={l('Projects')}
           onClick={() => openDialog('projects')}
         >
           <FolderOpen className="h-4 w-4" />
@@ -303,8 +306,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground max-sm:hidden"
-          title="Theme Studio"
-          aria-label="Open Theme Studio panel"
+          title={l('Theme Studio')}
+          aria-label={l('Open Theme Studio panel')}
           onClick={() => openDialog('theme')}
         >
           <Palette className="h-4 w-4" />
@@ -313,8 +316,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground max-sm:hidden"
-          title="Keyboard shortcuts"
-          aria-label="Keyboard shortcuts"
+          title={l('Keyboard shortcuts')}
+          aria-label={l('Keyboard shortcuts')}
           onClick={() => openDialog('shortcuts')}
         >
           <Keyboard className="h-4 w-4" />
@@ -323,8 +326,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground max-sm:hidden"
-          title="Send feedback"
-          aria-label="Send feedback"
+          title={l('Send feedback')}
+          aria-label={l('Send feedback')}
           onClick={() => openDialog('feedback')}
         >
           <MessageSquareHeart className="h-4 w-4" />
@@ -333,8 +336,8 @@ export function TopBar() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 text-muted-foreground hover:text-foreground max-sm:hidden"
-          title="Account (optional sign-in)"
-          aria-label="Account (optional sign-in)"
+          title={l('Account (optional sign-in)')}
+          aria-label={l('Account (optional sign-in)')}
           onClick={() => openDialog('account')}
         >
           <UserRound className="h-4 w-4" />
@@ -351,7 +354,7 @@ export function TopBar() {
           }}
         >
           <Download className="h-3.5 w-3.5" />
-          Export
+          {l('Export')}
         </Button>
       </div>
       <PWAUpdateToast />

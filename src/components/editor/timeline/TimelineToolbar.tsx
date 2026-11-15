@@ -43,6 +43,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { Toggle } from '@/components/ui/toggle'
+import { useLabel } from '@/lib/i18n/labels'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,6 +67,7 @@ export interface TimelineToolbarProps {
 const TOOL_BTN = 'h-8 w-8 text-foreground/65 hover:text-foreground'
 
 export function TimelineToolbar({ className }: TimelineToolbarProps) {
+  const l = useLabel()
   const project = useEditor((s) => s.project)
   const currentTime = useEditor((s) => s.currentTime)
   const zoom = useEditor((s) => s.zoom)
@@ -147,7 +149,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             size="icon"
             className={TOOL_BTN}
             disabled={!hasSelection}
-            aria-label="Copy selected clips"
+            aria-label={l('Copy selected clips')}
             onClick={() => {
               useEditor.getState().copySelected()
               toast(`${selectedIds.length} clip${selectedIds.length > 1 ? 's' : ''} copied`)
@@ -166,7 +168,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             size="icon"
             className={TOOL_BTN}
             disabled={!hasSelection}
-            aria-label="Cut selected clips"
+            aria-label={l('Cut selected clips')}
             onClick={() => {
               useEditor.getState().cutSelected()
               toast('Clip cut to clipboard')
@@ -185,7 +187,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             size="icon"
             className={TOOL_BTN}
             disabled={!hasClipboard}
-            aria-label="Paste clips at playhead"
+            aria-label={l('Paste clips at playhead')}
             onClick={() => {
               const before = useEditor.getState().project.clips.length
               useEditor.getState().pasteAtPlayhead()
@@ -209,7 +211,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             size="icon"
             className={TOOL_BTN}
             disabled={!canSplit}
-            aria-label="Split at playhead"
+            aria-label={l('Split at playhead')}
             onClick={() => useEditor.getState().splitAtPlayhead()}
           >
             <Scissors className="size-4" />
@@ -226,7 +228,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             size="icon"
             className={TOOL_BTN}
             disabled={!canFreeze}
-            aria-label="Insert freeze frame at playhead"
+            aria-label={l('Insert freeze frame at playhead')}
             onClick={async () => {
               const ok = await useEditor.getState().insertFreezeFrame()
               if (ok) toast.success('Freeze frame inserted ❄️ — 3s still, clips ripple right')
@@ -247,7 +249,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             size="icon"
             className={TOOL_BTN}
             disabled={!canExtract}
-            aria-label="Extract audio from video clip"
+            aria-label={l('Extract audio from video clip')}
             onClick={async () => {
               const res = await useEditor.getState().extractAudioFromVideo()
               if (res === 'ok') toast.success('Audio extracted — new clip on the audio track, video sound muted')
@@ -268,7 +270,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             variant="ghost"
             size="icon"
             className={TOOL_BTN}
-            aria-label="Add adjustment layer at playhead"
+            aria-label={l('Add adjustment layer at playhead')}
             data-nc-add-adjustment
             onClick={() => {
               const ok = useEditor.getState().addAdjustmentLayer()
@@ -289,7 +291,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             size="icon"
             className={TOOL_BTN}
             disabled={!hasSelection}
-            aria-label="Duplicate selected clip"
+            aria-label={l('Duplicate selected clip')}
             onClick={() => {
               if (selectedIds[0]) useEditor.getState().duplicateClip(selectedIds[0])
             }}
@@ -309,7 +311,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
               size="icon"
               className={cn(TOOL_BTN, 'hover:bg-rose-500/10 hover:text-rose-400')}
               disabled={!hasSelection}
-              aria-label="Delete selected clips"
+              aria-label={l('Delete selected clips')}
               onClick={() => useEditor.getState().deleteSelected()}
             >
               <Trash2 className="size-4" />
@@ -324,7 +326,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
               size="icon"
               className={cn(TOOL_BTN, '-ml-1.5 w-4 min-w-0 px-0')}
               disabled={!hasSelection}
-              aria-label="More delete options"
+              aria-label={l('More delete options')}
             >
               <ChevronDown className="size-3.5" />
             </Button>
@@ -353,7 +355,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             size="sm"
             pressed={snapEnabled}
             onPressedChange={() => useEditor.getState().toggleSnap()}
-            aria-label="Toggle snapping"
+            aria-label={l('Toggle snapping')}
             className={cn(
               'h-8 w-8 px-0',
               snapEnabled
@@ -376,7 +378,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
                 variant="ghost"
                 size="icon"
                 className={cn(TOOL_BTN, 'relative w-9', userMarkers.length > 0 && 'text-(--nc-accent-300) hover:text-(--nc-accent-200)')}
-                aria-label="Timeline markers"
+                aria-label={l('Timeline markers')}
               >
                 <Bookmark className="size-4" />
                 {userMarkers.length > 0 && (
@@ -468,7 +470,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
                 size="icon"
                 className={cn(TOOL_BTN, 'relative w-9', beatMarkers.length > 0 && showBeatMarkers && 'text-emerald-300 hover:text-emerald-200')}
                 disabled={detecting}
-                aria-label="Beat sync markers"
+                aria-label={l('Beat sync markers')}
               >
                 {detecting ? <Loader2 className="size-4 animate-spin" /> : <AudioWaveform className="size-4" />}
                 {beatBpm !== null && (
@@ -572,7 +574,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             disabled={analyzing}
             data-nc-suggest-highlights
             onClick={() => void runSuggestHighlights()}
-            aria-label="Suggest highlights — find and trim dead air"
+            aria-label={l('Suggest highlights — find and trim dead air')}
           >
             {analyzing ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           </Button>
@@ -589,7 +591,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             size="sm"
             pressed={toolMode === 'razor'}
             onPressedChange={() => useEditor.getState().setToolMode(toolMode === 'razor' ? 'select' : 'razor')}
-            aria-label="Blade tool"
+            aria-label={l('Blade tool')}
             className={cn(
               'h-8 w-8 px-0',
               toolMode === 'razor'
@@ -614,7 +616,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
               useEditor.getState().setToolMode(next)
               toast(next === 'ripple' ? 'Ripple edit — drags close the gap' : 'Select tool', { duration: 1400 })
             }}
-            aria-label="Ripple edit tool"
+            aria-label={l('Ripple edit tool')}
             className={cn(
               'h-8 w-8 px-0',
               toolMode === 'ripple'
@@ -637,7 +639,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
               useEditor.getState().setToolMode(next)
               toast(next === 'roll' ? 'Roll edit — drag the cut between adjacent clips' : 'Select tool', { duration: 1400 })
             }}
-            aria-label="Roll edit tool"
+            aria-label={l('Roll edit tool')}
             className={cn(
               'h-8 w-8 px-0',
               toolMode === 'roll'
@@ -660,7 +662,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
               useEditor.getState().setToolMode(next)
               toast(next === 'slip' ? 'Slip — drag a clip body to slide its media window' : 'Select tool', { duration: 1400 })
             }}
-            aria-label="Slip tool"
+            aria-label={l('Slip tool')}
             className={cn(
               'h-8 w-8 px-0',
               toolMode === 'slip'
@@ -683,7 +685,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
               useEditor.getState().setToolMode(next)
               toast(next === 'slide' ? 'Slide — neighbors absorb the move' : 'Select tool', { duration: 1400 })
             }}
-            aria-label="Slide tool"
+            aria-label={l('Slide tool')}
             className={cn(
               'h-8 w-8 px-0',
               toolMode === 'slide'
@@ -710,7 +712,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
                   'relative w-9',
                   (inPoint !== null || outPoint !== null) && 'text-amber-300 hover:text-amber-200',
                 )}
-                aria-label="In and Out points"
+                aria-label={l('In and Out points')}
               >
                 <Braces className="size-4" />
                 {(inPoint !== null || outPoint !== null) && (
@@ -783,7 +785,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             variant="ghost"
             size="icon"
             className={TOOL_BTN}
-            aria-label="Previous edit point"
+            aria-label={l('Previous edit point')}
             onClick={() => useEditor.getState().jumpEdit(-1)}
           >
             <StepBack className="size-4" />
@@ -797,7 +799,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             variant="ghost"
             size="icon"
             className={TOOL_BTN}
-            aria-label="Next edit point"
+            aria-label={l('Next edit point')}
             onClick={() => useEditor.getState().jumpEdit(1)}
           >
             <StepForward className="size-4" />
@@ -825,7 +827,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             variant="ghost"
             size="icon"
             className={TOOL_BTN}
-            aria-label="Zoom out"
+            aria-label={l('Zoom out')}
             onClick={() => setZoom(zoom / 1.3)}
           >
             <ZoomOut className="size-4" />
@@ -840,7 +842,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
         max={300}
         step={1}
         value={[zoom]}
-        aria-label="Timeline zoom"
+        aria-label={l('Timeline zoom')}
         onValueChange={(v) => setZoom(Array.isArray(v) ? (v[0] ?? zoom) : zoom)}
       />
 
@@ -850,7 +852,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             variant="ghost"
             size="icon"
             className={TOOL_BTN}
-            aria-label="Zoom in"
+            aria-label={l('Zoom in')}
             onClick={() => setZoom(zoom * 1.3)}
           >
             <ZoomIn className="size-4" />
@@ -865,7 +867,7 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
             variant="ghost"
             size="icon"
             className={cn(TOOL_BTN, 'w-9')}
-            aria-label="Fit timeline"
+            aria-label={l('Fit timeline')}
             onClick={fitZoom}
           >
             <Maximize2 className="size-3.5" />

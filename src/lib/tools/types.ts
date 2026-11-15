@@ -71,6 +71,9 @@ export type ToolAction =
   | 'confirm-clear-markers'
   | 'pulse-recovery'
   | 'pulse-empty-ctas'
+  | 'open-shortcut-map'
+  | 'open-shortcut-sheet'
+  | 'toggle-bangla'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

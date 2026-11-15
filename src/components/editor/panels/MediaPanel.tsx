@@ -31,6 +31,8 @@ import { formatBytes, formatShortTime } from '@/lib/editor/utils'
 import { DEFAULT_TEXT_STYLE } from '@/lib/editor/constants'
 import { getKV, setKV } from '@/lib/editor/db'
 import type { MediaAssetRuntime, MediaKind, TextStyle } from '@/lib/editor/types'
+import { rovingGridKeydown } from '@/lib/editor/roving'
+import { useLabel } from '@/lib/i18n/labels'
 
 const KIND_ICON: Record<MediaKind, LucideIcon> = {
   video: VideoIcon,
@@ -52,11 +54,26 @@ function AssetCard({
 }) {
   const KindIcon = KIND_ICON[asset.kind]
   const isAudio = asset.kind === 'audio'
+  const l = useLabel()
 
   return (
-    <div className="group relative">
+    <div
+      className="group relative"
+      /* UX60 Phase 6 (Days 41–43) — the card is a keyboard grid item:
+         arrows rove, Enter adds to the timeline (same as double-click) */
+      data-nc-item
+      tabIndex={0}
+      role="button"
+      aria-label={`${asset.name} — ${l('Add to timeline')}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          onAdd(asset.id)
+        }
+      }}
+    >
       <div
-        title={`Double-click to add "${asset.name}" to the timeline`}
+        title={`${l('Double-click to add')} "${asset.name}" ${l('to the timeline')}`}
         onDoubleClick={() => onAdd(asset.id)}
         className={
           isAudio
@@ -98,10 +115,11 @@ function AssetCard({
         )}
 
         {/* hover actions */}
-        <span className="absolute right-1.5 top-1.5 flex flex-col gap-1 opacity-0 transition group-hover:opacity-100">
+        <span className="absolute right-1.5 top-1.5 flex flex-col gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
           <button
             type="button"
-            title="Add to timeline"
+            title={l('Add to timeline')}
+            aria-label={`${l('Add to timeline')} — ${asset.name}`}
             onClick={(e) => {
               e.stopPropagation()
               onAdd(asset.id)
@@ -112,7 +130,8 @@ function AssetCard({
           </button>
           <button
             type="button"
-            title="Delete from library"
+            title={l('Delete from library')}
+            aria-label={`${l('Delete from library')} — ${asset.name}`}
             onClick={(e) => {
               e.stopPropagation()
               onDelete(asset.id)
@@ -139,6 +158,7 @@ function AssetCard({
 /* ---------------- empty state (UX60 Days 39-40 — actionable) ---------------- */
 
 function MediaEmptyState({ onImport, onTryDemo }: { onImport: () => void; onTryDemo: () => void }) {
+  const l = useLabel()
   // pulse from the Pro-wall deep link (nc-pulse-empty-ctas)
   const [pulse, setPulse] = useState(false)
   useEffect(() => {
@@ -159,16 +179,16 @@ function MediaEmptyState({ onImport, onTryDemo }: { onImport: () => void; onTryD
           <Film className="size-9 text-fuchsia-300" />
         </span>
       </span>
-      <p className="mt-3 text-sm font-medium">Your media library is empty</p>
-      <p className="mt-1 text-xs text-muted-foreground">Import video, photos or music to start editing</p>
+      <p className="mt-3 text-sm font-medium">{l('Your media library is empty')}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{l('Import video, photos or music to start editing')}</p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <Button size="sm" className="h-8 px-3 text-xs" data-nc-empty-media-import onClick={onImport}>
           <UploadCloud className="mr-1.5 size-3.5" />
-          Import media
+          {l('Import media')}
         </Button>
         <Button size="sm" variant="outline" className="h-8 px-3 text-xs" data-nc-empty-media-demo onClick={onTryDemo}>
           <Sparkles className="mr-1.5 size-3.5" />
-          Try demo project
+          {l('Try demo project')}
         </Button>
       </div>
     </div>
@@ -295,6 +315,7 @@ function QuickStartChecklist() {
 /* ---------------- panel ---------------- */
 
 export function MediaPanel() {
+  const l = useLabel()
   const media = useEditor((s) => s.media)
   const importing = useEditor((s) => s.importing)
   const setImporting = useEditor((s) => s.setImporting)
@@ -382,6 +403,7 @@ export function MediaPanel() {
           multiple
           accept="video/*,image/*,audio/*,.cube"
           className="hidden"
+          aria-label={l('Import media')}
           onChange={(e) => {
             const files = Array.from(e.target.files ?? [])
             e.target.value = ''
@@ -390,7 +412,7 @@ export function MediaPanel() {
         />
         <UploadCloud className="mx-auto size-7 text-fuchsia-300" />
         <p className="mt-1.5 text-sm font-medium">
-          {dragOver && !importing ? 'Drop files to import' : 'Import media'}
+          {dragOver && !importing ? l('Drop files to import') : l('Import media')}
         </p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">MP4 · WebM · JPG · PNG · MP3 · WAV</p>
 
@@ -405,9 +427,9 @@ export function MediaPanel() {
         )}
       </div>
 
-      {/* ------- assets grid ------- */}
+      {/* ------- assets grid — UX60 Phase 6: arrow-key roving ------- */}
       {media.length > 0 ? (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2" onKeyDown={rovingGridKeydown} data-nc-media-grid>
           {media.map((asset) => (
             <AssetCard key={asset.id} asset={asset} onAdd={addToTimeline} onDelete={handleDelete} />
           ))}

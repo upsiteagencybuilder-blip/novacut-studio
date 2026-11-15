@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import { useLabel } from '@/lib/i18n/labels'
 import { averageCentroids, gridEnergyCentroid, subjectCropRect } from '@/lib/editor/reframe'
 import {
   Activity,
@@ -483,11 +484,12 @@ function Section({
   children: ReactNode
 }) {
   const ref = usePropsSectionFocus(sectionId)
+  const l = useLabel()
   return (
     <section ref={ref} data-nc-section="flat" className="space-y-3 rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
       <div className="flex items-center gap-1.5">
         <Icon className="h-[13px] w-[13px] text-muted-foreground" />
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{l(title)}</h3>
         {onReset && (
           <button
             type="button"
@@ -1104,13 +1106,14 @@ function CollapsibleSection({
   children: ReactNode
 }) {
   const ref = usePropsSectionFocus(sectionId, () => onOpenChange(true))
+  const l = useLabel()
   return (
     <Collapsible open={open} onOpenChange={onOpenChange}>
       <section ref={ref} data-nc-section="collapsible" className="rounded-xl border border-(--nc-line) bg-(--nc-panel-soft)">
         <div className="flex items-center gap-1.5 px-3 py-2.5" data-nc-section-head>
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
             <Icon className="h-[13px] w-[13px] shrink-0 text-muted-foreground" />
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{l(title)}</h3>
             <ChevronDown
               className={cn(
                 'ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
@@ -4054,6 +4057,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
             <Switch
               checked={clip.muted}
               onCheckedChange={(on) => updateClip(clip.id, { muted: on }, true)}
+              aria-label="Mute — silence this clip"
             />
           </div>
 
@@ -4160,6 +4164,7 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
                 <Switch
                   checked={clip.autoDuck ?? false}
                   onCheckedChange={(on) => updateClip(clip.id, { autoDuck: on }, true)}
+                  aria-label="Auto-duck under video audio"
                 />
               </div>
               <p className="text-[10px] leading-snug text-muted-foreground/75">

@@ -5,6 +5,7 @@
  * Mounted once in the TopBar.
  */
 import { useEffect, useReducer, useState } from 'react'
+import { useLabel } from '@/lib/i18n/labels'
 import { toast } from 'sonner'
 import { ArrowDownToLine, Database, Loader2, RefreshCw, Share, SquarePlus, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -103,6 +104,7 @@ export function PWAUpdateToast() {
 /* ---------------- install button (direct native install) ---------------- */
 
 export function InstallApp() {
+  const l = useLabel()
   const { iosGuide, installed, install } = usePWAInstall()
   const [guideOpen, setGuideOpen] = useState(false)
   const [pending, setPending] = useState(false)
@@ -133,8 +135,8 @@ export function InstallApp() {
         variant="ghost"
         size="icon"
         className="h-8 w-8 text-muted-foreground hover:text-foreground"
-        title="Install NovaCut as an app"
-        aria-label="Install NovaCut as an app"
+        title={l('Install NovaCut as an app')}
+        aria-label={l('Install NovaCut as an app')}
         disabled={pending}
         onClick={() => void handleClick()}
       >

@@ -37,6 +37,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEditor } from '@/lib/editor/store'
+import { announce } from '@/lib/editor/announce'
 import {
   cancelExport,
   exportProjectAudio,
@@ -394,6 +395,8 @@ export function ExportDialog() {
         sizeBytes: result.blob.size,
         durationMs: result.durationMs,
       })
+      // UX60 Phase 6 (Days 44–45) — live-region: export ends off-focus
+      announce('Export finished — the download is ready in the export dialog')
       // UX60 Day 7-8 — the checklist's "exported once" step flips here
       useEditor.getState().markExported()
       // Day 54 — honest disclosure when the audio engine could not start

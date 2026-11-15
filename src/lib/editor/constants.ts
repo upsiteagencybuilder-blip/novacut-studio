@@ -471,6 +471,11 @@ export const SHORTCUTS: { keys: string; action: string }[] = [
   { keys: 'Ctrl + Shift + Z / Ctrl + Y', action: 'Redo' },
   { keys: '+ / - / Shift + Z', action: 'Zoom timeline in / out / fit' },
   { keys: 'Ctrl + E', action: 'Open export dialog' },
+  /* UX60 Phase 6 (Days 41–43) — the panel keyboard map */
+  { keys: 'Alt + 1…9', action: 'Panel navigation — jump to Media, Text, Stickers, Effects, Audio, AI, Pro' },
+  { keys: '↑ ↓ ← → (in a panel)', action: 'Move focus across the panel grid — Enter opens / applies the item' },
+  { keys: '↑ ↓ (on the tool rail)', action: 'Move between panel tabs (Home / End = first / last)' },
+  { keys: 'Tab / Shift + Tab', action: 'Next / previous control — every control in the editor is keyboard-reachable, focus always visible' },
 ]
 
 /* ---------------- Blend / easing / pro color ---------------- */

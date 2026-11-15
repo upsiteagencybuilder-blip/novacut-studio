@@ -31,6 +31,7 @@ import { ContextToolbar } from './ContextToolbar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
+import { useLabel } from '@/lib/i18n/labels'
 
 type DragState =
   | { mode: 'move'; startX: number; startY: number; origX: number; origY: number }
@@ -48,6 +49,7 @@ const timeVisible = (start: number, duration: number, t: number): boolean =>
   t >= start - 1e-6 && t < start + duration - 1e-6
 
 export function PreviewPane() {
+  const l = useLabel()
   const project = useEditor((s) => s.project)
   const currentTime = useEditor((s) => s.currentTime)
   const isPlaying = useEditor((s) => s.isPlaying)
@@ -467,7 +469,7 @@ export function PreviewPane() {
             style={{ width: fit.w || undefined, height: fit.h || undefined }}
             onDoubleClick={handleStageDoubleClick}
           >
-            <canvas ref={canvasRef} role="img" aria-label="Program preview — live composite of the timeline at the playhead" className="block h-full w-full" />
+            <canvas ref={canvasRef} role="img" aria-label={l('Program preview — live composite of the timeline at the playhead')} className="block h-full w-full" />
 
             {/* ---- monitor overlays (guides & grids suite) — purely visual, never intercepts input ---- */}
             {monitorSafe && (
@@ -654,7 +656,7 @@ export function PreviewPane() {
               {!previewAuto && (
                 <button
                   type="button"
-                  aria-label="Restore full preview resolution and auto-scaling"
+                  aria-label={l('Restore full preview resolution and auto-scaling')}
                   onClick={resetAutoScale}
                   className="ml-0.5 text-amber-300 hover:text-amber-200"
                 >
@@ -745,7 +747,7 @@ export function PreviewPane() {
               <div
                 data-nc-compare-handle
                 role="slider"
-                aria-label="Compare split position"
+                aria-label={l('Compare split position')}
                 aria-valuemin={2}
                 aria-valuemax={98}
                 aria-valuenow={Math.round(split * 100)}
@@ -776,9 +778,9 @@ export function PreviewPane() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          className="max-sm:h-11 max-sm:w-11 h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Go to start (Home)"
-          aria-label="Go to start"
+          aria-label={l('Go to start')}
           onClick={() => setCurrentTime(0)}
         >
           <SkipBack className="h-4 w-4" />
@@ -786,9 +788,9 @@ export function PreviewPane() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          className="max-sm:h-11 max-sm:w-11 h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Previous frame (←)"
-          aria-label="Previous frame"
+          aria-label={l('Previous frame')}
           onClick={() => frameStep(-1)}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -796,9 +798,9 @@ export function PreviewPane() {
         <Button
           variant="ghost"
           size="icon"
-          className="nc-gradient nc-glow h-10 w-10 rounded-full text-white hover:opacity-90"
-          title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
+          className="nc-gradient nc-glow max-sm:h-11 max-sm:w-11 h-10 w-10 rounded-full text-white hover:opacity-90"
+          title={isPlaying ? l('Pause (Space)') : l('Play (Space)')}
+          aria-label={isPlaying ? l('Pause') : l('Play')}
           onClick={togglePlay}
         >
           {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
@@ -806,9 +808,9 @@ export function PreviewPane() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          className="max-sm:h-11 max-sm:w-11 h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Next frame (→)"
-          aria-label="Next frame"
+          aria-label={l('Next frame')}
           onClick={() => frameStep(1)}
         >
           <ChevronRight className="h-4 w-4" />
@@ -816,9 +818,9 @@ export function PreviewPane() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          className="max-sm:h-11 max-sm:w-11 h-8 w-8 text-muted-foreground hover:text-foreground"
           title="Go to end (End)"
-          aria-label="Go to end"
+          aria-label={l('Go to end')}
           onClick={() => setCurrentTime(projectDuration(project))}
         >
           <SkipForward className="h-4 w-4" />
@@ -841,7 +843,7 @@ export function PreviewPane() {
                 size="icon"
                 className={`h-8 w-8 ${anyMonitorOn ? 'bg-cyan-500/20 text-cyan-300' : 'text-muted-foreground hover:text-foreground'}`}
                 title="Monitor overlays: safe margins, thirds, rulers, zebra, false color, guides"
-                aria-label="Monitor overlays menu"
+                aria-label={l('Monitor overlays menu')}
                 data-nc-monitor-toggle
               >
                 <Grid3x3 className="h-4 w-4" />
@@ -889,7 +891,7 @@ export function PreviewPane() {
                     step={1}
                     value={[Math.round(zebraThreshold * 100)]}
                     onValueChange={(v) => setZebraThreshold((v[0] ?? 100) / 100)}
-                    aria-label="Zebra threshold"
+                    aria-label={l('Zebra threshold')}
                   />
                 </div>
               )}
@@ -934,8 +936,8 @@ export function PreviewPane() {
               variant="ghost"
               size="icon"
               className={`h-8 w-8 ${compare ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'text-muted-foreground hover:text-foreground'}`}
-              title={compare ? 'Exit compare split' : 'Compare split: original ⇔ graded'}
-              aria-label={compare ? 'Exit compare split' : 'Compare split view'}
+              title={compare ? l('Exit compare split') : l('Compare split: original ⇔ graded')}
+              aria-label={compare ? l('Exit compare split') : l('Compare split view')}
               aria-pressed={compare}
               data-nc-compare-toggle
               onClick={toggleCompare}
@@ -947,8 +949,8 @@ export function PreviewPane() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            title={volumeMuted ? 'Unmute' : 'Mute'}
-            aria-label={volumeMuted ? 'Unmute master volume' : 'Mute master volume'}
+            title={volumeMuted ? l('Unmute') : l('Mute')}
+            aria-label={volumeMuted ? l('Unmute master volume') : l('Mute master volume')}
             onClick={toggleMasterMuted}
           >
             {volumeMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
@@ -958,7 +960,7 @@ export function PreviewPane() {
           <div
             data-nc-audio-meter
             role="img"
-            aria-label="Master audio meter — 4× oversampled true peak, RMS level, falling peak hold and clip lamp"
+            aria-label={l('Master audio meter — 4× oversampled true peak, RMS level, falling peak hold and clip lamp')}
             title="Master meter: white tick = 4× oversampled true peak, bar = RMS, amber = falling peak hold, red lamp = clip"
             className={`relative h-6 w-3 shrink-0 max-sm:hidden ${meterPulse ? 'rounded-sm ring-2 ring-amber-300' : ''}`}
           >
@@ -985,7 +987,7 @@ export function PreviewPane() {
             step={0.01}
             value={[masterMuted ? 0 : masterVolume]}
             onValueChange={(v) => setMasterVolume(v[0] ?? 0)}
-            aria-label="Master volume"
+            aria-label={l('Master volume')}
           />
 
           <Select
@@ -1012,7 +1014,7 @@ export function PreviewPane() {
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-foreground"
             title="Fullscreen"
-            aria-label="Toggle fullscreen preview"
+            aria-label={l('Toggle fullscreen preview')}
             onClick={toggleFullscreen}
           >
             <Maximize className="h-4 w-4" />
