@@ -251,6 +251,29 @@ function useToolAction() {
         useEditor.getState().setPanelDensity(next)
         toast.success(`Panel density: ${next} — persisted per device`)
       },
+      /* ---- UX60 Phase 5 — forgiveness & error-proofing ---- */
+      'confirm-clear-markers': () => {
+        const st = useEditor.getState()
+        const n = (st.project.markers ?? []).length
+        if (!n) {
+          toast('No markers on the timeline yet — add one with Shift+M, then this guard shows its impact preview')
+          return
+        }
+        // routes through the real impact-preview confirm dialog (undoable)
+        st.clearMarkers()
+        toast('Destructive-action guard — confirm or keep everything')
+      },
+      'pulse-recovery': () => {
+        const st = useEditor.getState()
+        st.showRecoveryBanner({ savedAt: st.project.updatedAt, preview: true })
+        toast('Draft-recovery preview — after an unexpected exit this banner appears automatically')
+      },
+      'pulse-empty-ctas': () => {
+        setPanelTab('media')
+        // pulse AFTER the media tab mounts its empty state
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent('nc-pulse-empty-ctas')), 200)
+        toast('Every empty surface ships its next-best action — the Media panel shows two when empty')
+      },
     }
     return map
   }, [setPanelTab, setAiSubTab, openDialog])

@@ -187,9 +187,14 @@ export function TextPanel() {
             )
           })}
           {visiblePresets.length === 0 && (
-            <p className="col-span-2 py-6 text-center text-[11px] text-muted-foreground">
-              {filter === 'favorites' ? 'No starred presets yet — tap the ☆ on a title card.' : 'Nothing used yet.'}
-            </p>
+            <div className="col-span-2 flex flex-col items-center gap-2 py-6 text-center" data-nc-empty-text>
+              <p className="text-[11px] text-muted-foreground">
+                {filter === 'favorites' ? 'No starred presets yet — tap the ☆ on a title card.' : 'Nothing used yet.'}
+              </p>
+              <Button size="sm" variant="outline" className="h-7 px-2.5 text-[10px]" data-nc-empty-text-cta onClick={() => setFilter('all')}>
+                Browse all titles
+              </Button>
+            </div>
           )}
         </div>
       </section>

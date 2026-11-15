@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button'
 import { useEditor } from '@/lib/editor/store'
 import { HISTORY_LIMIT } from '@/lib/editor/store'
+import type { HistoryMeta } from '@/lib/editor/store'
 
 /** human label for a history key (keys are kebab ids used across the app) */
 function prettyLabel(key: string): string {
@@ -62,6 +63,20 @@ function prettyLabel(key: string): string {
     .join(' ')
 }
 
+/** UX60 Days 33-34 — what the timeline looks like at the state this entry returns to */
+function CountsChips({ counts }: { counts?: HistoryMeta['counts'] }) {
+  if (!counts) return null
+  const bits: string[] = [`${counts.clips} clip${counts.clips === 1 ? '' : 's'}`]
+  if (counts.text > 0) bits.push(`${counts.text} text`)
+  if (counts.markers > 0) bits.push(`${counts.markers} marker${counts.markers === 1 ? '' : 's'}`)
+  bits.push(`${counts.tracks} track${counts.tracks === 1 ? '' : 's'}`)
+  return (
+    <span className="shrink-0 rounded bg-(--nc-panel-strong) px-1 py-px text-[9px] whitespace-nowrap text-muted-foreground" data-nc-history-counts>
+      {bits.join(' · ')}
+    </span>
+  )
+}
+
 function relTime(at: number): string {
   const s = Math.max(0, Math.round((Date.now() - at) / 1000))
   if (s < 5) return 'just now'
@@ -96,6 +111,17 @@ export function HistoryPanelDialog() {
     toast(`Re-applied ${steps} step${steps === 1 ? '' : 's'}`)
   }
 
+  // UX60 Days 33-34 — keyboard navigation: ↑/↓ move through entries, Enter jumps
+  const onListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault()
+    const items = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[data-nc-history-entry]') ?? [])
+    if (!items.length) return
+    const idx = items.indexOf(document.activeElement as HTMLButtonElement)
+    const next = e.key === 'ArrowDown' ? Math.min(items.length - 1, idx + 1) : Math.max(0, idx - 1)
+    items[next]?.focus()
+  }
+
   if (!open) return null
 
   return (
@@ -107,11 +133,11 @@ export function HistoryPanelDialog() {
             Edit history
           </DialogTitle>
           <DialogDescription className="text-[11px]">
-            {past.length} undoable · {future.length} re-doable · depth {HISTORY_LIMIT} steps. Click any entry to jump there.
+            {past.length} undoable · {future.length} re-doable · depth {HISTORY_LIMIT} steps. Click any entry to jump, ↑↓ to browse.
           </DialogDescription>
         </DialogHeader>
 
-        <div ref={listRef} className="max-h-[60vh] space-y-1 overflow-y-auto px-3 py-3" data-nc-history-list>
+        <div ref={listRef} onKeyDown={onListKeyDown} className="max-h-[60vh] space-y-1 overflow-y-auto px-3 py-3" data-nc-history-list>
           {/* redo stack — re-appliable future */}
           {future.length > 0 && (
             <p className="flex items-center gap-1.5 px-1 pb-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -122,11 +148,13 @@ export function HistoryPanelDialog() {
             <button
               key={`f-${h.at}-${h.steps}`}
               type="button"
+              data-nc-history-entry
               onClick={() => jumpForward(h.steps)}
               className="flex w-full items-center gap-2 rounded-lg border border-dashed border-(--nc-line) px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition hover:border-amber-400/40 hover:bg-amber-400/5 hover:text-foreground"
             >
               <CornerDownRight className="h-3 w-3 shrink-0 opacity-50" />
               <span className="min-w-0 flex-1 truncate">{prettyLabel(h.label)}</span>
+              <CountsChips counts={h.counts} />
               <span className="shrink-0 text-[9px] opacity-60">+{h.steps}</span>
             </button>
           ))}
@@ -155,6 +183,7 @@ export function HistoryPanelDialog() {
               className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] text-foreground/80 transition hover:bg-(--nc-panel-strong) hover:text-foreground"
             >
               <span className="min-w-0 flex-1 truncate">{prettyLabel(h.label)}</span>
+              <CountsChips counts={h.counts} />
               <span className="shrink-0 text-[9px] text-muted-foreground/75">{relTime(h.at)}</span>
               <span className="shrink-0 rounded bg-(--nc-panel-strong) px-1 text-[9px] text-muted-foreground">−{h.steps}</span>
             </button>

@@ -74,6 +74,32 @@ export type ClipPatch = Partial<Omit<Clip, 'transform' | 'filters' | 'textStyle'
   colorGrade?: Partial<ColorGrade>
 }
 
+/** UX60 Phase 5 (Days 33-34) — one labeled history entry. `counts` summarizes
+ * the state this entry returns to (the snapshot it points at), so the History
+ * panel shows WHAT changed, not just a label. */
+export interface HistoryMeta {
+  label: string
+  at: number
+  counts?: { clips: number; tracks: number; text: number; markers: number }
+}
+
+/** UX60 Phase 5 (Days 35-36) — a destructive action waiting for the user's OK.
+ * `lines` are the honest impact preview; `onConfirm` runs only after a real tap. */
+export interface PendingConfirm {
+  title: string
+  lines: string[]
+  confirmLabel: string
+  onConfirm: () => void
+}
+
+/** UX60 Phase 5 (Days 37-38) — draft-recovery banner model. `savedAt` is the
+ * restored project's real autosave timestamp; `preview` marks the Pro-wall
+ * deep-link preview (honest — it says so inside the banner). */
+export interface RecoveryBannerState {
+  savedAt: number
+  preview?: boolean
+}
+
 interface EditorStore {
   /* ---------- state ---------- */
   ready: boolean
@@ -99,6 +125,12 @@ interface EditorStore {
   activeDialog: DialogName
   exportState: ExportState
   autosave: 'idle' | 'saving' | 'saved' | 'error'
+  /** UX60 Phase 5 (Days 37-38) — when the last successful local autosave landed (null = never) */
+  lastSavedAt: number | null
+  /** UX60 Phase 5 (Days 37-38) — visible "draft restored" banner (null = hidden) */
+  recoveryBanner: RecoveryBannerState | null
+  /** UX60 Phase 5 (Days 35-36) — destructive action awaiting the impact-preview confirm dialog */
+  pendingConfirm: PendingConfirm | null
   past: Project[]
   future: Project[]
   importing: boolean
@@ -200,7 +232,12 @@ interface EditorStore {
   /** detach a video clip's soundtrack into an editable audio clip on the audio track ('no-video' = no target, 'no-audio' = silent source) */
   extractAudioFromVideo: () => Promise<'ok' | 'no-video' | 'no-audio' | 'failed'>
   deleteClip: (id: string) => void
-  deleteSelected: () => void
+  /** UX60 Phase 5 — multi-delete (≥2 clips) asks first with an impact preview;
+   * automation paths pass { skipConfirm: true }. Single deletes stay instant
+   * with an Undo toast. */
+  deleteSelected: (opts?: { skipConfirm?: boolean; silent?: boolean }) => void
+  /** UX60 Phase 5 — the raw deletion shared by the confirm dialog + automation (no dialog, no toast) */
+  deleteSelectedNow: (ids: string[]) => void
   rippleDeleteSelected: () => void
   duplicateClip: (id: string) => void
   duplicateSelected: () => void
@@ -286,6 +323,16 @@ interface EditorStore {
   /** solo a track — other tracks are silenced during playback (solo again to unsolo) */
   setTrackSolo: (id: string, solo: boolean) => void
 
+  /* ---------- forgiveness (UX60 Phase 5) ---------- */
+  /** Days 35-36 — open the impact-preview confirm dialog for a destructive action */
+  requestConfirm: (c: PendingConfirm) => void
+  /** Days 35-36 — close the dialog; `ok` runs the pending action */
+  resolveConfirm: (ok: boolean) => void
+  /** Days 37-38 — show the draft-recovery banner (unclean exit or deep-link preview) */
+  showRecoveryBanner: (banner: RecoveryBannerState) => void
+  /** Days 37-38 — one-tap dismiss */
+  dismissRecoveryBanner: () => void
+
   /* ---------- versions ---------- */
   versions: VersionSnapshot[]
   versionsLoaded: boolean
@@ -365,10 +412,10 @@ interface EditorStore {
 
   /* ---------- history ---------- */
   pushHistory: (key?: string) => void
-  /** Day 65 — human-readable labels for the past stack (parallel to `past`) */
-  historyPast: { label: string; at: number }[]
-  /** Day 65 — labels for the redo stack (parallel to `future`) */
-  historyFuture: { label: string; at: number }[]
+  /** Day 65 — human-readable labels + Phase-5 state counts for the past stack (parallel to `past`) */
+  historyPast: HistoryMeta[]
+  /** Day 65 — labels + counts for the redo stack (parallel to `future`) */
+  historyFuture: HistoryMeta[]
   /** Day 65 — undo N steps at once (History panel jump-back) */
   undoSteps: (n: number) => void
   /** Day 65 — redo N steps at once (History panel jump-forward) */
@@ -403,6 +450,23 @@ function surfaceStorageError(err: unknown) {
     storageWarned = true
     toast.error('Local storage is FULL — saving stopped. Free space in Projects → Storage.', { duration: 10000 })
   }
+}
+
+/** UX60 Phase 5 (Days 33-34) — compact state fingerprint for a history entry:
+ * what the timeline looks like at the state this entry returns to. */
+function summarizeProject(p: Project) {
+  return {
+    clips: p.clips.length,
+    tracks: p.tracks.length,
+    text: p.clips.filter((c) => c.kind === 'text').length,
+    markers: (p.markers ?? []).length,
+  }
+}
+
+/** human duration for impact lines: 12.5s · 1m 5s */
+function secLabel(s: number): string {
+  if (s < 60) return `${round2(s)}s`
+  return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`
 }
 /** internal copy/cut clipboard — session scope, deep-cloned clips */
 let clipboardClips: Clip[] = []
@@ -569,6 +633,9 @@ export const useEditor = create<EditorStore>((set, get) => ({
   activeDialog: null,
   exportState: { phase: 'idle', progress: 0 },
   autosave: 'idle',
+  lastSavedAt: null,
+  recoveryBanner: null,
+  pendingConfirm: null,
   past: [],
   historyPast: [],
   future: [],
@@ -664,7 +731,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
             try {
               await db.saveProject(get().project)
               await db.setKV('lastProjectId', get().project.id)
-              set({ autosave: 'saved' })
+              // UX60 Phase 5 — the Saved chip ticks with real relative time
+              set({ autosave: 'saved', lastSavedAt: Date.now() })
             } catch (err) {
               set({ autosave: 'error' })
               surfaceStorageError(err)
@@ -820,20 +888,53 @@ export const useEditor = create<EditorStore>((set, get) => ({
   removeMediaAsset: async (id) => {
     const s = get()
     const asset = s.media.find((m) => m.id === id)
-    if (asset) URL.revokeObjectURL(asset.objectUrl)
-    get().pushHistory()
-    set((st) => ({
-      media: st.media.filter((m) => m.id !== id),
-      mediaVersion: st.mediaVersion + 1,
-      project: withUpdatedAt({ ...st.project, clips: st.project.clips.filter((c) => c.mediaId !== id) }),
-      selectedClipIds: st.selectedClipIds.filter((cid) => !st.project.clips.some((c) => c.id === cid && c.mediaId === id)),
-    }))
-    // a deleted LUT asset must not serve stale pixels from the engine cache
-    if (asset?.kind === 'lut') {
-      const { getEngine } = await import('./engine')
-      getEngine().invalidateLutCache(id)
+    if (!asset) return
+    // UX60 Phase 5 (Days 35-36) — honest impact preview when the asset is in use:
+    // removing it also deletes every timeline clip that references it.
+    const usedBy = s.project.clips.filter((c) => c.mediaId === id)
+    const doRemove = async () => {
+      URL.revokeObjectURL(asset.objectUrl)
+      get().pushHistory()
+      set((st) => ({
+        media: st.media.filter((m) => m.id !== id),
+        mediaVersion: st.mediaVersion + 1,
+        project: withUpdatedAt({ ...st.project, clips: st.project.clips.filter((c) => c.mediaId !== id) }),
+        selectedClipIds: st.selectedClipIds.filter((cid) => !st.project.clips.some((c) => c.id === cid && c.mediaId === id)),
+      }))
+      // a deleted LUT asset must not serve stale pixels from the engine cache
+      if (asset.kind === 'lut') {
+        const { getEngine } = await import('./engine')
+        getEngine().invalidateLutCache(id)
+      }
+      await db.deleteAsset(id).catch(() => undefined)
+      toast.success(
+        usedBy.length
+          ? `Removed “${asset.name}” + ${usedBy.length} clip${usedBy.length === 1 ? '' : 's'}`
+          : `Removed “${asset.name}”`,
+        {
+          description: usedBy.length ? 'Undo restores the clips — the file itself is gone from the library' : undefined,
+          action: { label: 'Undo', onClick: () => get().undo() },
+          duration: 5000,
+        }
+      )
     }
-    await db.deleteAsset(id).catch(() => undefined)
+    if (usedBy.length) {
+      s.requestConfirm({
+        title: `Remove “${asset.name}” from the library?`,
+        lines: [
+          usedBy.length === 1
+            ? '1 timeline clip uses this file and is deleted with it'
+            : `${usedBy.length} timeline clips use this file and are deleted with it`,
+          'One undo restores the clips — but the file is gone from the library until re-imported',
+        ],
+        confirmLabel: `Remove asset + ${usedBy.length} clip${usedBy.length === 1 ? '' : 's'}`,
+        onConfirm: () => {
+          void doRemove()
+        },
+      })
+      return
+    }
+    await doRemove()
   },
 
   getMediaMap: () => {
@@ -1671,19 +1772,56 @@ export const useEditor = create<EditorStore>((set, get) => ({
       project: withUpdatedAt({ ...st.project, clips: st.project.clips.filter((c) => c.id !== id) }),
       selectedClipIds: s.selectedClipIds.filter((cid) => cid !== id),
     }))
+    // UX60 Phase 5 — single delete stays instant, but forgiveness is visible:
+    // the toast carries a working Undo button.
+    toast('Clip deleted', {
+      action: { label: 'Undo', onClick: () => get().undo() },
+      duration: 4000,
+    })
   },
 
-  deleteSelected: () => {
-    const s = get()
-    if (!s.selectedClipIds.length) return
-    s.pushHistory()
+  /** UX60 Phase 5 (Days 35-36) — the real deletion, shared by the confirm dialog
+   * and skipConfirm automation paths. */
+  deleteSelectedNow: (ids) => {
+    get().pushHistory()
     set((st) => ({
       project: withUpdatedAt({
         ...st.project,
-        clips: st.project.clips.filter((c) => !st.selectedClipIds.includes(c.id) && !(c.kind === 'nested' && c.nested?.open)),
+        clips: st.project.clips.filter((c) => !ids.includes(c.id) && !(c.kind === 'nested' && c.nested?.open)),
       }),
       selectedClipIds: [],
     }))
+  },
+
+  deleteSelected: (opts) => {
+    const s = get()
+    const ids = s.selectedClipIds
+    if (!ids.length) return
+    // ≥2 clips = a batch a user may regret → honest impact preview first.
+    // Automation (copilot / NL commands / cut) passes skipConfirm.
+    if (!opts?.skipConfirm && ids.length >= 2) {
+      const clips = s.project.clips.filter((c) => ids.includes(c.id))
+      const audioN = clips.filter((c) => c.kind === 'audio' || c.kind === 'video').length
+      const totalDur = clips.reduce((a, c) => a + c.duration, 0)
+      s.requestConfirm({
+        title: `Delete ${ids.length} clips?`,
+        lines: [
+          `${ids.length} clips (${secLabel(totalDur)} of timeline) will be removed`,
+          audioN > 0 ? `${audioN} carry audio — their sound goes with them` : 'No audio is affected',
+          'One undo (Ctrl+Z) brings every clip back',
+        ],
+        confirmLabel: `Delete ${ids.length} clips`,
+        onConfirm: () => get().deleteSelectedNow(ids),
+      })
+      return
+    }
+    s.deleteSelectedNow(ids)
+    if (!opts?.silent) {
+      toast(ids.length === 1 ? 'Clip deleted' : `${ids.length} clips deleted`, {
+        action: { label: 'Undo', onClick: () => get().undoSteps(ids.length) },
+        duration: 4000,
+      })
+    }
   },
 
   rippleDeleteSelected: () => {
@@ -2120,7 +2258,8 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const s = get()
     if (!s.selectedClipIds.length) return
     s.copySelected()
-    s.deleteSelected()
+    // cut is a copy+delete pipeline — no confirm, no toast (clipboard is the feedback)
+    s.deleteSelected({ skipConfirm: true, silent: true })
   },
 
   pasteAtPlayhead: () => {
@@ -2206,9 +2345,19 @@ export const useEditor = create<EditorStore>((set, get) => ({
   },
 
   clearMarkers: () => {
-    if (!(get().project.markers ?? []).length) return
-    get().pushHistory('marker-clear')
-    set((st) => ({ project: withUpdatedAt({ ...st.project, markers: [] }) }))
+    const s = get()
+    const n = (s.project.markers ?? []).length
+    if (!n) return
+    // UX60 Phase 5 (Days 35-36) — clearing every marker is destructive → impact preview
+    s.requestConfirm({
+      title: `Clear all ${n} markers?`,
+      lines: [`${n} marker${n === 1 ? '' : 's'} removed from the timeline`, 'One undo (Ctrl+Z) restores them'],
+      confirmLabel: `Clear ${n} markers`,
+      onConfirm: () => {
+        get().pushHistory('marker-clear')
+        set((st) => ({ project: withUpdatedAt({ ...st.project, markers: [] }) }))
+      },
+    })
   },
 
   jumpMarker: (dir) => {
@@ -2421,15 +2570,29 @@ export const useEditor = create<EditorStore>((set, get) => ({
     const s = get()
     const track = s.project.tracks.find((t) => t.id === id)
     if (!track || s.project.tracks.length <= 1) return
-    s.pushHistory()
-    set((st) => ({
-      project: withUpdatedAt({
-        ...st.project,
-        tracks: st.project.tracks.filter((t) => t.id !== id),
-        clips: st.project.clips.filter((c) => c.trackId !== id),
-      }),
-      selectedClipIds: [],
-    }))
+    const clipCount = s.project.clips.filter((c) => c.trackId === id).length
+    const doIt = () => {
+      get().pushHistory()
+      set((st) => ({
+        project: withUpdatedAt({
+          ...st.project,
+          tracks: st.project.tracks.filter((t) => t.id !== id),
+          clips: st.project.clips.filter((c) => c.trackId !== id),
+        }),
+        selectedClipIds: [],
+      }))
+    }
+    // UX60 Phase 5 (Days 35-36) — a track with content warns before removing it
+    if (clipCount > 0) {
+      s.requestConfirm({
+        title: `Delete “${track.name}”?`,
+        lines: [`${clipCount} clip${clipCount === 1 ? '' : 's'} on this track are deleted too`, 'One undo restores the track and every clip'],
+        confirmLabel: `Delete track + ${clipCount} clips`,
+        onConfirm: doIt,
+      })
+      return
+    }
+    doIt()
   },
 
   setTrackVolume: (id, volume, history) => {
@@ -2622,6 +2785,27 @@ export const useEditor = create<EditorStore>((set, get) => ({
   setAiSubTab: (tab) => set({ aiSubTab: tab }),
   openDialog: (d) => set({ activeDialog: d }),
 
+  /* ================= forgiveness (UX60 Phase 5) ================= */
+
+  requestConfirm: (c) => set({ pendingConfirm: c }),
+
+  resolveConfirm: (ok) => {
+    const pending = get().pendingConfirm
+    if (!pending) return
+    set({ pendingConfirm: null })
+    if (ok) {
+      try {
+        pending.onConfirm()
+      } catch (err) {
+        console.error('confirmed action failed', err)
+      }
+    }
+  },
+
+  showRecoveryBanner: (banner) => set({ recoveryBanner: banner }),
+
+  dismissRecoveryBanner: () => set({ recoveryBanner: null }),
+
   /* ================= export ================= */
 
   setExportState: (patch) => set((s) => ({ exportState: { ...s.exportState, ...patch } })),
@@ -2666,7 +2850,7 @@ export const useEditor = create<EditorStore>((set, get) => ({
     }
     set((st) => ({
       past: [...st.past.slice(-HISTORY_LIMIT + 1), cloneProject(st.project)],
-      historyPast: [...st.historyPast.slice(-HISTORY_LIMIT + 1), { label, at: Date.now() }],
+      historyPast: [...st.historyPast.slice(-HISTORY_LIMIT + 1), { label, at: Date.now(), counts: summarizeProject(st.project) }],
       future: [],
       historyFuture: [],
     }))
@@ -2680,8 +2864,13 @@ export const useEditor = create<EditorStore>((set, get) => ({
       past: st.past.slice(0, -1),
       historyPast: st.historyPast.slice(0, -1),
       future: [cloneProject(st.project), ...st.future.slice(0, HISTORY_LIMIT - 1)],
-      historyFuture: [{ label: st.historyPast[st.historyPast.length - 1]?.label ?? 'edit', at: Date.now() }, ...st.historyFuture.slice(0, HISTORY_LIMIT - 1)],
-      project: prev,
+      historyFuture: [
+        { label: st.historyPast[st.historyPast.length - 1]?.label ?? 'edit', at: Date.now(), counts: summarizeProject(st.project) },
+        ...st.historyFuture.slice(0, HISTORY_LIMIT - 1),
+      ],
+      // undo IS a modification — bump updatedAt so both local autosave and the
+      // cloud engine (updatedAt-diffed) register the reverted state
+      project: withUpdatedAt(prev),
       selectedClipIds: st.selectedClipIds.filter((id) => prev.clips.some((c) => c.id === id)),
     }))
   },
@@ -2694,8 +2883,11 @@ export const useEditor = create<EditorStore>((set, get) => ({
       future: st.future.slice(1),
       historyFuture: st.historyFuture.slice(1),
       past: [...st.past.slice(-HISTORY_LIMIT + 1), cloneProject(st.project)],
-      historyPast: [...st.historyPast.slice(-HISTORY_LIMIT + 1), { label: st.historyFuture[0]?.label ?? 'edit', at: Date.now() }],
-      project: next,
+      historyPast: [
+        ...st.historyPast.slice(-HISTORY_LIMIT + 1),
+        { label: st.historyFuture[0]?.label ?? 'edit', at: Date.now(), counts: summarizeProject(st.project) },
+      ],
+      project: withUpdatedAt(next),
       selectedClipIds: st.selectedClipIds.filter((id) => next.clips.some((c) => c.id === id)),
     }))
   },

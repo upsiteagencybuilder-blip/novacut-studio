@@ -479,7 +479,8 @@ function applyDeleteSelected(st: StoreState, r: CopilotReceipt): void {
     r.skipped.push('Delete: nothing selected')
     return
   }
-  st.deleteSelected()
+  // automation path — skips the multi-delete confirm dialog (receipt reports it)
+  st.deleteSelected({ skipConfirm: true, silent: true })
   r.applied.push(`${n} clip${n === 1 ? '' : 's'} deleted`)
 }
 

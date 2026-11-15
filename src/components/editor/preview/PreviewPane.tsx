@@ -695,11 +695,48 @@ export function PreviewPane() {
 
             {!hasVisual && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <span className="rounded-full bg-(--nc-scrim) px-3 py-1 text-xs text-muted-foreground backdrop-blur-sm">
-                  {visualClipCount === 0
-                    ? 'Add media to start'
-                    : 'Nothing at the playhead — drag it over a clip'}
-                </span>
+                {visualClipCount === 0 ? (
+                  /* UX60 Days 39-40 — the empty stage ships its next-best action */
+                  <div
+                    className="pointer-events-auto flex flex-col items-center gap-2 rounded-xl bg-(--nc-scrim) px-4 py-3 backdrop-blur-sm"
+                    data-nc-empty-stage
+                  >
+                    <span className="text-xs text-muted-foreground">Add media to start</span>
+                    <button
+                      type="button"
+                      data-nc-empty-stage-cta
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        useEditor.getState().setPanelTab('media')
+                      }}
+                      className="rounded-lg border border-(--nc-line-strong) bg-(--nc-panel) px-2.5 py-1 text-[10px] font-medium text-foreground transition hover:bg-(--nc-panel-strong)"
+                    >
+                      Browse media
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="pointer-events-auto flex items-center gap-2 rounded-full bg-(--nc-scrim) px-3 py-1.5 backdrop-blur-sm"
+                    data-nc-empty-stage
+                  >
+                    <span className="text-xs text-muted-foreground">Nothing at the playhead</span>
+                    <button
+                      type="button"
+                      data-nc-empty-stage-jump
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const st = useEditor.getState()
+                        const first = [...st.project.clips]
+                          .filter((c) => c.kind !== 'audio')
+                          .sort((a, b) => a.start - b.start)[0]
+                        if (first) st.setCurrentTime(Math.max(0, first.start + 0.05))
+                      }}
+                      className="rounded-lg border border-(--nc-line-strong) bg-(--nc-panel) px-2 py-0.5 text-[10px] font-medium text-foreground transition hover:bg-(--nc-panel-strong)"
+                    >
+                      Go to first clip
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

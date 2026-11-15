@@ -682,9 +682,21 @@ function TrackLane({
 
       {emptyHint && (
         <div className="absolute inset-2 flex items-center justify-center">
-          <div className="flex h-full w-full max-w-xl items-center justify-center gap-2 rounded-xl border border-dashed border-(--nc-line-strong) text-[11px] text-muted-foreground">
+          <div className="flex h-full w-full max-w-xl items-center justify-center gap-2 rounded-xl border border-dashed border-(--nc-line-strong) px-3 text-center text-[11px] text-muted-foreground">
             <Film className="size-3.5 shrink-0" />
-            Import media, then click + or drag clips here
+            <span>Import media, then click + or drag clips here</span>
+            {/* UX60 Days 39-40 — the empty timeline ships its next-best action */}
+            <button
+              type="button"
+              data-nc-empty-timeline-cta
+              onClick={(e) => {
+                e.stopPropagation()
+                useEditor.getState().setPanelTab('media')
+              }}
+              className="shrink-0 rounded-lg border border-(--nc-line-strong) bg-(--nc-panel) px-2.5 py-1 text-[10px] font-medium text-foreground transition hover:bg-(--nc-panel-strong)"
+            >
+              Browse media
+            </button>
           </div>
         </div>
       )}

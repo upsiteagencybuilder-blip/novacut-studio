@@ -1613,10 +1613,11 @@ export function EffectsPanel() {
                 ? 'Applied and rendered effects show up in Recent.'
                 : 'Try a different search or category.'}
           </p>
-          {!(
-            (category === 'favorites' && favorites.length === 0) ||
-            (category === 'recent' && recent.length === 0)
-          ) && (
+          {((category === 'favorites' && favorites.length === 0) || (category === 'recent' && recent.length === 0)) ? (
+            <Button variant="outline" size="sm" className="mt-3 h-8 rounded-lg text-xs" data-nc-empty-effects-cta onClick={() => setCategory('all')}>
+              Browse all effects
+            </Button>
+          ) : (
             <Button variant="outline" size="sm" className="mt-3 h-8 rounded-lg text-xs" onClick={clearSearchFilters}>
               Clear search
             </Button>

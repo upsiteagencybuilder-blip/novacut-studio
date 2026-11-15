@@ -72,12 +72,14 @@
 
 | Day | Deliverable | Status |
 | --- | --- | --- |
-| 33–34 | Undo history browser: visual stack with labeled steps, jump-to-any-state (builds on existing history) | ⬜ |
-| 35–36 | Destructive-action confirmations with impact preview ("Delete 3 clips + their audio?") | ⬜ |
-| 37–38 | Autosave/recovery UX: visible "restored draft" banner with diff time + one-tap discard | ⬜ |
-| 39–40 | Actionable empty states: every empty panel ships its next-best action button | ⬜ |
+| 33–34 | Undo history browser: visual stack with labeled steps, jump-to-any-state (builds on existing history) | ✅ (browser shipped Day 65; this commit adds per-state impact counts + arrow-key browsing) |
+| 35–36 | Destructive-action confirmations with impact preview ("Delete 3 clips + their audio?") | ✅ (this commit) |
+| 37–38 | Autosave/recovery UX: visible "restored draft" banner with diff time + one-tap discard | ✅ (this commit) |
+| 39–40 | Actionable empty states: every empty panel ships its next-best action button | ✅ (this commit) |
 
 **Exit criteria:** forced reload mid-edit recovers the project with zero data loss and zero confusion.
+
+> ✅ **Phase 5 complete** (this commit): history state-counts + keyboard nav, impact-preview confirmations (multi-delete ≥2, used-media removal, clear-all-markers, track removal — single deletes stay instant with a working Undo toast), draft-recovery banner (stale-heartbeat crash detection, real saved-time, one-tap dismiss, honest Pro-wall preview variant) + relative-time Saved chip, and actionable empty states across media/timeline/preview/text/effects/stickers/sound shipped together; receipts in `worklog.md` (Task UX60-6). Exit criterion proven end-to-end: distinctive mid-edit change (project rename) → autosave `saved` → forced reload → project restored intact ("Phase5 Recovery Probe") with the recovery banner showing the real save time — zero data loss, zero confusion. Automation paths (copilot, NL commands, cut) bypass the guard by design and undo/redo now bump `updatedAt` so cloud sync sees reverted states.
 
 ## Phase 6 — Accessibility & localization (Days 41–48)
 **Goal:** fully usable by keyboard, screen reader, and Bangla-first users.

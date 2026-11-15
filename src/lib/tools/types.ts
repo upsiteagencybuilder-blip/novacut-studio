@@ -68,6 +68,9 @@ export type ToolAction =
   | 'toggle-simple-mode'
   | 'show-contextual-tools'
   | 'toggle-panel-density'
+  | 'confirm-clear-markers'
+  | 'pulse-recovery'
+  | 'pulse-empty-ctas'
 
 /** Top-level catalog section id. */
 export type ToolSectionId =

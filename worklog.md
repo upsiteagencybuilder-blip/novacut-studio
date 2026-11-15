@@ -2909,3 +2909,49 @@ Counts (auto-computed from catalog): **728 total · live 297→303 · planned 28
 - Fresh reloads (desktop + mobile): 0 console errors, 0 page errors; dev.log healthy; demo golden path intact (6 clips).
 - Test-driver note (honesty): an initial "trusted Play click didn't work" was a locator artifact — `find role button --name "Play"` fuzzy-matched the NEW "Di**play** settings" button; exact ref/aria-label clicks work. Product playback verified with real user activation via ref click (0.5→1.64s playing).
 - lint + tsc clean.
+
+## Post-v1.0.0 — UX60 Phase 5 completion: Days 33–40 (Forgiveness & error-proofing)
+
+**Task UX60-6 · trace `1a1dc7ddb9053e95` · date: Phase-5 batch (this commit)**
+
+Goal: nothing a user does is ever scary or unrecoverable. Four deliverable pairs shipped together; every destructive path now either asks with a REAL computed impact preview or answers instantly with a working Undo.
+
+### Shipped 1 — History browser upgrade (Days 33–34)
+- The visual history browser itself shipped Day 65 (`HistoryPanelDialog`, `open-history` deep link); Phase 5 upgrades it into a true state browser: every history entry now carries a **per-state impact summary** — `clips · text · markers · tracks` counted from the exact snapshot the entry returns to (`summarizeProject` recorded in `pushHistory`/`undo`/`redo` → `HistoryMeta.counts`), rendered as chips (`data-nc-history-counts`) on undo AND redo entries.
+- **Arrow-key browsing**: ↑/↓ inside the list roves focus across `[data-nc-history-entry]` buttons, Enter jumps (disclosed in the dialog subtitle). Jump-to-any-state re-verified through the real stacks (jump −2 → 6 clips back, redo stack refill, dialog stays open).
+- Honest note in the plan doc: the browser row was ⬜ while the Day-65 dialog already covered it — the row is marked ✅ with that disclosure.
+
+### Shipped 2 — Impact-preview confirmations (Days 35–36)
+- Store: `pendingConfirm { title, lines, confirmLabel, onConfirm }` + `requestConfirm/resolveConfirm`; new lazy `ConfirmActionDialog` (amber impact list `data-nc-confirm-impact`, destructive confirm, "Keep everything" cancel, Escape/backdrop close — all proven). The action runs ONLY on a real confirm tap.
+- **Multi-clip delete (≥2 selected) asks first** — keyboard Delete, toolbar, context menu, Properties delete: "Delete 2 clips?" → "2 clips (5.2s of timeline) will be removed" + audio-carry line + undo line. Cancel keeps everything; Confirm deletes; single deletes stay INSTANT with a sonner toast carrying a working **Undo** button (clicked in E2E: 3→2→3).
+- **Used-media removal asks**: "Remove “sunrise.jpg” from the library?" → "1 timeline clip uses this file and is deleted with it" + honest "file is gone until re-imported" (undo restores clips, not the binary — said so).
+- **Clear-all-markers asks** (toolbar + deep link) and **track removal asks** when the track holds clips ("Delete “Overlay 1”?" → "2 clips on this track are deleted too"). Empty/unused paths stay instant.
+- Automation bypasses the guard by design: copilot, NL commands, and Ctrl+X cut pass `{ skipConfirm, silent }` — receipts: NL delete-selected and copilot delete call sites updated.
+- ROOT FIX found by the receipts: `undo/redo` restored snapshots WITHOUT bumping `updatedAt`, so undo/redo-only sessions were invisible to the updatedAt-diffed cloud autosave — both now wrap with `withUpdatedAt` (local autosave already fired on reference change; verified firing on undo).
+
+### Shipped 3 — Draft recovery banner (Days 37–38)
+- Crash heartbeat (Day 64) now raises a **persistent visible banner** (`RecoveryBanner`, `data-nc-recovery-banner`, role=status) instead of a 10s toast: "Draft restored — saved {real diff time}" + honest description + one-tap **Keep editing** dismiss (and an ✕). Watcher retries until the store is ready, then reads the restored project's REAL `updatedAt`.
+- **TopBar Saved chip ticks with real relative time**: `lastSavedAt` recorded on every successful local autosave; chip shows "Saved · just now / 53s / 2m ago", refreshed every 10s (`data-nc-autosave-chip`).
+- Pro-wall deep link `pulse-recovery` previews the SAME banner honestly labeled "Draft recovery — preview" with this project's real save time.
+
+### Shipped 4 — Actionable empty states (Days 39–40)
+- **Media panel** (`data-nc-empty-media`): two CTAs — "Import media" (opens the real file picker) and "Try demo project" (loads the demo; clicked in E2E → 6 clips/4 media/3 tracks).
+- **Timeline empty hint**: "Browse media" button (data-nc-empty-timeline-cta, stopPropagation) → switches panelTab; **Preview stage**: empty project → "Browse media", content-but-not-at-playhead → "Go to first clip" (jumps currentTime to the earliest visual clip; both verified).
+- **Filter empties**: Text favorites/used → "Browse all titles"; Effects favorites/recent → "Browse all effects"; Sticker emoji → "Browse all emoji"/"Clear search"; Sound browser → "Clear filters" — each clicked in E2E and each emptied state cleared by its own CTA.
+- Pro-wall deep link `pulse-empty-ctas` pulses the empty media card when it exists (`nc-pulse-empty-ctas` ring flash, verified in the fresh-empty session) and honestly no-ops the pulse when media is loaded.
+
+### Catalog + plan doc
+- 3 new live entries (panels → new group **"Forgiveness & recovery"**: Impact-Preview Confirmations `confirm-clear-markers`, Draft Recovery Banner `pulse-recovery`, Actionable Empty States `pulse-empty-ctas`) — all three cards E2E-clicked through their real flows (marker-clear guard with a live marker → confirm → undo restores; preview banner → dismiss; media tab switch). `panel-history-panel` desc updated (counts + arrow keys). Counts auto: **746 total · 326 live** (verified on the wall: "746 tools catalogued · 326 live now").
+- `docs/UX-60-DAYS.md`: Phase 5 rows 33–40 marked ✅ + "Phase 5 complete" note with the exit-criterion receipt.
+
+### Bugs FOUND in E2E, fixed at the root
+1. **Used-media grammar**: "1 timeline clip use this file" → pluralization fixed ("1 … uses this file and is deleted with it").
+2. **Undo/redo were invisible to cloud autosave** (no `updatedAt` bump) → both wrap `withUpdatedAt` now.
+3. **MediaPanel double-toast**: the panel toasted "Removed from library" even when the new guard only OPENED the dialog — store owns the (honest, Undo-carrying) toast now.
+4. **Pre-existing mobile/desktop file-mode noise**: 39 tracked files carried 100644→100755 mode-only diffs from the environment — chmod 644 restored before commit so the diff contains only Phase-5 content.
+
+### E2E receipts
+- Desktop 1280×800: fresh-IDB session → media empty CTAs (demo load works), timeline/stage empty CTAs, multi-delete dialog (cancel keeps 6, confirm → 4 + honest impact lines), single-delete instant + toast Undo click restores, history counts chips on undo+redo entries (e.g. "6 clips · 2 text · 3 tracks"), ArrowDown focus rove, jump −2 + redo refill, track-removal confirm ("Delete track + 2 clips") cancel, media-removal confirm, marker-clear confirm via deep link + undo restore, recovery banner via stale-heartbeat reload ("saved 53s ago" from the REAL restored draft) + one-tap dismiss, Saved chip "Saved · just now", recovery-probe rename "Phase5 Recovery Probe" surviving a forced reload (exit criterion), 3 deep-link cards clicked, text/effects/sticker filter CTAs round-trip, Escape closes the guard with clips intact.
+- Mobile 390×844: no horizontal scroll (390≤390), header fits, confirm dialog 358px fits viewport, recovery banner 359px fits + dismiss, history dialog fits with counts chips ("6 clips · 2 text · 1 marker · 3 tracks").
+- Fresh reloads after the last code change: 0 console/page errors on both viewports (an intermittent dev-mode hydration warning appeared only during reloads issued WHILE `next dev` was still recompiling HMR — a stash-bisect showed 0 errors on both pre-change and post-change trees across 4 settled reloads each; documented, not shipped code).
+- lint + tsc clean. Screenshots: /tmp/phase5-desktop.png, /tmp/phase5-mobile.png.

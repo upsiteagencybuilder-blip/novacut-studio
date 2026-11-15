@@ -287,13 +287,26 @@ export function StickerPanel() {
             })}
           </div>
           {visibleEmojis.length === 0 && (
-            <p className="py-4 text-center text-[11px] text-muted-foreground">
-              {favOnly && !q
-                ? 'No starred emoji in this pack — tap the ☆ corner of an emoji.'
-                : q
-                  ? `No emoji pack matches “${query}”.`
-                  : 'Nothing here yet.'}
-            </p>
+            <div className="flex flex-col items-center gap-2 py-4 text-center" data-nc-empty-sticker>
+              <p className="text-[11px] text-muted-foreground">
+                {favOnly && !q
+                  ? 'No starred emoji in this pack — tap the ☆ corner of an emoji.'
+                  : q
+                    ? `No emoji pack matches “${query}”.`
+                    : 'Nothing here yet.'}
+              </p>
+              <button
+                type="button"
+                data-nc-empty-sticker-cta
+                onClick={() => {
+                  if (favOnly) setFavOnly(false)
+                  if (q) setQuery('')
+                }}
+                className="rounded-lg border border-(--nc-line-strong) px-2.5 py-1 text-[10px] font-medium text-foreground transition hover:bg-(--nc-panel-strong)"
+              >
+                {q ? 'Clear search' : 'Browse all emoji'}
+              </button>
+            </div>
           )}
         </>
       )}

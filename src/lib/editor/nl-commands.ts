@@ -378,8 +378,8 @@ export async function executeNL(m: NLMatch): Promise<boolean> {
     }
     case 'delete-selected':
       if (!s.selectedClipIds.length) return fail('Nothing selected')
-      s.deleteSelected()
-      toast.success('Selection deleted — Ctrl+Z restores it')
+      // automation path — skips the multi-delete confirm dialog
+      s.deleteSelected({ skipConfirm: true })
       return true
     case 'duplicate-selected': {
       if (!s.selectedClipIds.length) return fail('Nothing selected')

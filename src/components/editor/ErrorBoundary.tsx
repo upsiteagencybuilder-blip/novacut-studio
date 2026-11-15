@@ -8,13 +8,14 @@
  *   offers a plain reload, "Reload & keep my project" (the default — local
  *   autosave already holds everything) and a destructive local reset.
  * - CrashRecoveryWatcher: on mount, if THIS TAB had a previous unclean exit
- *   (sessionStorage flag from telemetry), surface one honest toast — the
- *   project itself is restored automatically from IndexedDB autosave.
+ *   (sessionStorage flag from telemetry), raise the persistent draft-recovery
+ *   banner (UX60 Days 37-38) with the restored draft's real save time —
+ *   the project itself is restored automatically from IndexedDB autosave.
  */
 import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { useEditor } from '@/lib/editor/store'
 import { hadUncleanExit, markSessionLive, recordError } from '@/lib/telemetry'
 
 interface BoundaryState {
@@ -93,18 +94,29 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, BoundarySt
   }
 }
 
-/** mount once inside the shell — offers crash recovery when the tab died before */
+/** mount once inside the shell — raises the recovery banner after a crash */
 export function CrashRecoveryWatcher() {
   useEffect(() => {
     const unclean = hadUncleanExit()
     // start (or resume) the liveness heartbeat for THIS session
     markSessionLive()
     if (!unclean) return
-    toast('Recovered from an unexpected exit', {
-      description: 'Your project was restored from the local autosave. Previous session state is intact.',
-      duration: 10000,
-      icon: <AlertTriangle className="h-4 w-4 text-amber-400" />,
-    })
+    // UX60 Days 37-38 — visible banner (not just a toast): the restored draft
+    // is real (the store loaded it from IndexedDB), so is its save time.
+    const st = useEditor.getState()
+    if (st.ready) {
+      st.showRecoveryBanner({ savedAt: st.project.updatedAt })
+    } else {
+      // store still hydrating — retry shortly, banner lands once ready
+      const t = window.setInterval(() => {
+        const s = useEditor.getState()
+        if (s.ready) {
+          window.clearInterval(t)
+          s.showRecoveryBanner({ savedAt: s.project.updatedAt })
+        }
+      }, 250)
+      window.setTimeout(() => window.clearInterval(t), 8000)
+    }
   }, [])
   return null
 }

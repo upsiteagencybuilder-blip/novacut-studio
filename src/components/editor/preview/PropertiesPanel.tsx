@@ -693,7 +693,7 @@ function ClipActionsRow({ clipId, multi }: { clipId: string; multi?: boolean }) 
           variant="ghost"
           size="sm"
           className="h-9 flex-1 border border-rose-500/30 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
-          onClick={deleteSelected}
+          onClick={() => deleteSelected()}
         >
           <Trash2 className="h-3.5 w-3.5" />
           Delete

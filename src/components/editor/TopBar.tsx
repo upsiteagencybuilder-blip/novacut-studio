@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import {
   AlignJustify,
   Archive,
@@ -32,8 +33,16 @@ import { ConnectionPill, InstallApp, OfflineReadinessBadge, PWAUpdateToast } fro
 
 function AutosaveIndicator() {
   const autosave = useEditor((s) => s.autosave)
+  const lastSavedAt = useEditor((s) => s.lastSavedAt)
+  // UX60 Days 37-38 — the Saved chip ticks with real relative time
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 10000)
+    return () => clearInterval(t)
+  }, [])
+  const savedLabel = lastSavedAt ? relSaved(lastSavedAt) : 'Saved'
   return (
-    <div className="flex w-fit items-center gap-1 text-[10px] text-muted-foreground">
+    <div className="flex w-fit items-center gap-1 text-[10px] text-muted-foreground" data-nc-autosave-chip>
       {autosave === 'saving' && (
         <>
           <Loader2 className="h-3 w-3 animate-spin" />
@@ -43,7 +52,7 @@ function AutosaveIndicator() {
       {autosave === 'saved' && (
         <>
           <CloudCheck className="h-3 w-3 text-emerald-400" />
-          <span>Saved</span>
+          <span>Saved · {savedLabel}</span>
         </>
       )}
       {autosave === 'error' && (
@@ -60,6 +69,16 @@ function AutosaveIndicator() {
       )}
     </div>
   )
+}
+
+/** relative time for the last successful autosave (kept tiny + local) */
+function relSaved(at: number): string {
+  const s = Math.max(0, Math.round((Date.now() - at) / 1000))
+  if (s < 10) return 'just now'
+  if (s < 60) return `${s}s ago`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ago`
+  return `${Math.floor(m / 60)}h ago`
 }
 
 export function TopBar() {

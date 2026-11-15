@@ -238,6 +238,20 @@ export function SoundBrowser({ category }: { category: 'music' | 'sound' }) {
               ? 'No favorites yet — tap the star on any card to keep it here.'
               : emptyText}
           </p>
+          {!(favsOnly && favorites.length === 0) && (
+            <button
+              type='button'
+              data-nc-empty-sound-cta
+              onClick={() => {
+                setSearch('')
+                setFamily(null)
+                setFavsOnly(false)
+              }}
+              className='mt-2 rounded-lg border border-(--nc-line-strong) px-2.5 py-1 text-[10px] font-medium text-foreground transition hover:bg-(--nc-panel-strong)'
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       )}
 

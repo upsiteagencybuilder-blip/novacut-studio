@@ -16,6 +16,7 @@ import {
   Music as MusicIcon,
   Palette as PaletteIcon,
   Plus,
+  Sparkles,
   Trash2,
   UploadCloud,
   Video as VideoIcon,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { useEditor } from '@/lib/editor/store'
 import { importFiles } from '@/lib/editor/importer'
 import { formatBytes, formatShortTime } from '@/lib/editor/utils'
@@ -134,20 +136,41 @@ function AssetCard({
   )
 }
 
-/* ---------------- empty state ---------------- */
+/* ---------------- empty state (UX60 Days 39-40 — actionable) ---------------- */
 
-function MediaEmptyState() {
+function MediaEmptyState({ onImport, onTryDemo }: { onImport: () => void; onTryDemo: () => void }) {
+  // pulse from the Pro-wall deep link (nc-pulse-empty-ctas)
+  const [pulse, setPulse] = useState(false)
+  useEffect(() => {
+    const fn = () => {
+      setPulse(true)
+      window.setTimeout(() => setPulse(false), 1600)
+    }
+    window.addEventListener('nc-pulse-empty-ctas', fn)
+    return () => window.removeEventListener('nc-pulse-empty-ctas', fn)
+  }, [])
   return (
-    <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+    <div
+      data-nc-empty-media
+      className={`flex flex-col items-center justify-center rounded-xl px-4 py-10 text-center transition ${pulse ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-(--nc-sheet)' : ''}`}
+    >
       <span className="nc-gradient nc-glow rounded-2xl p-[2px]">
         <span className="flex h-[76px] w-[76px] items-center justify-center rounded-[14px] bg-(--nc-sheet)">
           <Film className="size-9 text-fuchsia-300" />
         </span>
       </span>
       <p className="mt-3 text-sm font-medium">Your media library is empty</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Import video, photos or music to start editing
-      </p>
+      <p className="mt-1 text-xs text-muted-foreground">Import video, photos or music to start editing</p>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <Button size="sm" className="h-8 px-3 text-xs" data-nc-empty-media-import onClick={onImport}>
+          <UploadCloud className="mr-1.5 size-3.5" />
+          Import media
+        </Button>
+        <Button size="sm" variant="outline" className="h-8 px-3 text-xs" data-nc-empty-media-demo onClick={onTryDemo}>
+          <Sparkles className="mr-1.5 size-3.5" />
+          Try demo project
+        </Button>
+      </div>
     </div>
   )
 }
@@ -316,8 +339,8 @@ export function MediaPanel() {
 
   const handleDelete = useCallback(
     async (id: string) => {
+      // the store handles the used-by impact preview + honest toast with Undo
       await removeMediaAsset(id)
-      toast.success('Removed from library')
     },
     [removeMediaAsset]
   )
@@ -390,7 +413,15 @@ export function MediaPanel() {
           ))}
         </div>
       ) : (
-        !importing && <MediaEmptyState />
+        !importing && (
+          <MediaEmptyState
+            onImport={() => inputRef.current?.click()}
+            onTryDemo={() => {
+              void useEditor.getState().loadDemoProject()
+              toast.success('Demo project loaded — 6 clips on 3 tracks to explore')
+            }}
+          />
+        )
       )}
     </div>
   )
