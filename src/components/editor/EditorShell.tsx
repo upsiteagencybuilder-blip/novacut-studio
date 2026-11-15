@@ -36,13 +36,13 @@ const VersionsDialog = lazy(() => import('@/components/editor/dialogs/VersionsDi
 const ThemeStudioDialog = lazy(() => import('@/components/editor/dialogs/ThemeStudioDialog').then((m) => ({ default: m.ThemeStudioDialog })))
 const StorageDialog = lazy(() => import('@/components/editor/dialogs/StorageDialog').then((m) => ({ default: m.StorageDialog })))
 const HistoryPanelDialog = lazy(() => import('@/components/editor/dialogs/HistoryPanelDialog').then((m) => ({ default: m.HistoryPanelDialog })))
-const ConfirmActionDialog = lazy(() => import('@/components/editor/dialogs/ConfirmActionDialog').then((m) => ({ default: m.ConfirmActionDialog })))
 import { SessionProvider } from 'next-auth/react'
 import { ThemeProvider } from '@/components/editor/theme/ThemeProvider'
 import { OnboardingOverlay } from '@/components/editor/panels/OnboardingOverlay'
 import { CoachMarks } from '@/components/editor/panels/CoachMarks'
 import { GuidedBanner } from '@/components/editor/panels/GuidedBanner'
 import { RecoveryBanner } from '@/components/editor/RecoveryBanner'
+import { ConfirmActionDialog } from '@/components/editor/dialogs/ConfirmActionDialog'
 import { startCloudAutosave } from '@/lib/cloud/autosave'
 import { CrashRecoveryWatcher } from '@/components/editor/ErrorBoundary'
 import { installTelemetry } from '@/lib/telemetry'
@@ -661,9 +661,7 @@ export function EditorShell() {
         {dialog === 'history' && <HistoryPanelDialog />}
       </Suspense>
       {/* UX60 Phase 5 — destructive-action guard + draft-recovery banner */}
-      <Suspense fallback={null}>
-        <ConfirmActionDialog />
-      </Suspense>
+      <ConfirmActionDialog />
       <RecoveryBanner />
       <OnboardingOverlay />
       <CoachMarks />
