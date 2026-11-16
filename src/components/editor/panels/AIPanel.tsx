@@ -36,6 +36,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
 import { analyzeClipSilence, base64ToBlob, exportAudioSegmentWav, fileToBase64, imageBase64ToFile, requireOnline, sniffImageMime } from '@/lib/editor/ai'
@@ -180,7 +181,66 @@ function AiBusyBar({
   )
 }
 
-/* ================= tab bar ================= */
+/** UX60 Phase 7 — module-level shimmer line (static components rule) */
+function SkLine({ w, h = 'h-2' }: { w: string; h?: string }) {
+  return <Skeleton className={`${h} rounded-full ${w}`} aria-hidden />
+}
+
+/**
+ * UX60 Phase 7 (Days 51–52) — streaming skeletons for long AI ops. The busy
+ * bar shows phase + elapsed; the skeleton below it previews the SHAPE of the
+ * result (reply bubble / receipt card / result grid / shot list), so the
+ * surface never sits on a bare spinner while work runs.
+ */
+function AiResultSkeleton({ kind }: { kind: 'reply' | 'card' | 'grid' | 'list' }) {
+  return (
+    <div className="mt-1.5 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2.5" data-nc-ai-skeleton={kind} role="status" aria-label="Working — result will appear here">
+      {kind === 'reply' && (
+        <div className="space-y-1.5">
+          <SkLine w="w-1/3" />
+          <SkLine w="w-11/12" />
+          <SkLine w="w-3/4" />
+          <div className="flex gap-1 pt-0.5" aria-hidden>
+            <Skeleton className="h-4 w-14 rounded-full" />
+            <Skeleton className="h-4 w-16 rounded-full" />
+            <Skeleton className="h-4 w-12 rounded-full" />
+          </div>
+        </div>
+      )}
+      {kind === 'card' && (
+        <div className="space-y-1.5">
+          <SkLine w="w-2/5" />
+          <div className="flex flex-wrap gap-1" aria-hidden>
+            <Skeleton className="h-4 w-16 rounded-full" />
+            <Skeleton className="h-4 w-20 rounded-full" />
+            <Skeleton className="h-4 w-14 rounded-full" />
+          </div>
+          <SkLine w="w-1/2" />
+        </div>
+      )}
+      {kind === 'grid' && (
+        <div className="grid grid-cols-3 gap-1.5" aria-hidden>
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="h-14 rounded-lg" />
+          ))}
+        </div>
+      )}
+      {kind === 'list' && (
+        <div className="space-y-1.5" aria-hidden>
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Skeleton className="h-7 w-9 shrink-0 rounded-md" />
+              <div className="min-w-0 flex-1 space-y-1">
+                <Skeleton className="h-2 rounded-full" style={{ width: `${82 - i * 9}%` }} />
+                <Skeleton className="h-2 w-1/3 rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const AI_TABS: { id: AiSubTab; label: string; icon: LucideIcon }[] = [
   { id: 'assistant', label: 'Assistant', icon: Bot },
@@ -722,6 +782,7 @@ function CopilotCard() {
                 hint="Reading your project and drafting the edit plan"
                 onCancel={cancel}
               />
+              <AiResultSkeleton kind="reply" />
             </div>
           </div>
         )}
@@ -958,6 +1019,7 @@ function BgmDirectorCard() {
           onCancel={cancelBgm}
         />
       )}
+      {bgmBusy && <AiResultSkeleton kind="card" />}
       {bgmPlan && (
         <div className="space-y-1.5 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2" data-nc-bgm-receipt>
           {bgmPlan.note && <p className="text-[10px] leading-relaxed text-foreground/80">{bgmPlan.note}</p>}
@@ -1233,6 +1295,7 @@ function AssetSearchCard() {
           onCancel={cancelAssetSearch}
         />
       )}
+      {assetBusy && <AiResultSkeleton kind="grid" />}
       {assetResults.length > 0 && (
         <div className="space-y-1.5" data-nc-asset-results>
           {assetNote && <p className="text-[10px] leading-relaxed text-foreground/80">{assetNote}</p>}
@@ -1420,6 +1483,7 @@ function StoryboardCard() {
           onCancel={cancelStoryboard}
         />
       )}
+      {sbBusy && <AiResultSkeleton kind="list" />}
       {sbShots && sbShots.length > 0 && (
         <div className="space-y-1 rounded-lg border border-(--nc-line) bg-(--nc-scrim) p-2" data-nc-sb-receipt>
           {sbShots.map((s, i) => (

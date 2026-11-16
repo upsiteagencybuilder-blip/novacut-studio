@@ -374,8 +374,46 @@ function SliderRow({
   /** optional right-side control (e.g. keyframe diamond) */
   accessory?: ReactNode
 }) {
+  /* UX60 Phase 7 (Days 53–54) — interaction latency: every pointermove used
+     to push a store commit (full panel + timeline + preview re-render per
+     move). Now the thumb + readout run on a LOCAL value (only this row
+     re-renders — instant at pointer speed), the store commits are throttled
+     to ~15Hz during the drag (the monitor-meter cadence — still live in the
+     preview canvas), and the exact final value commits on release. History
+     stays ONE undo step via the store's 900ms same-label dedupe. */
+  const [drag, setDrag] = useState<number | null>(null)
+  const pendingRef = useRef<number | null>(null)
+  const timerRef = useRef<number | null>(null)
+  const lastCommitRef = useRef(0)
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    },
+    [],
+  )
+  const commitThrottled = (v: number) => {
+    pendingRef.current = v
+    if (timerRef.current !== null) return
+    const wait = Math.max(0, 66 - (performance.now() - lastCommitRef.current))
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null
+      lastCommitRef.current = performance.now()
+      const p = pendingRef.current
+      pendingRef.current = null
+      if (p !== null) onChange(p)
+    }, wait)
+  }
+  const commitFinal = (v: number) => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    pendingRef.current = null
+    setDrag(null)
+    onChange(v)
+  }
   // clamp only what the thumb shows — the real value may exceed the range (e.g. corner-drag scale)
-  const safe = Math.min(Math.max(value, min), max)
+  const safe = drag ?? Math.min(Math.max(value, min), max)
   return (
     <div className="flex items-center gap-2">
       <span className="w-14 shrink-0 text-[11px] text-muted-foreground">{label}</span>
@@ -385,11 +423,16 @@ function SliderRow({
         max={max}
         step={step}
         value={[safe]}
-        onValueChange={(v) => onChange(v[0] ?? min)}
+        onValueChange={(v) => {
+          const next = v[0] ?? min
+          setDrag(next)
+          commitThrottled(next)
+        }}
+        onValueCommit={(v) => commitFinal(v[0] ?? min)}
       />
       {accessory}
       <span className="w-10 shrink-0 text-right font-mono text-[10px] tabular-nums text-foreground/70">
-        {format ? format(value) : fmtNum(value)}
+        {format ? format(drag ?? value) : fmtNum(drag ?? value)}
       </span>
     </div>
   )
@@ -2386,7 +2429,11 @@ function ScopesSection() {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'histogram' | 'waveform'>('histogram')
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const currentTime = useEditor((s) => s.currentTime)
+  // UX60 Phase 7 (Days 53–54) — the playhead no longer drives this section's
+  // re-render: `pausedPlayhead` is null while playing (no re-renders during
+  // playback — the sampled frame is already stale by the next tick) and
+  // tracks the time only while paused (seek = one redraw).
+  const pausedPlayhead = useEditor((s) => (s.isPlaying ? null : s.currentTime))
   // any clip mutation (grade/LUT/filter edits) must also re-scope the frame
   const clipsRef = useEditor((s) => s.project.clips)
   const lastDrawRef = useRef(0)
@@ -2495,7 +2542,7 @@ function ScopesSection() {
     }
     raf = requestAnimationFrame(run)
     return () => cancelAnimationFrame(raf)
-  }, [open, currentTime, draw, mode, clipsRef])
+  }, [open, pausedPlayhead, draw, mode, clipsRef])
 
   return (
     <CollapsibleSection
@@ -3079,6 +3126,9 @@ function AudioFxSection({ clip }: { clip: Clip }) {
 
 const DEFAULT_MASK: ClipMask = { shape: 'rect', x: 0, y: 0, w: 0.6, h: 0.6 }
 
+/** UX60 Phase 7 — keyframe-at-playhead tolerance (half a frame at 30fps) */
+const KF_EPS = 0.5 / 30 + 0.001
+
 /**
  * Day 16 — shape mask: cut the clip's draw to a rect or ellipse in canvas
  * space. Position/size sliders, invert toggle, and keyframe diamonds for
@@ -3087,7 +3137,13 @@ const DEFAULT_MASK: ClipMask = { shape: 'rect', x: 0, y: 0, w: 0.6, h: 0.6 }
  */
 function MaskSection({ clip }: { clip: Clip }) {
   const updateClip = useEditor((s) => s.updateClip)
-  const currentTime = useEditor((s) => s.currentTime)
+  // UX60 Phase 7 (Days 53–54) — keyframe-at-playhead is a BOOLEAN selector:
+  // this section re-renders only when a keyframe lands on / leaves the
+  // playhead, not on every frame of playback (kfAt below does the exact
+  // per-property lookup behind the boolean).
+  const hasKfAtPlayhead = useEditor((s) =>
+    (clip.keyframes ?? []).some((k) => Math.abs(k.time - s.currentTime) <= KF_EPS),
+  )
   const addKeyframeAtPlayhead = useEditor((s) => s.addKeyframeAtPlayhead)
   const removeKeyframe = useEditor((s) => s.removeKeyframe)
   const [open, setOpen] = useState(false)
@@ -3097,8 +3153,9 @@ function MaskSection({ clip }: { clip: Clip }) {
     updateClip(clip.id, { mask: { ...DEFAULT_MASK, ...mask, ...p } }, history)
 
   const kfAt = (prop: KeyframeProperty) => {
-    const eps = 0.5 / 30 + 0.001
-    return (clip.keyframes ?? []).find((k) => k.property === prop && Math.abs(k.time - currentTime) <= eps)
+    if (!hasKfAtPlayhead) return undefined
+    const t = useEditor.getState().currentTime
+    return (clip.keyframes ?? []).find((k) => k.property === prop && Math.abs(k.time - t) <= KF_EPS)
   }
   const anyKeys = (prop: KeyframeProperty) => (clip.keyframes ?? []).some((k) => k.property === prop)
   const toggleKf = (prop: KeyframeProperty, label: string) => {
@@ -3686,7 +3743,14 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
   const replaceClipMedia = useEditor((s) => s.replaceClipMedia)
   const insertFreezeFrame = useEditor((s) => s.insertFreezeFrame)
   const extractAudioFromVideo = useEditor((s) => s.extractAudioFromVideo)
-  const currentTime = useEditor((s) => s.currentTime)
+  // UX60 Phase 7 (Days 53–54) — keyframe-at-playhead is a BOOLEAN selector:
+  // this whole editor re-renders only when a keyframe lands on / leaves the
+  // playhead, not on every frame of playback (kfAt does the exact per-
+  // property lookup behind the boolean).
+  const hasKfAtPlayhead = useEditor((s) => {
+    const eps = 0.5 / (s.project.fps || 30) + 0.001
+    return (clip.keyframes ?? []).some((k) => Math.abs(k.time - s.currentTime) <= eps)
+  })
   const addKeyframeAtPlayhead = useEditor((s) => s.addKeyframeAtPlayhead)
   const removeKeyframe = useEditor((s) => s.removeKeyframe)
   const beatMarkers = useEditor((s) => s.beatMarkers)
@@ -3780,7 +3844,9 @@ function SingleClipEditor({ clip }: { clip: Clip }) {
   /* --- one-click keyframing from the Transform sliders (Sector 9) --- */
   const keyAtPlayhead = (prop: KeyframeProperty): Keyframe | undefined => {
     const eps = 0.5 / (project.fps || 30) + 0.001
-    return (clip.keyframes ?? []).find((k) => k.property === prop && Math.abs(k.time - currentTime) <= eps)
+    if (!hasKfAtPlayhead) return undefined
+    const t = useEditor.getState().currentTime
+    return (clip.keyframes ?? []).find((k) => k.property === prop && Math.abs(k.time - t) <= eps)
   }
 
   const toggleKeyframe = (prop: KeyframeProperty) => {

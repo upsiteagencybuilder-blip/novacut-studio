@@ -21,6 +21,7 @@ import {
   VolumeX,
 } from 'lucide-react'
 import { useEditor } from '@/lib/editor/store'
+import { bumpRenderCount } from '@/lib/editor/perf'
 import { estimateClipRect, getEngine, type ClipBounds } from '@/lib/editor/engine'
 import { CANVAS_PRESETS } from '@/lib/editor/constants'
 import { clamp, formatTimecode, projectDuration } from '@/lib/editor/utils'
@@ -49,9 +50,10 @@ const timeVisible = (start: number, duration: number, t: number): boolean =>
   t >= start - 1e-6 && t < start + duration - 1e-6
 
 export function PreviewPane() {
+  // UX60 Phase 7 (Days 53–54) — honest render counter (see lib/editor/perf.ts)
+  bumpRenderCount('preview')
   const l = useLabel()
   const project = useEditor((s) => s.project)
-  const currentTime = useEditor((s) => s.currentTime)
   const isPlaying = useEditor((s) => s.isPlaying)
   const selectedClipIds = useEditor((s) => s.selectedClipIds)
   const masterVolume = useEditor((s) => s.masterVolume)
@@ -89,6 +91,25 @@ export function PreviewPane() {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const dragRef = useRef<DragState | null>(null)
+
+  /* UX60 Phase 7 (Days 53–54) — the transport timecode is DIRECT-DOM (the
+     meter pattern): a store subscription writes the text, so playback no
+     longer re-renders this whole component to tick a number. fps mirrors
+     into a ref so the subscription can stay mount-once. */
+  const timecodeRef = useRef<HTMLSpanElement>(null)
+  const fpsRef = useRef(project.fps)
+  useEffect(() => {
+    fpsRef.current = project.fps
+  }, [project.fps])
+  useEffect(() => {
+    let last = -1
+    return useEditor.subscribe((s) => {
+      if (s.currentTime === last) return
+      last = s.currentTime
+      const el = timecodeRef.current
+      if (el) el.textContent = formatTimecode(s.currentTime, fpsRef.current)
+    })
+  }, [])
 
   // ---- Day 13 compare split (original ⇔ graded) ----
   const [compare, setCompare] = useState(false)
@@ -340,26 +361,29 @@ export function PreviewPane() {
 
   const mediaMap = useMemo(() => useEditor.getState().getMediaMap(), [mediaVersion])
 
-  /* -------- empty-stage hint -------- */
+  /* -------- empty-stage hint --------
+     UX60 Phase 7 — playhead-dependent booleans became SELECTORS: they only
+     re-render this big component when the answer flips (playhead crossing a
+     clip edge), not on every frame of playback. */
   const visualClipCount = project.clips.filter((c) => c.kind !== 'audio').length
-  const hasVisual = project.clips.some((c) => {
-    if (c.kind === 'audio') return false
-    const track = project.tracks.find((tr) => tr.id === c.trackId)
-    if (track?.hidden) return false
-    return timeVisible(c.start, c.duration, currentTime)
-  })
+  const hasVisual = useEditor((s) =>
+    s.project.clips.some((c) => {
+      if (c.kind === 'audio') return false
+      const track = s.project.tracks.find((tr) => tr.id === c.trackId)
+      if (track?.hidden) return false
+      return timeVisible(c.start, c.duration, s.currentTime)
+    }),
+  )
 
   /* -------- selection overlay -------- */
   const selectedId = selectedClipIds.length === 1 ? selectedClipIds[0] : null
   const selectedClip = selectedId ? project.clips.find((c) => c.id === selectedId) : undefined
-  const showOverlay = Boolean(
-    !isPlaying &&
-      selectedClip &&
-      // compounds move/scale from their contents (open one to transform it)
-      selectedClip.kind !== 'audio' &&
-      selectedClip.kind !== 'nested' &&
-      timeVisible(selectedClip.start, selectedClip.duration, currentTime)
-  )
+  const showOverlay = useEditor((s) => {
+    if (s.isPlaying || s.selectedClipIds.length !== 1) return false
+    const c = s.project.clips.find((x) => x.id === s.selectedClipIds[0])
+    if (!c || c.kind === 'audio' || c.kind === 'nested') return false
+    return timeVisible(c.start, c.duration, s.currentTime)
+  })
   // Engine bounds reflect the last rendered frame; estimate is the fallback.
   const bounds: ClipBounds | null =
     showOverlay && selectedClip
@@ -827,7 +851,7 @@ export function PreviewPane() {
         </Button>
 
         <div className="ml-1 flex shrink-0 items-baseline gap-1 font-mono text-xs tabular-nums">
-          <span className="text-foreground">{formatTimecode(currentTime, fps)}</span>
+          <span className="text-foreground" ref={timecodeRef} suppressHydrationWarning>{formatTimecode(useEditor.getState().currentTime, fps)}</span>
           <span className="text-muted-foreground">/</span>
           <span className="text-muted-foreground max-sm:hidden">{formatTimecode(duration, fps)}</span>
         </div>

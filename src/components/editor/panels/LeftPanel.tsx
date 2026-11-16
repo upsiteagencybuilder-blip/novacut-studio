@@ -14,19 +14,29 @@ import {
   Type,
   WandSparkles,
 } from 'lucide-react'
+import { lazy, Suspense, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useEditor } from '@/lib/editor/store'
 import type { PanelTab } from '@/lib/editor/types'
 import { rovingGridKeydown } from '@/lib/editor/roving'
 import { useLabel } from '@/lib/i18n/labels'
-import { AudioPanel } from './AudioPanel'
-import { AIPanel } from './AIPanel'
-import { EffectsPanel } from './EffectsPanel'
 import { MediaPanel } from './MediaPanel'
-import { ProToolkitPanel } from './ProToolkitPanel'
-import { StickerPanel } from './StickerPanel'
-import { TextPanel } from './TextPanel'
+// UX60 Phase 7 (Days 49–50) — panels lazy-mount on their FIRST open, not at
+// startup. MediaPanel stays static (default tab, quickstart checklist).
+// Once visited a panel STAYS mounted (hidden with [hidden]) so re-switching
+// is instant and panel state (scroll, filters, drafts) survives — the
+// deactivation side-effects panels used to run on unmount moved to an
+// `active` prop contract (EffectsPanel previews, SoundBrowser preview,
+// AudioPanel voiceover recording).
+const TextPanel = lazy(() => import('./TextPanel').then((m) => ({ default: m.TextPanel })))
+const StickerPanel = lazy(() => import('./StickerPanel').then((m) => ({ default: m.StickerPanel })))
+const EffectsPanel = lazy(() => import('./EffectsPanel').then((m) => ({ default: m.EffectsPanel })))
+const AudioPanel = lazy(() => import('./AudioPanel').then((m) => ({ default: m.AudioPanel })))
+const AIPanel = lazy(() => import('./AIPanel').then((m) => ({ default: m.AIPanel })))
+const ProToolkitPanel = lazy(() => import('./ProToolkitPanel').then((m) => ({ default: m.ProToolkitPanel })))
+import { PanelSkeleton, PanelGridSkeleton } from './PanelSkeleton'
 
 /**
  * UX60 Phase 6 (Days 41–43) — the canonical panel order. Alt+1..Alt+9 in
@@ -77,6 +87,28 @@ const PANEL_POSITION: Record<PanelTab, number> = {
   audio: 5,
   ai: 6,
   pro: 7,
+}
+
+/**
+ * UX60 Phase 7 (Days 49–52) — mount-on-first-open keep-alive wrapper.
+ * First activation renders the children behind a Suspense skeleton while the
+ * lazy chunk evaluates; afterwards the panel stays mounted and is simply
+ * hidden when inactive (instant re-switching, preserved panel state).
+ */
+function KeepAlive({ active, skeleton, children }: { active: boolean; skeleton: ReactNode; children: ReactNode }) {
+  const [visited, setVisited] = useState(active)
+  // mark-during-render (React's sanctioned derived-state adjustment): the
+  // first activation permanently marks this panel visited — no effect needed.
+  if (active && !visited) {
+    setVisited(true)
+  }
+  return (
+    <div hidden={!active} className="h-full" data-nc-keep-alive={visited ? '' : undefined}>
+      {visited ? (
+        <Suspense fallback={skeleton}>{children}</Suspense>
+      ) : null}
+    </div>
+  )
 }
 
 export function LeftPanel() {
@@ -160,13 +192,27 @@ export function LeftPanel() {
           className={`min-h-0 flex-1 overflow-y-auto p-3 ${panelDensity === 'compact' ? 'nc-density-compact' : ''}`}
           data-nc-panel-body
         >
-          {panelTab === 'media' && <MediaPanel />}
-          {panelTab === 'text' && <TextPanel />}
-          {panelTab === 'stickers' && <StickerPanel />}
-          {panelTab === 'effects' && <EffectsPanel />}
-          {panelTab === 'audio' && <AudioPanel />}
-          {panelTab === 'ai' && <AIPanel />}
-          {panelTab === 'pro' && <ProToolkitPanel />}
+          <KeepAlive active={panelTab === 'media'} skeleton={<PanelGridSkeleton />}>
+            <MediaPanel />
+          </KeepAlive>
+          <KeepAlive active={panelTab === 'text'} skeleton={<PanelSkeleton />}>
+            <TextPanel />
+          </KeepAlive>
+          <KeepAlive active={panelTab === 'stickers'} skeleton={<PanelGridSkeleton />}>
+            <StickerPanel />
+          </KeepAlive>
+          <KeepAlive active={panelTab === 'effects'} skeleton={<PanelGridSkeleton />}>
+            <EffectsPanel active={panelTab === 'effects'} />
+          </KeepAlive>
+          <KeepAlive active={panelTab === 'audio'} skeleton={<PanelSkeleton />}>
+            <AudioPanel active={panelTab === 'audio'} />
+          </KeepAlive>
+          <KeepAlive active={panelTab === 'ai'} skeleton={<PanelSkeleton />}>
+            <AIPanel />
+          </KeepAlive>
+          <KeepAlive active={panelTab === 'pro'} skeleton={<PanelGridSkeleton />}>
+            <ProToolkitPanel />
+          </KeepAlive>
         </div>
       </div>
     </div>

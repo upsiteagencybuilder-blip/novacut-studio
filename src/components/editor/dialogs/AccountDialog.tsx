@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface LinkedDevice {
   deviceId: string
@@ -103,8 +104,20 @@ export function AccountDialog() {
         </DialogHeader>
 
         {status === 'loading' ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          // UX60 Phase 7 (Days 51–52) — cloud session check gets the account
+          // card's skeleton shape, never a bare spinner
+          <div className="space-y-3 py-1" data-nc-cloud-skeleton role="status" aria-label="Checking cloud account…">
+            <div className="flex items-center gap-3 rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-3">
+              <Skeleton className="size-9 shrink-0 rounded-lg" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className="h-3 w-28 rounded-full" />
+                <Skeleton className="h-2 w-20 rounded-full" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-9 w-full rounded-md" />
+              <Skeleton className="h-9 w-full rounded-md" />
+            </div>
           </div>
         ) : session ? (
           <div className="space-y-3">

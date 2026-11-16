@@ -43,7 +43,7 @@ function isSound(effect: Effect): effect is SoundEffect {
   return effect.category === 'sound' || effect.category === 'music'
 }
 
-export function SoundBrowser({ category }: { category: 'music' | 'sound' }) {
+export function SoundBrowser({ category, active = true }: { category: 'music' | 'sound'; active?: boolean }) {
   const families = useMemo(() => effectFamilies(category), [category])
   const familyLabel = category === 'music' ? 'Genre' : 'Family'
   const emptyText =
@@ -75,6 +75,15 @@ export function SoundBrowser({ category }: { category: 'music' | 'sound' }) {
       if (playingId !== null) stopPreview()
     }
   }, [category])
+
+  /* UX60 Phase 7 — keep-alive deactivation plays the unmount role */
+  useEffect(() => {
+    if (active) return
+    if (endTimer.current !== null) window.clearTimeout(endTimer.current)
+    endTimer.current = null
+    if (playingId !== null) stopPreview()
+    setPlayingId(null)
+  }, [active, playingId])
 
   const toggleFavorite = useCallback((id: string) => {
     setFavorites((prev) => {
@@ -312,7 +321,10 @@ function SoundCard({
       >
         <span className='flex h-10 w-full items-center justify-center text-xl' aria-hidden>
           {loading ? (
-            <Loader2 className='size-4 animate-spin text-fuchsia-300' />
+            <span className='relative flex h-10 w-full items-center justify-center overflow-hidden' data-nc-rendering>
+              <span className='absolute inset-0 animate-pulse bg-(--nc-panel-strong)' />
+              <Loader2 className='relative size-4 animate-spin text-fuchsia-300' />
+            </span>
           ) : playing ? (
             <span className='flex size-7 items-center justify-center rounded-full bg-emerald-500/20'>
               <Square className='size-3 fill-emerald-300 text-emerald-300' />

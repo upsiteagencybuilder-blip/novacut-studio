@@ -25,6 +25,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useEditor } from '@/lib/editor/store'
 import { importFiles } from '@/lib/editor/importer'
 import { formatBytes, formatShortTime } from '@/lib/editor/utils'
@@ -325,12 +326,15 @@ export function MediaPanel() {
 
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
+  // UX60 Phase 7 — in-flight import count drives the skeleton tiles
+  const [pendingCount, setPendingCount] = useState(0)
 
   /** Import pipeline: importFiles → addMediaAsset → toasts */
   const handleFiles = useCallback(
     async (files: File[]) => {
       if (files.length === 0) return
       setImporting(true)
+      setPendingCount(files.length)
       try {
         const assets = await importFiles(files)
         assets.forEach(addMediaAsset)
@@ -426,6 +430,21 @@ export function MediaPanel() {
           </div>
         )}
       </div>
+
+      {/* UX60 Phase 7 (Days 51–52) — while the import scans (duration/thumb/peaks),
+          skeleton tiles preview the shape the assets will land in */}
+      {importing && (
+        <div className="grid grid-cols-2 gap-2" data-nc-import-skeleton role="status" aria-label="Importing media">
+          {Array.from({ length: Math.min(4, Math.max(1, pendingCount)) }, (_, i) => (
+            <div key={i} className="overflow-hidden rounded-lg border border-(--nc-line)" aria-hidden>
+              <Skeleton className="aspect-video w-full rounded-none" />
+              <div className="space-y-1.5 p-2">
+                <Skeleton className="h-2 w-3/4 rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ------- assets grid — UX60 Phase 6: arrow-key roving ------- */}
       {media.length > 0 ? (

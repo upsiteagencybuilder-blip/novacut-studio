@@ -22,8 +22,13 @@ import { projectDuration, clamp, formatTimecode } from '@/lib/editor/utils'
 import { TopBar } from '@/components/editor/TopBar'
 import { LeftPanel, PANEL_TAB_ORDER } from '@/components/editor/panels/LeftPanel'
 import { PreviewPane } from '@/components/editor/preview/PreviewPane'
-import { PropertiesPanel } from '@/components/editor/preview/PropertiesPanel'
 import { Timeline } from '@/components/editor/timeline/Timeline'
+// UX60 Phase 7 (Days 49–50) — the 4.6k-line properties panel is the biggest
+// module in the app; it must NOT sit in the critical shell-paint path. It
+// lazy-loads behind a real skeleton (desktop rail + mobile sheet) right after
+// the shell paints, so the shell itself beats the 1s budget.
+const PropertiesPanel = lazy(() => import('@/components/editor/preview/PropertiesPanel').then((m) => ({ default: m.PropertiesPanel })))
+import { PropertiesSkeleton } from '@/components/editor/panels/PanelSkeleton'
 // Day 63 — code splitting: every dialog is a lazy chunk, pulled only when it
 // first OPENS (conditional render below) — the startup bundle stays lean.
 const ExportDialog = lazy(() => import('@/components/editor/dialogs/ExportDialog').then((m) => ({ default: m.ExportDialog })))
@@ -541,11 +546,41 @@ export function EditorShell() {
   const keyboard = useKeyboardShortcuts()
   const timeline = useTimelineHeight()
   const [mobileSheet, setMobileSheet] = useState<'tools' | 'props' | null>(null)
+  // UX60 Phase 7 (Days 49–50) — the properties panel chunk is the biggest
+  // module in the app: evaluating it in the ready-commit window delayed the
+  // first shell PAINT by ~300ms. Paint FIRST (skeleton in place), then mount
+  // the panel — the chunk fetch+eval lands after the studio is on screen.
+  const [propsReady, setPropsReady] = useState(false)
   void keyboard
 
   useEffect(() => {
     void init()
   }, [init])
+
+  // First-shell-paint probe (UX60 Phase 7): fires one rAF AFTER the ready
+  // shell commits — the mark lands on the frame the user actually SEES the
+  // studio (the store's ready mark measures hydration, not pixels). The
+  // properties panel un-suspends on the same frame so its chunk fetch starts
+  // behind the paint instead of inside it.
+  const paintedRef = useRef(false)
+  useEffect(() => {
+    if (!ready || paintedRef.current) return
+    paintedRef.current = true
+    requestAnimationFrame(() => {
+      try {
+        performance.mark('novacut:shell-paint')
+        const entries = performance.getEntriesByName('novacut:shell-paint')
+        const t = entries.length ? Math.round(entries[entries.length - 1].startTime) : 0
+        ;(window as unknown as { __ncShellPaintMs?: number }).__ncShellPaintMs = t
+        void import('@/lib/editor/db').then(({ setKV }) =>
+          setKV('lastPaintMs', { ms: t, at: Date.now() }).catch(() => undefined)
+        )
+      } catch {
+        /* performance API unavailable — skip */
+      }
+      setPropsReady(true)
+    })
+  }, [ready])
 
   // Day 64 — local telemetry listeners (idempotent, never networked)
   useEffect(() => {
@@ -630,7 +665,13 @@ export function EditorShell() {
               <PreviewPane />
             </section>
             <aside className="h-full w-[318px] shrink-0 border-l border-(--nc-line) bg-(--nc-panel-soft)">
-              <PropertiesPanel />
+              {propsReady ? (
+                <Suspense fallback={<PropertiesSkeleton />}>
+                  <PropertiesPanel />
+                </Suspense>
+              ) : (
+                <PropertiesSkeleton />
+              )}
             </aside>
           </main>
           {/* timeline resize handle */}
@@ -678,7 +719,9 @@ export function EditorShell() {
                 <SheetTitle>Properties</SheetTitle>
                 <SheetDescription>Edit the selected clip properties.</SheetDescription>
               </SheetHeader>
-              <PropertiesPanel />
+              <Suspense fallback={<PropertiesSkeleton />}>
+                <PropertiesPanel />
+              </Suspense>
             </SheetContent>
           </Sheet>
         </>

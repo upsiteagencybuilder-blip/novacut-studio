@@ -69,7 +69,6 @@ const TOOL_BTN = 'h-8 w-8 text-foreground/65 hover:text-foreground'
 export function TimelineToolbar({ className }: TimelineToolbarProps) {
   const l = useLabel()
   const project = useEditor((s) => s.project)
-  const currentTime = useEditor((s) => s.currentTime)
   const zoom = useEditor((s) => s.zoom)
   const snapEnabled = useEditor((s) => s.snapEnabled)
   const selectedIds = useEditor((s) => s.selectedClipIds)
@@ -112,18 +111,31 @@ export function TimelineToolbar({ className }: TimelineToolbarProps) {
   const duration = projectDuration(project)
   const fps = project.fps
   const hasSelection = selectedIds.length > 0
+  // UX60 Phase 7 (Days 53–54) — playhead-dependent button gates are BOOLEAN
+  // selectors: they re-evaluate on every store change but only re-render the
+  // toolbar when the answer actually flips (playhead crossing clip edges),
+  // so playback/scrub no longer re-renders the whole toolbar per frame.
   // mirror the store's splitAtPlayhead target logic so the button enables exactly when a split can happen
-  const canSplit = selectedIds.length
-    ? project.clips.some((c) => selectedIds.includes(c.id) && currentTime > c.start && currentTime < c.start + c.duration)
-    : project.clips.some((c) => currentTime > c.start + 0.08 && currentTime < c.start + c.duration - 0.08)
+  const canSplit = useEditor((s) => {
+    const t = s.currentTime
+    return s.selectedClipIds.length
+      ? s.project.clips.some((c) => s.selectedClipIds.includes(c.id) && t > c.start && t < c.start + c.duration)
+      : s.project.clips.some((c) => t > c.start + 0.08 && t < c.start + c.duration - 0.08)
+  })
   // mirror the store's insertFreezeFrame target logic — any video/image under the playhead works
-  const canFreeze = project.clips.some(
-    (c) => (c.kind === 'video' || c.kind === 'image') && currentTime >= c.start && currentTime < c.start + c.duration,
-  )
+  const canFreeze = useEditor((s) => {
+    const t = s.currentTime
+    return s.project.clips.some(
+      (c) => (c.kind === 'video' || c.kind === 'image') && t >= c.start && t < c.start + c.duration,
+    )
+  })
   // mirror the store's extractAudioFromVideo target logic — selected video OR video under the playhead
-  const canExtract = project.clips.some(
-    (c) => c.kind === 'video' && (selectedIds.includes(c.id) || (currentTime >= c.start && currentTime < c.start + c.duration)),
-  )
+  const canExtract = useEditor((s) => {
+    const t = s.currentTime
+    return s.project.clips.some(
+      (c) => c.kind === 'video' && (s.selectedClipIds.includes(c.id) || (t >= c.start && t < c.start + c.duration)),
+    )
+  })
 
   const setZoom = (z: number) => useEditor.getState().setZoom(z)
 

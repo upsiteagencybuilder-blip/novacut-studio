@@ -20,6 +20,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { HEADER_WIDTH, MARKER_COLORS, RULER_HEIGHT, TRACK_HEIGHT } from '@/lib/editor/constants'
 import { useEditor } from '@/lib/editor/store'
+import { bumpRenderCount } from '@/lib/editor/perf'
 import { useLabel } from '@/lib/i18n/labels'
 import { openCompound } from '@/lib/editor/nested'
 import { transitionPairsForTrack } from '@/lib/editor/transitionBridge'
@@ -64,8 +65,10 @@ function isCompatible(kind: ClipKind, track: Track): boolean {
 }
 
 export function Timeline() {
+  // UX60 Phase 7 (Days 53–54) — honest render counter (see lib/editor/perf.ts):
+  // a per-frame re-render here shows up instantly in the scripted-drag counts.
+  bumpRenderCount('timeline')
   const project = useEditor((s) => s.project)
-  const currentTime = useEditor((s) => s.currentTime)
   const zoom = useEditor((s) => s.zoom)
   const isPlaying = useEditor((s) => s.isPlaying)
   const selectedIds = useEditor((s) => s.selectedClipIds)
@@ -125,16 +128,47 @@ export function Timeline() {
     return () => ro.disconnect()
   }, [])
 
-  /* auto-follow: keep the playhead visible during playback */
+  /* UX60 Phase 7 (Days 53–54) — the playhead is now DIRECT-DOM (the meter
+     pattern from the transport suite): a clock loop writes its transform +
+     the follow-scroll straight to the DOM at display rate, so playback and
+     scrubbing no longer re-render this whole component every frame. The
+     store keeps the truth; this loop only MIRRORS it cheaply (pure math —
+     no per-frame layout reads).
+     The same loop rAF-coalesces scrub commits (≤1 store write per frame). */
+  const playheadRef = useRef<HTMLDivElement>(null)
+  const scrubPendingRef = useRef<number | null>(null)
+  const lastHeadXRef = useRef(HEADER_WIDTH)
   useEffect(() => {
-    if (!isPlaying) return
-    const el = scrollRef.current
-    if (!el) return
-    const x = HEADER_WIDTH + currentTime * zoom
-    if (x < el.scrollLeft + 80 || x > el.scrollLeft + el.clientWidth - 80) {
-      el.scrollLeft = Math.max(0, x - el.clientWidth * 0.3)
+    let raf = 0
+    const tick = () => {
+      raf = requestAnimationFrame(tick)
+      let st = useEditor.getState()
+      const pending = scrubPendingRef.current
+      if (pending !== null) {
+        scrubPendingRef.current = null
+        if (pending !== st.currentTime) st.setCurrentTime(pending)
+        st = useEditor.getState()
+      }
+      const t = st.currentTime
+      const z = zoomRef.current
+      const x = HEADER_WIDTH + t * z
+      if (Math.abs(lastHeadXRef.current - x) > 0.25) {
+        lastHeadXRef.current = x
+        const ph = playheadRef.current
+        if (ph) ph.style.transform = `translateX(${t * z}px)`
+      }
+      if (st.isPlaying) {
+        const el = scrollRef.current
+        if (el) {
+          if (x < el.scrollLeft + 80 || x > el.scrollLeft + el.clientWidth - 80) {
+            el.scrollLeft = Math.max(0, x - el.clientWidth * 0.3)
+          }
+        }
+      }
     }
-  }, [currentTime, isPlaying, zoom])
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
 
   /* UX60 Phase 2 (Days 13–14) — smart trim hints: when exactly one clip with
      audio is selected, analyze its silence boundaries once (debounced, cached
@@ -171,7 +205,10 @@ export function Timeline() {
     const el = scrollRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
-    useEditor.getState().setCurrentTime((clientX - rect.left + el.scrollLeft - HEADER_WIDTH) / zoomRef.current)
+    // UX60 Phase 7 — rAF-coalesced: the clock loop commits ≤1 store write per
+    // frame; the playhead itself still moves instantly (direct-DOM below).
+    const t = (clientX - rect.left + el.scrollLeft - HEADER_WIDTH) / zoomRef.current
+    scrubPendingRef.current = Math.max(0, t)
   }, [])
 
   /* shared scrub drag for the ruler and the playhead handle */
@@ -436,10 +473,13 @@ export function Timeline() {
                 />
               )}
 
-              {/* playhead (moves with scroll — lives inside the content) */}
+              {/* playhead (moves with scroll — lives inside the content).
+                  UX60 Phase 7: position is DIRECT-DOM — the clock loop writes
+                  translateX at display rate; React renders only the base. */}
               <div
+                ref={playheadRef}
                 className="pointer-events-none absolute inset-y-0 z-[45]"
-                style={{ left: HEADER_WIDTH + currentTime * zoom }}
+                style={{ left: HEADER_WIDTH, transform: `translateX(${useEditor.getState().currentTime * zoom}px)` }}
               >
                 <div className="absolute inset-y-0 left-0 w-px bg-(--nc-accent-400) shadow-[0_0_7px_var(--nc-playhead-glow)]" />
                 <div

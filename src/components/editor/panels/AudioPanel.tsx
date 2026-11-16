@@ -48,7 +48,7 @@ function formatClock(seconds: number): string {
 
 /* ---------------- voiceover recorder ---------------- */
 
-function VoiceoverRecorder() {
+function VoiceoverRecorder({ active = true }: { active?: boolean }) {
   const [recState, setRecState] = useState<RecState>('idle')
   const [elapsed, setElapsed] = useState(0)
 
@@ -230,6 +230,19 @@ function VoiceoverRecorder() {
     }
   }, [cleanupCapture])
 
+  // UX60 Phase 7 (Days 49–50) — the audio panel keeps alive after its first
+  // open; deactivation now plays the unmount role: a mid-recording leave
+  // discards the take exactly like the unmount path did.
+  useEffect(() => {
+    if (active) return
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      discardRef.current = true
+      recorderRef.current.stop()
+      cleanupCapture()
+      setRecState('idle')
+    }
+  }, [active, cleanupCapture])
+
   return (
     <div className="nc-glass rounded-lg p-3">
       <div className="flex items-center justify-between">
@@ -317,7 +330,7 @@ const AUDIO_TABS: Array<{ id: AudioTab; label: string; icon: typeof Music }> = [
   { id: 'sfx', label: 'SFX', icon: AudioWaveform },
 ]
 
-export function AudioPanel() {
+export function AudioPanel({ active = true }: { active?: boolean }) {
   const [tab, setTab] = useState<AudioTab>('library')
 
   return (
@@ -348,14 +361,14 @@ export function AudioPanel() {
         ))}
       </div>
 
-      {tab === 'library' && <LibraryTab />}
-      {tab === 'music' && <SoundBrowser category='music' />}
-      {tab === 'sfx' && <SoundBrowser category='sound' />}
+      {tab === 'library' && <LibraryTab active={active} />}
+      {tab === 'music' && <SoundBrowser category='music' active={active} />}
+      {tab === 'sfx' && <SoundBrowser category='sound' active={active} />}
     </div>
   )
 }
 
-function LibraryTab() {
+function LibraryTab({ active = true }: { active?: boolean }) {
   const media = useEditor((s) => s.media)
   const audioAssets = media.filter((m) => m.kind === 'audio')
   const setImporting = useEditor((s) => s.setImporting)
@@ -419,7 +432,7 @@ function LibraryTab() {
   return (
     <div className='space-y-3'>
       {/* ---------- voiceover recorder ---------- */}
-      <VoiceoverRecorder />
+      <VoiceoverRecorder active={active} />
 
       {/* ---------- master volume ---------- */}
       <div className='nc-glass rounded-lg p-3'>

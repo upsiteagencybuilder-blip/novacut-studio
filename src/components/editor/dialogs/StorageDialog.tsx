@@ -67,6 +67,8 @@ export function StoragePanel() {
   const [memReport, setMemReport] = useState<MediaMemoryReport | null>(null)
   // Day 63 — measured startup time (written by the store on hydration)
   const [startupMs, setStartupMs] = useState<number | null>(null)
+  // UX60 Phase 7 — first shell paint (written by the ShellPaintProbe)
+  const [paintMs, setPaintMs] = useState<number | null>(null)
   // Day 64 — local telemetry log (never networked)
   const [errors, setErrors] = useState<TelemetryEntry[]>([])
 
@@ -75,6 +77,9 @@ export function StoragePanel() {
     setMemReport(getMediaReport(media))
     void getKV<{ ms: number; at: number }>('lastStartupMs')
       .then((v) => setStartupMs(v?.ms ?? null))
+      .catch(() => undefined)
+    void getKV<{ ms: number; at: number }>('lastPaintMs')
+      .then((v) => setPaintMs(v?.ms ?? null))
       .catch(() => undefined)
     setErrors(getRecentErrors())
   }, [media])
@@ -184,6 +189,11 @@ export function StoragePanel() {
             label="Last startup (measured, this device)"
             value={startupMs != null ? `${startupMs} ms` : '—'}
             hint="navigation → editor hydrated"
+          />
+          <StatRow
+            label="First shell paint (measured, this device)"
+            value={paintMs != null ? `${paintMs} ms` : '—'}
+            hint="navigation → studio pixels visible"
           />
           <StatRow label="Projects (IndexedDB)" value={String(report?.projectCount ?? '—')} />
           <StatRow label="Version snapshots" value={String(report?.versionCount ?? '—')} />

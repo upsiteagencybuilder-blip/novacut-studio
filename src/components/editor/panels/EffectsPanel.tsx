@@ -446,7 +446,10 @@ function AudioCard({
       >
         <span className="flex h-12 w-full items-center justify-center bg-(--nc-scrim) text-2xl" aria-hidden>
           {loading ? (
-            <Loader2 className="size-5 animate-spin text-fuchsia-300" />
+            <span className="relative flex h-12 w-full items-center justify-center overflow-hidden" data-nc-rendering>
+              <span className="absolute inset-0 animate-pulse bg-(--nc-panel-strong)" />
+              <Loader2 className="relative size-5 animate-spin text-fuchsia-300" />
+            </span>
           ) : playing ? (
             <AudioLines className="size-6 animate-pulse text-emerald-300" />
           ) : (
@@ -538,7 +541,10 @@ function VoiceCard({
       >
         <span className="flex h-12 w-full items-center justify-center bg-(--nc-scrim) text-2xl" aria-hidden>
           {loading ? (
-            <Loader2 className="size-5 animate-spin text-fuchsia-300" />
+            <span className="relative flex h-12 w-full items-center justify-center overflow-hidden" data-nc-rendering>
+              <span className="absolute inset-0 animate-pulse bg-(--nc-panel-strong)" />
+              <Loader2 className="relative size-5 animate-spin text-fuchsia-300" />
+            </span>
           ) : playing ? (
             <AudioLines className="size-6 animate-pulse text-emerald-300" />
           ) : (
@@ -639,7 +645,7 @@ function SpeedCard({
 
 /* ---------------- panel ---------------- */
 
-export function EffectsPanel() {
+export function EffectsPanel({ active = true }: { active?: boolean }) {
   const clip = useEditor((s) => s.project.clips.find((c) => c.id === s.selectedClipIds[0]))
   const updateClip = useEditor((s) => s.updateClip)
   const addMediaAsset = useEditor((s) => s.addMediaAsset)
@@ -713,6 +719,17 @@ export function EffectsPanel() {
       if (voiceEndTimer.current !== null) window.clearTimeout(voiceEndTimer.current)
     }
   }, [])
+
+  // UX60 Phase 7 (Days 49–50) — panels keep-alive after their first open
+  // (lazy-mount once, stay mounted for instant re-switching): deactivation
+  // now plays the unmount role — silence any running preview.
+  useEffect(() => {
+    if (active) return
+    stopPreview()
+    stopVoicePreview()
+    if (previewEndTimer.current !== null) window.clearTimeout(previewEndTimer.current)
+    if (voiceEndTimer.current !== null) window.clearTimeout(voiceEndTimer.current)
+  }, [active])
 
   // new filter context → back to the first page; leaving Packs closes the open pack
   useEffect(() => {
