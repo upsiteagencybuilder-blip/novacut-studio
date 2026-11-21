@@ -14,7 +14,6 @@ import {
   BadgeCheck,
   Ban,
   Captions,
-  CheckCircle2,
   ChevronDown,
   Copy,
   Download,
@@ -45,6 +44,7 @@ import {
   startExport,
   supportedExportMimeTypes,
 } from '@/lib/editor/exporter'
+import { ExportFilmStrip, ExportSuccessBurst } from './ExportCelebration'
 import { EXPORT_PRESETS, EXPORT_QUALITY_PRESETS } from '@/lib/editor/constants'
 import { getSmartDefaultExportPreset, recordExportPreset } from '@/lib/editor/smart-defaults'
 import {
@@ -1587,9 +1587,15 @@ export function ExportDialog() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
                 </span>
-                Recording in real time…
+                {phase === 'finalizing' ? 'Finalizing the file…' : 'Recording in real time…'}
               </p>
             </div>
+
+            {/* Day 55-56 — film-strip progress: segments fill as the render advances */}
+            <ExportFilmStrip
+              progress={phase === 'finalizing' ? 1 : exportState.progress}
+              finalizing={phase === 'finalizing'}
+            />
 
             <div className="h-2 w-full overflow-hidden rounded-full bg-(--nc-panel-strong)">
               <div
@@ -1617,8 +1623,9 @@ export function ExportDialog() {
         {phase === 'done' && (
           <div className="space-y-3">
             <div className="text-center">
-              <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-400" />
-              <p className="mt-2 font-bold">Export complete!</p>
+              {/* Day 55-56 — one-shot success burst behind the check (restrained, brand palette) */}
+              <ExportSuccessBurst />
+              <p className="nc-gradient-text mt-2 font-bold">Export complete!</p>
               <div className="mt-2 flex items-center justify-center gap-2">
                 <span className="rounded-md border border-(--nc-line) bg-(--nc-panel) px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
                   {formatBytes(exportState.sizeBytes ?? 0)}

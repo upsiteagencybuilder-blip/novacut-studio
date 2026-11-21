@@ -113,7 +113,7 @@
 
 | Day | Deliverable | Status |
 | --- | --- | --- |
-| 55–56 | Export celebration: progress film-strip + success moment (restrained, brand-consistent) | ⬜ |
+| 55–56 | Export celebration: progress film-strip + success moment (restrained, brand-consistent) | ✅ (this commit — real-export proven: strip tracks store progress exactly, one-shot burst ends invisible, reduced-motion covered) |
 | 57–58 | Micro-interaction pass: consistent hover/press/success motion (respects reduced-motion) | ⬜ |
 | 59 | Full-site UX sweep + docs refresh (help dialog mirrors new features) | ⬜ |
 | 60 | **v1.1.0 "UX edition"** release: tag, deploy checklist, changelog, honest catalog recount | ⬜ |
