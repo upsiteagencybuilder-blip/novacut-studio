@@ -41,8 +41,18 @@ Trim and cut on a multi-track timeline, add text, stickers, cinematic filters an
 - **Onboarding v2** — contextual tips fired once on measured conditions
 - **i18n scaffold (en/bn)** — cookie-driven locale, hand-written Bengali onboarding door
 - **Editable keyboard shortcuts** — capture UI, conflict detection, device-local persistence, safe reset
-- **Command palette (⌘K)** — 27 live commands, every one dispatching to a real feature
+- **Command palette (⌘K)** — honest search; natural-language phrasings ("make my title bigger and gold") resolve to real actions
 - **Accessibility** — global focus-visible ring, skip link, landmarks, contrast promotions
+
+### UX 60-day edition (v1.1.0)
+- **First-cut speed** — use-case canvas picker, first-run coach marks, quick-start checklist
+- **Smart assistance** — one-click cut-to-beat, highlight-reel suggest, silence-snap trim hints, selection-aware context toolbar
+- **Guided workflows** — 4 task templates (Reels hook / YouTube intro / promo / end screen), step-by-step walkthrough banner, smart defaults that remember your panel/canvas/export preset
+- **Progressive disclosure** — one-switch Simple mode, contextual chroma/keyframe tools, comfortable/compact density
+- **Forgiveness** — history state browser with impact counts, impact-preview confirmations, draft-recovery banner, actionable empty states
+- **Accessibility & Bangla** — complete keyboard map (Alt+1–9) + printable sheet, ARIA/focus-trap audit, Bangla primary chrome, contrast/reduced-motion/44px audits
+- **Perceived performance** — lazy panels + post-paint properties load, real skeletons on every long async surface, direct-DOM playhead/scrub (1 render per playback, not per frame)
+- **Delight** — film-strip export progress + one-shot success burst (reduced-motion safe), consistent press/lift/pop micro-interactions, help dialog mirroring the new features
 
 ### Cloud (optional)
 - Device-key based project backup/restore to Turso, share links, versioned snapshots, feedback —
@@ -53,7 +63,7 @@ Trim and cut on a multi-track timeline, add text, stickers, cinematic filters an
 ## Honesty rule
 
 Every user-facing entry point does what it says. Planned-but-missing features are labeled
-**planned** in the Pro Toolkit catalog (289 live / 291 planned) and never fake behavior.
+**planned** in the Pro Toolkit catalog (329 live · 8 beta · 272 planned) and never fake behavior.
 Numbers shown in the UI (storage, startup ms, cache files, command counts) are **measured live**.
 
 ---
@@ -83,6 +93,7 @@ bun run db:push      # sync Prisma schema (SQLite dev fallback)
 | `src/lib/cloud/` | optional Turso-backed backup/share/feedback |
 | `src/i18n/` + `messages/` | next-intl config and en/bn catalogs |
 | `docs/ROADMAP-90.md` | the 90-day build plan with the daily protocol |
+| `docs/UX-60-DAYS.md` | the 60-day UX-friendliness plan (v1.1.0 arc) |
 
 ## License
 

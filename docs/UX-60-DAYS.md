@@ -116,11 +116,20 @@
 | 55–56 | Export celebration: progress film-strip + success moment (restrained, brand-consistent) | ✅ (this commit — real-export proven: strip tracks store progress exactly, one-shot burst ends invisible, reduced-motion covered) |
 | 57–58 | Micro-interaction pass: consistent hover/press/success motion (respects reduced-motion) | ✅ (this commit — global press verb measured via trusted pointer: scale 0.96 while active; lift + pop verified; hover-media sandbox caveat disclosed) |
 | 59 | Full-site UX sweep + docs refresh (help dialog mirrors new features) | ✅ (this commit — whats-new block in the help dialog; 404 + 6 dialogs + palette + recovery banner swept on both viewports) |
-| 60 | **v1.1.0 "UX edition"** release: tag, deploy checklist, changelog, honest catalog recount | ⬜ |
+| 60 | **v1.1.0 "UX edition"** release: tag, deploy checklist, changelog, honest catalog recount | ✅ (this commit — v1.0.0→1.1.0 in package+manifest, docs/RELEASE-v1.1.0.md, catalog recount Live 329 / Beta 8 / Roadmap 272 read from the running app, tag v1.1.0) |
 
 **Exit criteria:** release receipts published; every plan item above is ✅ or honestly deferred with a reason in the worklog.
 
+> ✅ **Phase 8 complete** (this commit): film-strip export progress + one-shot success burst, the press/lift/pop micro-interaction system (reduced-motion safe), help dialog mirroring the shipped features, and the v1.1.0 "UX edition" release (version bump, release report, honest catalog recount Live 329 / Beta 8 / Roadmap 272, tag). Receipts in `worklog.md` (Tasks UX60-9 … UX60-12). Exit criterion MET: all 12 plan rows above are ✅ — nothing deferred.
+
 ---
+
+## Plan complete — final status
+
+All 8 phases shipped ✅ across commits `f03e2a9` … (this release). The honest
+ledger rule held for the whole 60 days: real behavior only, deep-linked from the
+Pro wall where relevant, E2E receipts on every batch, planned entries never
+silently flipped, and every unmeasurable number disclosed instead of faked.
 
 ## Honesty ledger
 - This document is a **plan, not a claim**: ⬜ items are not implemented. Only ✅ rows carry commit hashes.
