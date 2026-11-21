@@ -1487,7 +1487,7 @@ export function ExportDialog() {
               {queueJobs.length > 0 && (
                 <div className="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
                   {queueJobs.map((job) => (
-                    <div key={job.id} className="rounded-lg bg-(--nc-sheet) px-2.5 py-1.5">
+                    <div key={job.id} className="nc-mi-lift rounded-lg bg-(--nc-sheet) px-2.5 py-1.5">
                       <div className="flex items-center gap-2">
                         <span
                           className={cn(

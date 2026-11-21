@@ -1293,3 +1293,41 @@ input[type="range"].nc-range::-webkit-slider-thumb {
     animation: none;
   }
 }
+
+/* ================================================================
+ * UX60 Phase 8 (Days 57–58) — MICRO-INTERACTION SYSTEM
+ * Three motion verbs, one vocabulary ("pop" lives with the Days
+ * 55–56 celebration block above):
+ *   PRESS — every real <button> acknowledges the touch with a tiny
+ *           scale-down while pressed (mouse, touch, and Enter/Space
+ *           all fire :active). Element-level rule so any explicit
+ *           Tailwind transform utility on a button still wins.
+ *   LIFT  — opt-in .nc-mi-lift for card-like rows: rise 1px + soft
+ *           shadow on hover; settle back on press.
+ *   POP   — .nc-pop-in one-shot success pop.
+ * Transform/opacity/color-only — GPU-cheap; the global
+ * prefers-reduced-motion blanket collapses all of it. Disabled
+ * buttons never move. Drag surfaces (guides, compare handle, trim
+ * handles) are role=slider DIVs, deliberately NOT buttons, so drag
+ * gestures never scale.
+ * ================================================================ */
+button:not(:disabled) {
+  transition-property: transform, background-color, border-color, color, box-shadow, opacity;
+  transition-duration: 130ms;
+  transition-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+button:not(:disabled):active {
+  transform: scale(0.96);
+}
+.nc-mi-lift {
+  transition-property: transform, box-shadow, background-color, border-color, color;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.nc-mi-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px -12px rgb(0 0 0 / 0.55);
+}
+.nc-mi-lift:active {
+  transform: translateY(0) scale(0.98);
+}

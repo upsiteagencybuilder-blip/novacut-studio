@@ -297,7 +297,7 @@ function QuickStartChecklist() {
                     : 'border-(--nc-line-strong) text-[8px] font-bold text-muted-foreground'
                 }`}
               >
-                {item.done ? <Check className="size-2.5" /> : i + 1}
+                {item.done ? <Check className="size-2.5 nc-pop-in" /> : i + 1}
               </span>
               <span className="min-w-0">
                 <span className={`block text-[11px] font-medium leading-tight ${item.done ? 'text-emerald-300/90 line-through' : 'text-foreground/90'}`}>
