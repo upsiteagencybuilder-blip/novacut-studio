@@ -115,7 +115,7 @@
 | --- | --- | --- |
 | 55–56 | Export celebration: progress film-strip + success moment (restrained, brand-consistent) | ✅ (this commit — real-export proven: strip tracks store progress exactly, one-shot burst ends invisible, reduced-motion covered) |
 | 57–58 | Micro-interaction pass: consistent hover/press/success motion (respects reduced-motion) | ✅ (this commit — global press verb measured via trusted pointer: scale 0.96 while active; lift + pop verified; hover-media sandbox caveat disclosed) |
-| 59 | Full-site UX sweep + docs refresh (help dialog mirrors new features) | ⬜ |
+| 59 | Full-site UX sweep + docs refresh (help dialog mirrors new features) | ✅ (this commit — whats-new block in the help dialog; 404 + 6 dialogs + palette + recovery banner swept on both viewports) |
 | 60 | **v1.1.0 "UX edition"** release: tag, deploy checklist, changelog, honest catalog recount | ⬜ |
 
 **Exit criteria:** release receipts published; every plan item above is ✅ or honestly deferred with a reason in the worklog.

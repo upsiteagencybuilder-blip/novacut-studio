@@ -219,6 +219,24 @@ export function ShortcutsDialog() {
         </DialogHeader>
 
         <div className="max-h-[60vh] overflow-y-auto pr-1" data-nc-shortcut-list>
+          {/* Day 59 — the help surface mirrors the newest features (plain English,
+              consistent with the Phase-6 disclosure that long-form help text stays English) */}
+          <div
+            className="mb-2 rounded-xl border border-(--nc-line) bg-(--nc-panel-soft) p-2.5"
+            data-nc-whats-new
+            aria-label="What's new in this version"
+          >
+            <p className="text-[9px] font-semibold uppercase tracking-wide text-fuchsia-300">New in v1.1.0</p>
+            <ul className="mt-1.5 space-y-1 text-[11px] leading-snug text-muted-foreground">
+              <li>Simple mode — the header pill hides pro tools until you need them</li>
+              <li>The ⌘K palette understands plain language (&ldquo;make my title bigger and gold&rdquo;)</li>
+              <li>Cut to the beat — one click slices your video to the music (Audio panel)</li>
+              <li>Task templates — Reels hook, YouTube intro, promo, end screen (Projects)</li>
+              <li>History browser — jump to any of your last 150 edits (top bar)</li>
+              <li>Bangla UI toggle + this dialog&rsquo;s printable shortcut sheet</li>
+              <li>Export shows a film-strip progress and a small success moment</li>
+            </ul>
+          </div>
           {/* Day 71 — customizable actions first, each with an inline editor */}
           {ACTIONS.map((a) => (
             <ShortcutRow key={`${a.id}-${version}`} action={a} />
