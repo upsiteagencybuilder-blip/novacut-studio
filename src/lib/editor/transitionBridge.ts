@@ -33,6 +33,8 @@ export function wipeWindowOf(incoming: Clip): number | null {
  * The transition window (seconds) between an outgoing and adjacent incoming
  * clip, or null when no bridge is armed:
  *  - wipe bridge: incoming has a wipe mask + iris keys → window = mask reveal span
+ *  - flip bridge: incoming carries a bridgeFx 'flip' spec → window = spec window
+ *    (the scaleX key collapse/grow needs the live outgoing underneath)
  *  - fade bridge: outgoing.fadeOut > 0 and incoming.fadeIn > 0 → window = min of both
  * The window never exceeds either clip's duration.
  */
@@ -43,8 +45,11 @@ export function bridgeWindowFor(outgoing: Clip, incoming: Clip): number | null {
 
   let window: number | null = null
   const wipeWin = wipeWindowOf(incoming)
+  const fxWin = incoming.bridgeFx?.kind === 'flip' ? incoming.bridgeFx.window : undefined
   if (wipeWin != null && wipeWin > 0.01) {
     window = wipeWin
+  } else if (fxWin != null && fxWin > 0.01) {
+    window = fxWin
   } else if (outgoing.fadeOut > 0.01 && incoming.fadeIn > 0.01) {
     window = Math.min(outgoing.fadeOut, incoming.fadeIn)
   }

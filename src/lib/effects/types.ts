@@ -22,6 +22,7 @@
 
 import type {
   BlendMode,
+  BridgeFxSpec,
   ColorGrade,
   EasingType,
   Filters,
@@ -73,6 +74,12 @@ export interface TransitionPatch {
   fadeOut?: number
   motion?: MotionType
   motionIntensity?: number
+  /**
+   * Special bridge render path (v4 families: additive / non-additive dissolve,
+   * ripple, swirl, flip). Carried onto the INCOMING clip when applied; any
+   * transition without one clears it (null) so families never stick stale.
+   */
+  bridgeFx?: BridgeFxSpec | null
   /**
    * Shape-wipe mask set on the clip (wipe transitions). The mask progress is
    * driven by the patch's 'iris' keyframes (0 hidden → 1 revealed).

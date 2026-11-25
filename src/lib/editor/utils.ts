@@ -266,6 +266,8 @@ export const KEYFRAME_PROPERTIES: { id: KeyframeProperty; label: string; min: nu
   { id: 'x', label: 'Position X', min: -1, max: 1, step: 0.01 },
   { id: 'y', label: 'Position Y', min: -1, max: 1, step: 0.01 },
   { id: 'scale', label: 'Scale', min: 0.1, max: 4, step: 0.01 },
+  // per-axis horizontal scale (v4 Flip family) — negative values mirror the content
+  { id: 'scaleX', label: 'Scale X', min: -4, max: 4, step: 0.01 },
   { id: 'rotation', label: 'Rotation', min: -180, max: 180, step: 1, unit: '°' },
   { id: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.01 },
   { id: 'volume', label: 'Volume', min: 0, max: 1, step: 0.01 },
@@ -305,6 +307,9 @@ export function baseValueForProperty(clip: Clip, property: KeyframeProperty): nu
       return clip.transform.y
     case 'scale':
       return clip.transform.scale
+    case 'scaleX':
+      // per-axis scale multiplier (v4 Flip family) — 1 = no horizontal scaling
+      return 1
     case 'rotation':
       return clip.transform.rotation
     case 'opacity':

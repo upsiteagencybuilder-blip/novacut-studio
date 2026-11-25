@@ -63,7 +63,7 @@ Trim and cut on a multi-track timeline, add text, stickers, cinematic filters an
 ## Honesty rule
 
 Every user-facing entry point does what it says. Planned-but-missing features are labeled
-**planned** in the Pro Toolkit catalog (329 live · 8 beta · 272 planned) and never fake behavior.
+**planned** in the Pro Toolkit catalog (336 live · 8 beta · 265 planned) and never fake behavior.
 Numbers shown in the UI (storage, startup ms, cache files, command counts) are **measured live**.
 
 ---

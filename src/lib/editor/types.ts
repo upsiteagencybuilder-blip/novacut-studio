@@ -149,7 +149,28 @@ export type TextAnimation =
 export type StickerAnimation = 'none' | 'pop' | 'float' | 'spin' | 'pulse'
 
 /** Properties that can be keyframed */
-export type KeyframeProperty = 'x' | 'y' | 'scale' | 'rotation' | 'opacity' | 'volume' | 'iris' | 'maskX' | 'maskY' | 'maskScale'
+export type KeyframeProperty = 'x' | 'y' | 'scale' | 'scaleX' | 'rotation' | 'opacity' | 'volume' | 'iris' | 'maskX' | 'maskY' | 'maskScale'
+
+/**
+ * Special bridge render path selected by a transition family (v4). Stored on
+ * the INCOMING clip; the engine's transition bridge reads it to replace the
+ * plain fade/wipe composite with the family's real render path:
+ *  - 'additive'     — incoming composites with the 'lighter' blend (brightening dissolve)
+ *  - 'lumaDissolve' — per-pixel luminance-mapped dissolve (non-additive)
+ *  - 'ripple'       — outgoing pixels displaced by an expanding radial wave
+ *  - 'swirl'        — outgoing pixels rotated around center (angular smear)
+ *  - 'flip'         — card flip: outgoing collapses via 'scaleX' keys, incoming
+ *                     grows back (arms the bridge via `window`, no fades needed)
+ */
+export interface BridgeFxSpec {
+  kind: 'additive' | 'lumaDissolve' | 'ripple' | 'swirl' | 'flip'
+  /** bridge window in seconds (required for 'flip' — it has no fades to derive it from) */
+  window?: number
+  /** displacement amplitude multiplier (ripple/swirl variants) */
+  amp?: number
+  /** easing of the flip bridge's OUTGOING collapse (1 → 0 across the window) */
+  outEasing?: EasingType
+}
 export type EasingType =
   | 'linear'
   | 'easeIn'
@@ -163,9 +184,11 @@ export type EasingType =
 
 /**
  * Shape-wipe masks for transitions (drawn on the INCOMING clip, animated via
- * the keyframable 'iris' property: 0 = hidden, 1 = fully revealed).
+ * the keyframable 'iris' property: 0 = hidden, 1 = fully revealed). The four
+ * 'pageTurn*' shapes sweep a diagonal fold line from the named corner across
+ * the frame (Page Turn family) with a gradient shadow drawn along the fold.
  */
-export type WipeShape = 'circle' | 'box' | 'diamond' | 'cross' | 'clock' | 'barnDoors' | 'splitH' | 'splitV'
+export type WipeShape = 'circle' | 'box' | 'diamond' | 'cross' | 'clock' | 'barnDoors' | 'splitH' | 'splitV' | 'pageTurnTL' | 'pageTurnTR' | 'pageTurnBL' | 'pageTurnBR'
 
 export interface Keyframe {
   id: string
@@ -545,6 +568,13 @@ export interface Clip {
    * null/undefined = no mask (plain draw).
    */
   wipe?: WipeShape | null
+  /**
+   * Special transition-bridge render path (v4 families: additive / non-additive
+   * dissolve, ripple, swirl, flip). Set on the INCOMING clip by the applied
+   * transition; cleared to null by any transition without one. Read by the
+   * engine bridge — not user-editable in the properties panel.
+   */
+  bridgeFx?: BridgeFxSpec | null
   /** created by AI auto-captions — included in .srt sidecar export */
   isCaption?: boolean
   /** compound (nested) container payload — set only when kind is 'nested' */

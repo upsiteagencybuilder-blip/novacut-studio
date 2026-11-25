@@ -2,11 +2,15 @@ import type { ProTool } from '../types'
 
 /**
  * Pro Toolkit — transitions section.
- * Industry transitions mapped to the 240 shipped transition definitions
- * (24 families incl. Dissolve, Fade, Slide, Push, Wipe, Zoom, Flash, Spin,
+ * Industry transitions mapped to the 300 shipped transition definitions
+ * (30 families incl. Dissolve, Fade, Slide, Push, Wipe, Zoom, Flash, Spin,
  * Glitch, Warp Zoom, Cube Spin, Stutter Cut, Film Dissolve, Iris, Clock Wipe,
- * Barn Doors, Split). Fades bridge into TRUE crossfades over the cut; wipe
- * families reveal through animated canvas masks.
+ * Barn Doors, Split, and the v4 special-path families — Additive Dissolve,
+ * Non-Additive Dissolve, Page Turn, Flip, Ripple Dissolve, Swirl). Fades
+ * bridge into TRUE crossfades over the cut; wipe families reveal through
+ * animated canvas masks; v4 families swap the bridge composite for their real
+ * render path (lighter blend / luma map / fold shadow / scaleX flip /
+ * displacement kernels).
  */
 
 export const TRANSITIONS_TOOLS: ProTool[] = [
@@ -15,8 +19,8 @@ export const TRANSITIONS_TOOLS: ProTool[] = [
   { id: 'transition-dip-to-black', name: 'Dip to Black', section: 'transitions', group: 'Dissolves & dips', status: 'live', desc: 'Stutter cut variants dip through black via opacity fades' },
   { id: 'transition-dip-to-white', name: 'Dip to White', section: 'transitions', group: 'Dissolves & dips', status: 'live', desc: 'Stutter cut dip variants flash through white shutters' },
   { id: 'transition-film-dissolve', name: 'Film Dissolve', section: 'transitions', group: 'Dissolves & dips', status: 'live', desc: 'Film Dissolve family: true crossfade with photochemical gate-weave jitter', action: 'open-effects' },
-  { id: 'transition-additive-dissolve', name: 'Additive Dissolve', section: 'transitions', group: 'Dissolves & dips', status: 'planned', desc: 'Brightening dissolve that glows through the cut' },
-  { id: 'transition-non-additive-dissolve', name: 'Non-Additive Dissolve', section: 'transitions', group: 'Dissolves & dips', status: 'planned', desc: 'Map luminance from one clip into the other' },
+  { id: 'transition-additive-dissolve', name: 'Additive Dissolve', section: 'transitions', group: 'Dissolves & dips', status: 'live', desc: 'Additive Dissolve family brightens through the cut — the incoming composites with the lighter blend over a live outgoing', action: 'open-effects' },
+  { id: 'transition-non-additive-dissolve', name: 'Non-Additive Dissolve', section: 'transitions', group: 'Dissolves & dips', status: 'live', desc: 'Non-Additive Dissolve maps the outgoing frame luminance into the incoming reveal per-pixel', action: 'open-effects' },
   { id: 'transition-morph-cut', name: 'Morph Cut', section: 'transitions', group: 'Dissolves & dips', status: 'planned', desc: 'Face-aware blend that hides jump cuts in talking heads' },
   { id: 'transition-basic-transitions', name: 'Basic Transitions (Fade · Dissolve · Flash · Blind)', section: 'transitions', group: 'Dissolves & dips', status: 'live', desc: 'Fade, dissolve and flash families ship as true crossfades, blinds remain roadmap' },
 
@@ -30,17 +34,17 @@ export const TRANSITIONS_TOOLS: ProTool[] = [
   { id: 'transition-iris-cross', name: 'Iris Cross', section: 'transitions', group: 'Wipes & irises', status: 'live', desc: 'Iris Cross family opens a plus-shaped mask over the incoming shot', action: 'open-effects' },
   { id: 'transition-iris-diamond', name: 'Iris Diamond', section: 'transitions', group: 'Wipes & irises', status: 'live', desc: 'Iris Diamond family reveals through a growing diamond mask', action: 'open-effects' },
   { id: 'transition-iris-round', name: 'Iris Round', section: 'transitions', group: 'Wipes & irises', status: 'live', desc: 'Iris Round family — the classic circular iris over a live outgoing clip', action: 'open-effects' },
-  { id: 'transition-page-peel', name: 'Page Peel', section: 'transitions', group: 'Wipes & irises', status: 'planned', desc: 'Curl the outgoing clip away like a page corner' },
-  { id: 'transition-page-turn', name: 'Page Turn', section: 'transitions', group: 'Wipes & irises', status: 'planned', desc: 'Full page turn with backface and soft shadow' },
+  { id: 'transition-page-peel', name: 'Page Peel', section: 'transitions', group: 'Wipes & irises', status: 'live', desc: 'Corner-origin fold sweeps the outgoing away like a turned page — 2D fold with crease shadow; a 3D mesh curl stays roadmap', action: 'open-effects' },
+  { id: 'transition-page-turn', name: 'Page Turn', section: 'transitions', group: 'Wipes & irises', status: 'live', desc: 'Page Turn family sweeps a diagonal fold from any corner with a soft crease shadow; backface is the reveal (2D fold, honestly not a 3D mesh)', action: 'open-effects' },
 
   // -------- 3D & motion --------
   { id: 'transition-push', name: 'Push Transition', section: 'transitions', group: '3D & motion', status: 'live', desc: 'Push family slides the outgoing clip off while incoming enters', action: 'open-effects' },
   { id: 'transition-slide', name: 'Slide Transition', section: 'transitions', group: '3D & motion', status: 'live', desc: 'Slide family throws clips across the frame edge to edge', action: 'open-effects' },
   { id: 'transition-zoom', name: 'Zoom Transition', section: 'transitions', group: '3D & motion', status: 'live', desc: 'Zoom family scales clips through the cut, in or out', action: 'open-effects' },
-  { id: 'transition-3d-transitions', name: '3D Transitions (Cube · Flip · Sphere · Room)', section: 'transitions', group: '3D & motion', status: 'planned', desc: 'Cube spin family ships, flip, sphere and room stay roadmap' },
+  { id: 'transition-3d-transitions', name: '3D Transitions (Cube · Flip · Sphere · Room)', section: 'transitions', group: '3D & motion', status: 'live', desc: 'Cube Spin and true card Flip families ship (per-axis scaleX keyframes); sphere and room stay roadmap', action: 'open-effects' },
 
   // -------- Glitch & stylized --------
-  { id: 'transition-ripple-dissolve', name: 'Ripple & Dissolve Transitions', section: 'transitions', group: 'Glitch & stylized', status: 'planned', desc: 'Drift dissolve variants ship, true ripple distortion stays roadmap' },
-  { id: 'transition-speed-blur', name: 'Speed Blur Transitions (Swirl · Zoom · Push)', section: 'transitions', group: 'Glitch & stylized', status: 'planned', desc: 'Warp zoom and blur families ship, swirl variants stay roadmap' },
+  { id: 'transition-ripple-dissolve', name: 'Ripple & Dissolve Transitions', section: 'transitions', group: 'Glitch & stylized', status: 'live', desc: 'TRUE ripple displacement ships — an expanding radial wave warps the outgoing pixels while the incoming fades in; drift variants already shipped', action: 'open-effects' },
+  { id: 'transition-speed-blur', name: 'Speed Blur Transitions (Swirl · Zoom · Push)', section: 'transitions', group: 'Glitch & stylized', status: 'live', desc: 'Swirl vortex joins warp zoom and push; the blur family itself stays a crossfade (disclosed — blur is not keyframable)', action: 'open-effects' },
   { id: 'transition-warp-glitch', name: 'Warp & Glitch Transitions', section: 'transitions', group: 'Glitch & stylized', status: 'live', desc: 'Warp zoom and glitch families deliver stylized throw transitions', action: 'open-effects' },
 ]

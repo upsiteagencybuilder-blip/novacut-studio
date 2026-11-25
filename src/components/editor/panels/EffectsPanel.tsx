@@ -263,7 +263,12 @@ function transitionClipPatch(patch: TransitionPatch, clip: Clip, side: 'out' | '
     ...(patch.fadeOut !== undefined ? { fadeOut: patch.fadeOut } : {}),
     ...(patch.motion !== undefined ? { motion: patch.motion } : {}),
     ...(patch.motionIntensity !== undefined ? { motionIntensity: patch.motionIntensity } : {}),
-    ...(patch.wipe !== undefined ? { wipe: patch.wipe } : {}),
+    // v4 bridge render path + wipe mask ride on the INCOMING clip; both are
+    // ALWAYS written on the in side so a new transition fully replaces the
+    // previous family (a wipe applied over a bridgeFx family — or the reverse —
+    // must never leave a stale mask/path behind; the stale wipe was caught
+    // live by the E2E A/B probe: it silently held the outgoing at full alpha)
+    ...(side === 'in' ? { wipe: patch.wipe ?? null, bridgeFx: patch.bridgeFx ?? null } : {}),
     keyframes: (patch.keys ?? []).map((k) => ({
       id: uid('kf'),
       property: k.property,

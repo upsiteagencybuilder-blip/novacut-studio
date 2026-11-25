@@ -5,12 +5,12 @@
  * Renders the project timeline onto a <canvas> and drives synced media playback.
  * Pure module: no direct store import — state arrives via a snapshot fn (see bridge hook).
  */
-import type { Clip, ColorGrade, LutData, MediaAssetRuntime, Project, WipeShape } from './types'
+import type { BridgeFxSpec, Clip, ColorGrade, LutData, MediaAssetRuntime, Project, WipeShape } from './types'
 import type { OverlayDraw, VisionDraw } from '@/lib/effects/types'
 import { getEffect, getOverlayDraw } from '@/lib/effects/registry'
 import { drawOverlayFrame, hash01, hashInt, hashString, overlayShake, overlayZoomPulse, valueNoise } from '@/lib/effects/overlay-render'
 import { drawVisionFrame, getVisionSeed } from '@/lib/effects/vision-render'
-import { applyPixelEffects, buildFilterString, clamp, composeFilters, composeGrades, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, fadeCurveFactor, formatTimecode, normalizeGainFor, projectDuration, rampSourceFraction } from './utils'
+import { applyEasing, applyPixelEffects, buildFilterString, clamp, composeFilters, composeGrades, easeInOut, easeOutBack, effectiveSpeedAt, evaluateKeyframeProperty, fadeCurveFactor, formatTimecode, normalizeGainFor, projectDuration, rampSourceFraction } from './utils'
 import { bridgeWindowFor, outgoingNeighborOf } from './transitionBridge'
 import { applyClipFx, applyTrackEq, buildFxChain, buildTrackEq, makeImpulse, rebuildModulation } from './audio-mix'
 import { ensureFormantModule, getFormantError } from './formant-worklet'
@@ -1505,20 +1505,50 @@ class PreviewEngine {
         // EXT   — after its end it keeps rendering UNDER the incoming clip with
         //         alpha (1 − progress) while the incoming's fadeIn ramps up —
         //         a true crossfade. Wipe masks reveal over the same live bridge.
+        // v4 — a bridgeFx spec on the INCOMING clip swaps the composite for the
+        //      family's real render path: additive (lighter blend), luma
+        //      dissolve (per-pixel luminance map), ripple/swirl (displaced
+        //      outgoing pixels) and flip (scaleX key collapse/grow, hold out).
         const bridgedSuccessor = project.clips.find(
           (c) => c.trackId === track.id && c.start >= clip.start + clip.duration - 0.0001 && bridgeWindowFor(clip, c) != null,
         )
         const bridgeOut = project.clips.find(
           (c) => c.trackId === track.id && bridgeWindowFor(c, clip) != null && t >= c.start + c.duration - 0.0001,
         )
+        const fx = bridgeOut && !this.noColorFx ? clip.bridgeFx ?? null : null
         if (bridgeOut) {
           const window = bridgeWindowFor(bridgeOut, clip)!
           const progress = clamp((t - clip.start) / window, 0, 1)
+          if (progress < 1 && fx && (fx.kind === 'additive' || fx.kind === 'flip')) {
+            // additive / flip — outgoing holds FULL alpha (the incoming's blend
+            // or the flip collapse does the work), incoming draws over it.
+            // Flip collapse: the outgoing's width is driven straight from the
+            // bridge progress (its own keyframes can't live past its end) with
+            // the spec's out-easing; the incoming grows via its scaleX keys.
+            const collapse = fx.kind === 'flip' ? 1 - applyEasing(progress, fx.outEasing ?? 'easeIn') : undefined
+            this.drawClip(ctx, bridgeOut, t, W, H, mediaMap, project, { progress, hold: true, scaleXOverride: collapse }, adj)
+            this.drawClip(ctx, clip, t, W, H, mediaMap, project, fx.kind === 'additive' ? { blend: 'lighter' } : undefined, adj)
+            continue
+          } else if (progress < 1 && fx && (fx.kind === 'ripple' || fx.kind === 'swirl')) {
+            // displaced outgoing (ripple wave / angular swirl) at ramping alpha,
+            // incoming fades in normally on top
+            this.drawDisplacedOutgoing(ctx, bridgeOut, fx, t, W, H, mediaMap, project, progress, scale, adj)
+            this.drawClip(ctx, clip, t, W, H, mediaMap, project, undefined, adj)
+            continue
+          } else if (progress < 1 && fx && fx.kind === 'lumaDissolve') {
+            // non-additive dissolve: BOTH clips render to scratch, the outgoing's
+            // luminance maps the incoming's reveal, one composite lands
+            this.drawLumaDissolveBridge(ctx, bridgeOut, clip, t, W, H, mediaMap, project, progress, scale, adj)
+            continue
+          }
           // wipe bridges hold the outgoing at FULL alpha (the mask does the
           // reveal over untouched pixels); fade bridges ramp (1 − progress)
           if (progress < 1) this.drawClip(ctx, bridgeOut, t, W, H, mediaMap, project, { progress, hold: !!clip.wipe }, adj)
         }
         this.drawClip(ctx, clip, t, W, H, mediaMap, project, bridgedSuccessor ? { progress: 0 } : undefined, adj)
+        // ---- page-turn fold shadow: drawn over the composite at the moving
+        // fold line (same line the wipe mask uses); vanishes at iris 1
+        if (bridgeOut && clip.wipe?.startsWith('pageTurn')) this.drawPageTurnShadow(ctx, clip, t, W, H)
       }
     }
   }
@@ -1747,8 +1777,10 @@ class PreviewEngine {
    * and alpha/gain ramp down with the bridge progress — producing a true
    * crossfade under the incoming clip. `hold` keeps full alpha instead (wipe
    * bridges: the animated mask reveals over untouched outgoing pixels).
+   * `blend` overrides the composite operation for the content pass (v4
+   * additive dissolve: the incoming composites with 'lighter').
    */
-  private drawClip(ctx: CanvasRenderingContext2D, clip: Clip, t: number, W: number, H: number, mediaMap: Map<string, MediaAssetRuntime>, project: Project, bridge?: { progress: number; hold?: boolean }, adj: Clip[] = []) {
+  private drawClip(ctx: CanvasRenderingContext2D, clip: Clip, t: number, W: number, H: number, mediaMap: Map<string, MediaAssetRuntime>, project: Project, bridge?: { progress?: number; hold?: boolean; blend?: GlobalCompositeOperation; skipFadeIn?: boolean; scaleXOverride?: number }, adj: Clip[] = []) {
     // adjustment layers draw nothing — they only carry FX for the clips below
     if (clip.kind === 'adjustment') return
     const tLocal = t - clip.start
@@ -1795,9 +1827,11 @@ class PreviewEngine {
     const ty = kfY ?? clip.transform.y
     const tscale = kfScale ?? clip.transform.scale
     const trot = kfRot ?? clip.transform.rotation
-    // bridged outgoing: hold its fadeOut (end of clip → factor 0 otherwise)
-    const fadeOpts = bridge ? { skipFadeOut: true } : undefined
-    const bridgeAlpha = bridge ? (bridge.hold ? 1 : 1 - bridge.progress) : 1
+    // bridged outgoing: hold its fadeOut (end of clip → factor 0 otherwise);
+    // luma-dissolve bridges also skip the incoming's own fadeIn (progress drives
+    // the reveal per-pixel — a simultaneous fade would double-map the edges)
+    const fadeOpts = bridge ? (bridge.skipFadeIn ? { skipFadeOut: true, skipFadeIn: true } : { skipFadeOut: true }) : undefined
+    const bridgeAlpha = bridge ? (bridge.hold ? 1 : 1 - (bridge.progress ?? 0)) : 1
     const alpha = (kfOpacity ?? clip.transform.opacity) * this.fadeFactor(clip, tLocal, fadeOpts) * bridgeAlpha
     if (alpha <= 0.002) return
 
@@ -1870,7 +1904,7 @@ class PreviewEngine {
           // solo — when any track is soloed, unsoloed tracks go silent
           const anySolo = project.tracks.some((tr) => tr.solo)
           const audible = !!track && !track.muted && (!anySolo || !!track.solo)
-          this.syncVideo(clip, tLocal, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, (track?.volume ?? 1) * (bridge ? 1 - bridge.progress : 1), fadeOpts)
+          this.syncVideo(clip, tLocal, { el, mediaId: clip.mediaId, gain: routed.gain }, audible, (track?.volume ?? 1) * (bridge ? 1 - (bridge.progress ?? 0) : 1), fadeOpts)
         }
       }
     }
@@ -1880,6 +1914,11 @@ class PreviewEngine {
     ctx.filter = buildFilterString(effFilters)
     if (clip.blendMode && clip.blendMode !== 'source-over') {
       ctx.globalCompositeOperation = clip.blendMode
+    }
+    if (bridge?.blend) {
+      // v4 bridge composite override (additive dissolve) — wins over the clip's
+      // own blendMode for the duration of the bridge only
+      ctx.globalCompositeOperation = bridge.blend
     }
 
     // ---- shape-wipe mask (wipe transitions): clip the drawing to an animated
@@ -1976,6 +2015,14 @@ class PreviewEngine {
 
     ctx.translate(W / 2 + tx * W + motionX + shakeX * W, H / 2 + ty * H + motionY + shakeY * H)
     ctx.rotate(((trot + shakeRot + motionRot) * Math.PI) / 180)
+
+    // keyframable per-axis scale (v4 Flip family) — composes multiplicatively
+    // with the uniform per-kind scale applied below; values < 0 mirror the
+    // content (the flip's backface). A bridge scaleXOverride (flip bridge:
+    // collapse driven by bridge progress) wins over the clip's own keys, which
+    // cannot live past the clip's end — exactly where the bridge window sits.
+    const kfScaleX = bridge?.scaleXOverride ?? evaluateKeyframeProperty(clip, 'scaleX', tLocal)
+    if (kfScaleX != null && kfScaleX !== 1) ctx.scale(kfScaleX, 1)
 
     // media mirroring (flip) — applied to video/image only; text mirrored would be unreadable
     if (clip.kind === 'video' || clip.kind === 'image') {
@@ -2128,8 +2175,228 @@ class PreviewEngine {
         ctx.rect(cx - w / 2, 0, w, H)
         break
       }
+      case 'pageTurnTL':
+      case 'pageTurnTR':
+      case 'pageTurnBL':
+      case 'pageTurnBR': {
+        // diagonal fold (Page Turn family): the line {x/W + y/H = c} (per the
+        // named corner's mirrored metric) sweeps from the origin corner to the
+        // opposite one as p goes 0→1; the region BEYOND the fold toward the
+        // origin corner reveals the incoming clip. Full cover at p = 1 (c = 2).
+        const c = p * 2
+        const cw = c * W
+        const ch = c * H
+        const cx2 = (c - 1) * W
+        const cy2 = (c - 1) * H
+        const fromL = shape === 'pageTurnTL' || shape === 'pageTurnBL'
+        const fromT = shape === 'pageTurnTL' || shape === 'pageTurnTR'
+        // origin corner of the fold
+        const ox = fromL ? 0 : W
+        const oy = fromT ? 0 : H
+        if (c <= 1) {
+          // growing corner triangle: origin → (origin ± cw, oy) → (ox, origin ± ch)
+          ctx.moveTo(ox, oy)
+          ctx.lineTo(fromL ? cw : W - cw, oy)
+          ctx.lineTo(ox, fromT ? ch : H - ch)
+        } else {
+          // sweep past the middle: origin edge + the two far edges + the fold line
+          ctx.moveTo(ox, oy)
+          ctx.lineTo(fromL ? W : 0, oy)
+          ctx.lineTo(fromL ? W : 0, fromT ? cy2 : H - cy2)
+          ctx.lineTo(fromL ? cx2 : W - cx2, fromT ? H : 0)
+          ctx.lineTo(ox, fromT ? H : 0)
+        }
+        ctx.closePath()
+        break
+      }
     }
     ctx.clip()
+  }
+
+  /* -------------------------------------------------- v4 bridge render paths */
+
+  /** Shared scratch canvas for the per-pixel bridge composites (luma/ripple/swirl) */
+  private bridgeScratch: HTMLCanvasElement | null = null
+  private bridgeScratchCtx: CanvasRenderingContext2D | null = null
+
+  private ensureBridgeScratch(sw: number, sh: number): CanvasRenderingContext2D | null {
+    if (!this.bridgeScratch) {
+      this.bridgeScratch = document.createElement('canvas')
+      this.bridgeScratchCtx = this.bridgeScratch.getContext('2d', { willReadFrequently: true })
+    }
+    const c = this.bridgeScratch!
+    if (c.width !== sw || c.height !== sh) {
+      c.width = sw
+      c.height = sh
+    }
+    return this.bridgeScratchCtx
+  }
+
+  /** Scratch resolution cap — mirrors the fx pipeline's budget (3840 in exports) */
+  private bridgeQuality(W: number, H: number): number {
+    const maxDim = this.exportScaleOverride !== null ? 3840 : 1600
+    return Math.min(1, maxDim / Math.max(W, H))
+  }
+
+  /**
+   * Ripple / Swirl bridge: the OUTGOING clip renders to scratch, its pixels are
+   * displaced by a deterministic radial wave (ripple) or angular twist (swirl)
+   * whose amplitude ramps with the bridge progress, and the result lands on the
+   * main canvas at the standard (1 − progress) bridge alpha. The incoming clip
+   * is drawn by the caller with its own fadeIn. Deterministic in t — preview
+   * and export render identical frames.
+   */
+  private drawDisplacedOutgoing(
+    ctx: CanvasRenderingContext2D,
+    outClip: Clip,
+    fx: BridgeFxSpec,
+    t: number,
+    W: number,
+    H: number,
+    mediaMap: Map<string, MediaAssetRuntime>,
+    project: Project,
+    progress: number,
+    scale: number,
+    adj: Clip[]
+  ) {
+    const q = this.bridgeQuality(W, H)
+    const sw = Math.max(2, Math.round(W * q))
+    const sh = Math.max(2, Math.round(H * q))
+    const sx = this.ensureBridgeScratch(sw, sh)
+    if (!sx) return
+    sx.setTransform(q, 0, 0, q, 0, 0)
+    sx.globalAlpha = 1
+    sx.globalCompositeOperation = 'source-over'
+    sx.filter = 'none'
+    sx.clearRect(0, 0, W, H)
+    this.drawClip(sx, outClip, t, W, H, mediaMap, project, { progress, hold: false }, adj)
+    const img = sx.getImageData(0, 0, sw, sh)
+    const amp = fx.amp ?? 1
+    if (fx.kind === 'ripple') displaceRipple(img, sw, sh, progress, amp)
+    else displaceSwirl(img, sw, sh, progress, amp)
+    sx.putImageData(img, 0, 0)
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.globalAlpha = 1
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.filter = 'none'
+    ctx.drawImage(this.bridgeScratch!, 0, 0, sw, sh, 0, 0, W * scale, H * scale)
+    ctx.restore()
+  }
+
+  /**
+   * Non-additive dissolve bridge: BOTH clips render to scratch at full alpha,
+   * then a single per-pixel composite lands — the OUTGOING frame's luminance
+   * maps the INCOMING's reveal (dark outgoing regions switch first, with a soft
+   * band so mid-tones cross-fade instead of popping). Deterministic in t.
+   */
+  private drawLumaDissolveBridge(
+    ctx: CanvasRenderingContext2D,
+    outClip: Clip,
+    inClip: Clip,
+    t: number,
+    W: number,
+    H: number,
+    mediaMap: Map<string, MediaAssetRuntime>,
+    project: Project,
+    progress: number,
+    scale: number,
+    adj: Clip[]
+  ) {
+    const q = this.bridgeQuality(W, H)
+    const sw = Math.max(2, Math.round(W * q))
+    const sh = Math.max(2, Math.round(H * q))
+    const sx = this.ensureBridgeScratch(sw, sh)
+    if (!sx) return
+    // A — outgoing, held full alpha
+    sx.setTransform(q, 0, 0, q, 0, 0)
+    sx.globalAlpha = 1
+    sx.globalCompositeOperation = 'source-over'
+    sx.filter = 'none'
+    sx.clearRect(0, 0, W, H)
+    this.drawClip(sx, outClip, t, W, H, mediaMap, project, { progress, hold: true }, adj)
+    const imgA = sx.getImageData(0, 0, sw, sh)
+    // B — incoming, own fadeIn skipped (progress drives the mapping)
+    sx.clearRect(0, 0, W, H)
+    this.drawClip(sx, inClip, t, W, H, mediaMap, project, { progress, hold: true, skipFadeIn: true }, adj)
+    const imgB = sx.getImageData(0, 0, sw, sh)
+    compositeLumaDissolve(imgA, imgB, progress)
+    sx.putImageData(imgA, 0, 0)
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.globalAlpha = 1
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.filter = 'none'
+    ctx.drawImage(this.bridgeScratch!, 0, 0, sw, sh, 0, 0, W * scale, H * scale)
+    ctx.restore()
+  }
+
+  /**
+   * Page Turn fold shadow — drawn over the finished bridge composite along the
+   * SAME diagonal the wipe mask uses (metric of the named corner). A soft dark
+   * band sits on the outgoing side of the fold line with a thin highlight at
+   * the crease; both fade to nothing as iris reaches 1.
+   */
+  private drawPageTurnShadow(ctx: CanvasRenderingContext2D, clip: Clip, t: number, W: number, H: number) {
+    const tLocal = t - clip.start
+    const iris = evaluateKeyframeProperty(clip, 'iris', tLocal)
+    if (iris == null || iris >= 0.999 || iris <= 0.001) return
+    const shape = clip.wipe as WipeShape
+    const c = clamp(iris, 0, 1) * 2
+    const fromL = shape === 'pageTurnTL' || shape === 'pageTurnBL'
+    const fromT = shape === 'pageTurnTL' || shape === 'pageTurnTR'
+    // fold line endpoints (canvas space), mirroring the mask geometry
+    let x1: number, y1: number, x2: number, y2: number
+    if (c <= 1) {
+      x1 = fromL ? c * W : (1 - c) * W
+      y1 = fromT ? 0 : H
+      x2 = fromL ? 0 : W
+      y2 = fromT ? c * H : (1 - c) * H
+    } else {
+      const cx2 = (c - 1) * W
+      const cy2 = (c - 1) * H
+      x1 = fromL ? W : 0
+      y1 = fromT ? cy2 : H - cy2
+      x2 = fromL ? cx2 : W - cx2
+      y2 = fromT ? H : 0
+    }
+    // gradient axis: perpendicular to the fold, pointing INTO the revealed
+    // region (the incoming side) — the shadow falls on the outgoing side
+    const dx = x2 - x1
+    const dy = y2 - y1
+    const len = Math.hypot(dx, dy) || 1
+    const band = Math.min(W, H) * 0.14
+    // normal direction: toward the origin corner (outgoing side)
+    const nx = (fromL ? -1 : 1) * (Math.abs(dy) / len)
+    const ny = (fromT ? -1 : 1) * (Math.abs(dx) / len)
+    ctx.save()
+    ctx.globalAlpha = 1
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.filter = 'none'
+    const g = ctx.createLinearGradient(x1, y1, x1 + nx * band, y1 + ny * band)
+    g.addColorStop(0, 'rgba(0,0,0,0.55)')
+    g.addColorStop(0.25, 'rgba(0,0,0,0.28)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g
+    // band quad: along the full fold line, `band` deep on the outgoing side
+    const ux = dx / len
+    const uy = dy / len
+    const ext = Math.min(W, H) * 0.02
+    ctx.beginPath()
+    ctx.moveTo(x1 - ux * ext, y1 - uy * ext)
+    ctx.lineTo(x2 + ux * ext, y2 + uy * ext)
+    ctx.lineTo(x2 + ux * ext + nx * band, y2 + uy * ext + ny * band)
+    ctx.lineTo(x1 - ux * ext + nx * band, y1 - uy * ext + ny * band)
+    ctx.closePath()
+    ctx.fill()
+    // thin crease highlight right ON the line
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)'
+    ctx.lineWidth = Math.max(1, Math.min(W, H) * 0.004)
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(x2, y2)
+    ctx.stroke()
+    ctx.restore()
   }
 
   /* -------------------------------------------------- text drawing */
@@ -2635,3 +2902,125 @@ export function estimateClipRect(clip: Clip, project: Project, mediaMap: Map<str
 }
 
 export { MIN_CLIP_DURATION }
+
+/* -------------------------------------------------- v4 bridge pixel kernels */
+
+/**
+ * Radial ripple displacement (Ripple Dissolve family) — deterministic in
+ * progress: every source pixel is resampled from a point pushed outward/inward
+ * by an expanding sine wave that runs from the frame center toward the edges
+ * as the bridge advances. Nearest-neighbor sampling keeps the kernel cheap
+ * (the bridge window is ~0.3–1.5s and the scratch is resolution-capped).
+ */
+function displaceRipple(img: ImageData, w: number, h: number, progress: number, amp: number) {
+  const src = new Uint8ClampedArray(img.data)
+  const dst = img.data
+  const cx = w / 2
+  const cy = h / 2
+  const maxR = Math.hypot(cx, cy)
+  const wave = 24 * amp * progress // peak displacement in scratch px
+  const freq = 9 / maxR // ~1.5 wavelengths across the half-diagonal
+  const front = progress * maxR * 1.15 // wavefront radius
+  const srcW = w
+  for (let y = 0; y < h; y++) {
+    const dy0 = y - cy
+    for (let x = 0; x < w; x++) {
+      const dx0 = x - cx
+      const r = Math.hypot(dx0, dy0)
+      // displacement only inside the wavefront band, fading at both ends
+      const band = front > 0 ? Math.max(0, 1 - Math.abs(r - front) / (maxR * 0.45)) : 0
+      if (band <= 0) {
+        const i = (y * srcW + x) * 4
+        dst[i] = src[i]
+        dst[i + 1] = src[i + 1]
+        dst[i + 2] = src[i + 2]
+        dst[i + 3] = src[i + 3]
+        continue
+      }
+      const off = Math.sin(r * freq * Math.PI * 2 - progress * 10) * wave * band
+      const inv = r > 0.0001 ? off / r : 0
+      const sxp = Math.min(w - 1, Math.max(0, Math.round(x + dx0 * inv)))
+      const syp = Math.min(h - 1, Math.max(0, Math.round(y + dy0 * inv)))
+      const si = (syp * srcW + sxp) * 4
+      const di = (y * srcW + x) * 4
+      dst[di] = src[si]
+      dst[di + 1] = src[si + 1]
+      dst[di + 2] = src[si + 2]
+      dst[di + 3] = src[si + 3]
+    }
+  }
+}
+
+/**
+ * Angular swirl displacement (Speed Blur · Swirl family) — deterministic in
+ * progress: each pixel rotates around the frame center by an angle that ramps
+ * with the bridge progress and falls off toward the edges (a vortex that
+ * tightens as the outgoing clip leaves). Nearest-neighbor sampling.
+ */
+function displaceSwirl(img: ImageData, w: number, h: number, progress: number, amp: number) {
+  const src = new Uint8ClampedArray(img.data)
+  const dst = img.data
+  const cx = w / 2
+  const cy = h / 2
+  const maxR = Math.hypot(cx, cy)
+  const maxTwist = 1.15 * amp * progress // radians at center
+  const srcW = w
+  for (let y = 0; y < h; y++) {
+    const dy0 = y - cy
+    for (let x = 0; x < w; x++) {
+      const dx0 = x - cx
+      const r = Math.hypot(dx0, dy0)
+      const falloff = 1 - r / maxR
+      const theta = maxTwist * falloff * falloff
+      if (theta === 0) {
+        const i = (y * srcW + x) * 4
+        dst[i] = src[i]
+        dst[i + 1] = src[i + 1]
+        dst[i + 2] = src[i + 2]
+        dst[i + 3] = src[i + 3]
+        continue
+      }
+      const cos = Math.cos(theta)
+      const sin = Math.sin(theta)
+      // sample the PRE-rotated position (pull the source pixel into place)
+      const sxp = Math.min(w - 1, Math.max(0, Math.round(cx + dx0 * cos - dy0 * sin)))
+      const syp = Math.min(h - 1, Math.max(0, Math.round(cy + dx0 * sin + dy0 * cos)))
+      const si = (syp * srcW + sxp) * 4
+      const di = (y * srcW + x) * 4
+      dst[di] = src[si]
+      dst[di + 1] = src[si + 1]
+      dst[di + 2] = src[si + 2]
+      dst[di + 3] = src[si + 3]
+    }
+  }
+}
+
+/**
+ * Non-additive dissolve composite — the OUTGOING frame's luminance maps the
+ * INCOMING's reveal directly INTO imgA (modified in place): dark outgoing
+ * regions switch to the incoming first, bright regions last, with a 96-level
+ * soft band so mid-tones cross-fade instead of popping. At progress 1 the
+ * whole frame has crossed the threshold and the incoming fills the frame.
+ */
+function compositeLumaDissolve(imgA: ImageData, imgB: ImageData, progress: number) {
+  const a = imgA.data
+  const b = imgB.data
+  const n = a.length
+  // threshold sweeps 0 → 255+soft so the frame fully crosses at progress 1
+  const soft = 96
+  const threshold = progress * (255 + soft)
+  for (let i = 0; i < n; i += 4) {
+    const luma = 0.2126 * a[i] + 0.7152 * a[i + 1] + 0.0722 * a[i + 2]
+    // reveal factor: 0 = keep outgoing, 1 = incoming (soft band around threshold)
+    const t = (threshold - luma) / soft
+    const m = t <= 0 ? 0 : t >= 1 ? 1 : t
+    if (m <= 0) continue
+    const ba = b[i + 3] / 255
+    const wB = m * ba
+    const wA = 1 - wB
+    a[i] = b[i] * wB + a[i] * wA
+    a[i + 1] = b[i + 1] * wB + a[i + 1] * wA
+    a[i + 2] = b[i + 2] * wB + a[i + 2] * wA
+    a[i + 3] = Math.max(a[i + 3] * wA, b[i + 3] * m)
+  }
+}

@@ -1,7 +1,7 @@
 /**
- * NovaCut Studio — Transition effects (240 definitions)
+ * NovaCut Studio — Transition effects (300 definitions)
  *
- * 24 families × 10 variants. Each transition is a paired patch:
+ * 30 families × 10 variants. Each transition is a paired patch:
  *   - `out` is applied to the OUTGOING clip (fadeOut, motion keys anchored 'start'/'end')
  *   - `in`  is applied to the INCOMING clip (fadeIn, motion keys); null when intro/outro-only
  *
@@ -25,6 +25,12 @@
  * driven by the keyframable 'iris' property rendered as an animated canvas
  * mask on the incoming clip while the engine's transition bridge keeps the
  * outgoing clip playing underneath.
+ *
+ * v4 families (post-plan batch): Additive Dissolve (lighter-blend bridge),
+ * Non-Additive Dissolve (per-pixel luminance-mapped dissolve), Page Turn
+ * (diagonal fold wipe + gradient fold shadow), Flip (card flip via the
+ * keyframable 'scaleX' property + bridge-driven outgoing collapse), Ripple
+ * Dissolve (radial wave displacement) and Swirl (angular vortex twist).
  */
 
 import type { EasingType, KeyframeProperty, WipeShape } from '@/lib/editor/types'
@@ -776,7 +782,7 @@ function buildSplit(): TransitionEffect[] {
   })
 }
 
-/* ---------------- assembly (11 × 10 + 5 × 10 v2 + 8 × 10 v3 = 240) ---------------- */
+/* ---------------- assembly (24 × 10 v1–v3 + 6 × 10 v4 = 300) ---------------- */
 
 export const TRANSITION_EFFECTS: TransitionEffect[] = [
   ...buildFade(),
@@ -805,4 +811,175 @@ export const TRANSITION_EFFECTS: TransitionEffect[] = [
   ...buildClockWipe(),
   ...buildBarnDoors(),
   ...buildSplit(),
+  // v4 families (post-plan batch — special bridge render paths)
+  ...buildAdditiveDissolve(),
+  ...buildNonAdditiveDissolve(),
+  ...buildPageTurn(),
+  ...buildFlip(),
+  ...buildRippleDissolve(),
+  ...buildSwirlBlur(),
 ]
+
+/* ================= v4 families (special bridge render paths) ================
+ * The families below do more than keyframes + fades can express: they set a
+ * `bridgeFx` spec on the INCOMING clip and the engine's transition bridge
+ * swaps the plain fade composite for the family's real render path:
+ *  - Additive Dissolve      → incoming composites with the 'lighter' blend
+ *  - Non-Additive Dissolve  → per-pixel luminance-mapped dissolve
+ *  - Page Turn              → diagonal fold wipe + gradient fold shadow
+ *  - Flip                   → card flip via the keyframable 'scaleX' property
+ *  - Ripple Dissolve        → expanding radial wave displaces the outgoing
+ *  - Swirl Blur             → angular vortex twist on the outgoing
+ */
+
+/* ---------------- Additive Dissolve (brightening lighter-blend dissolve) ---------------- */
+
+function buildAdditiveDissolve(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number }> = [
+    { label: 'Swift', d: 0.2 },
+    { label: 'Fast', d: 0.3 },
+    { label: 'Smooth', d: 0.5 },
+    { label: 'Gentle', d: 0.8 },
+    { label: 'Cinematic', d: 1.0 },
+    { label: 'Slow', d: 1.2 },
+    { label: 'Dramatic', d: 1.5 },
+    { label: 'Bloom', d: 0.6 },
+    { label: 'Light Leak', d: 0.9 },
+    { label: 'Nuclear', d: 1.4 },
+  ]
+  return specs.map((s) =>
+    mk(
+      'additive-dissolve', 'Additive Dissolve', `Additive Dissolve · ${s.label}`, s.d,
+      { fadeOut: s.d },
+      { fadeIn: s.d, bridgeFx: { kind: 'additive' } },
+      ['additive', 'lighter-blend', 'glow'],
+    ),
+  )
+}
+
+/* ---------------- Non-Additive Dissolve (luminance-mapped dissolve) ---------------- */
+
+function buildNonAdditiveDissolve(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number }> = [
+    { label: 'Swift', d: 0.25 },
+    { label: 'Fast', d: 0.35 },
+    { label: 'Smooth', d: 0.5 },
+    { label: 'Gentle', d: 0.8 },
+    { label: 'Cinematic', d: 1.0 },
+    { label: 'Slow', d: 1.2 },
+    { label: 'Dramatic', d: 1.5 },
+    { label: 'Shadow First', d: 0.6 },
+    { label: 'Ink Bleed', d: 0.9 },
+    { label: 'Silhouette', d: 1.3 },
+  ]
+  return specs.map((s) =>
+    mk(
+      'non-additive-dissolve', 'Non-Additive Dissolve', `Non-Additive Dissolve · ${s.label}`, s.d,
+      { fadeOut: s.d },
+      { fadeIn: s.d, bridgeFx: { kind: 'lumaDissolve' } },
+      ['luma-map', 'non-additive', 'matte'],
+    ),
+  )
+}
+
+/* ---------------- Page Turn (diagonal fold wipe + fold shadow) ---------------- */
+
+function buildPageTurn(): TransitionEffect[] {
+  const specs: Array<{ label: string; shape: WipeShape; d: number; e: EasingType }> = [
+    { label: 'Bottom Left · Swift', shape: 'pageTurnBL', d: 0.5, e: 'easeInOut' },
+    { label: 'Bottom Left · Smooth', shape: 'pageTurnBL', d: 0.8, e: 'easeInOut' },
+    { label: 'Bottom Left · Cinematic', shape: 'pageTurnBL', d: 1.2, e: 'easeInOut' },
+    { label: 'Bottom Right · Swift', shape: 'pageTurnBR', d: 0.5, e: 'easeInOut' },
+    { label: 'Bottom Right · Smooth', shape: 'pageTurnBR', d: 0.8, e: 'easeInOut' },
+    { label: 'Top Left · Smooth', shape: 'pageTurnTL', d: 0.8, e: 'easeInOut' },
+    { label: 'Top Right · Smooth', shape: 'pageTurnTR', d: 0.8, e: 'easeInOut' },
+    { label: 'Top Left · Dramatic', shape: 'pageTurnTL', d: 1.5, e: 'easeInOut' },
+    { label: 'Bottom Right · Dramatic', shape: 'pageTurnBR', d: 1.5, e: 'easeInOut' },
+    { label: 'Page Sweep · Linear', shape: 'pageTurnBL', d: 1.0, e: 'linear' },
+  ]
+  return specs.map((s) =>
+    mk('page-turn', 'Page Turn', `Page Turn · ${s.label}`, s.d, null, wipePatch(s.shape, s.e), ['wipe', 'fold', 'page', s.shape, s.e]),
+  )
+}
+
+/* ---------------- Flip (true card flip via the keyframable scaleX property) ---------------- */
+
+function buildFlip(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number; outE: EasingType; inE: EasingType }> = [
+    { label: 'Swift', d: 0.3, outE: 'easeIn', inE: 'easeOut' },
+    { label: 'Fast', d: 0.4, outE: 'easeIn', inE: 'easeOut' },
+    { label: 'Smooth', d: 0.6, outE: 'easeIn', inE: 'easeOut' },
+    { label: 'Gentle', d: 0.8, outE: 'easeInOut', inE: 'easeInOut' },
+    { label: 'Cinematic', d: 1.0, outE: 'easeInOut', inE: 'easeInOut' },
+    { label: 'Dramatic', d: 1.2, outE: 'easeInOut', inE: 'easeInOut' },
+    { label: 'Snap', d: 0.25, outE: 'easeIn', inE: 'backOut' },
+    { label: 'Card Toss', d: 0.7, outE: 'backIn', inE: 'backOut' },
+    { label: 'Heavy Board', d: 1.5, outE: 'easeIn', inE: 'easeOut' },
+    { label: 'Linear Spin', d: 0.5, outE: 'linear', inE: 'linear' },
+  ]
+  return specs.map((s) =>
+    mk(
+      'flip', 'Flip', `Flip · ${s.label}`, s.d,
+      // NO patch on the outgoing — the flip bridge drives its collapse straight
+      // from the bridge progress (keyframes cannot live past the clip's end,
+      // which is exactly where the flip window sits). The engine reads the
+      // spec's outEasing for the 1 → 0 collapse curve.
+      null,
+      // incoming grows back from zero width via its own scaleX keys; the
+      // bridgeFx window arms the bridge WITHOUT fades so the outgoing stays
+      // fully visible underneath while it collapses
+      { keys: pair('scaleX', 0, 1, s.inE), bridgeFx: { kind: 'flip', window: s.d, outEasing: s.outE } },
+      ['flip', '3d-flavored', 'scalex', s.outE, s.inE],
+    ),
+  )
+}
+
+/* ---------------- Ripple Dissolve (expanding radial wave on the outgoing) ---------------- */
+
+function buildRippleDissolve(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number; amp: number }> = [
+    { label: 'Swift', d: 0.35, amp: 0.8 },
+    { label: 'Fast', d: 0.5, amp: 0.9 },
+    { label: 'Smooth', d: 0.8, amp: 1.0 },
+    { label: 'Gentle', d: 1.0, amp: 0.9 },
+    { label: 'Cinematic', d: 1.2, amp: 1.0 },
+    { label: 'Slow', d: 1.5, amp: 1.1 },
+    { label: 'Pond', d: 1.0, amp: 1.4 },
+    { label: 'Drop', d: 0.6, amp: 1.2 },
+    { label: 'Tide', d: 1.4, amp: 1.2 },
+    { label: 'Subtle Wave', d: 0.9, amp: 0.6 },
+  ]
+  return specs.map((s) =>
+    mk(
+      'ripple-dissolve', 'Ripple Dissolve', `Ripple Dissolve · ${s.label}`, s.d,
+      { fadeOut: s.d },
+      { fadeIn: s.d, bridgeFx: { kind: 'ripple', amp: s.amp } },
+      ['ripple', 'wave', 'displacement'],
+    ),
+  )
+}
+
+/* ---------------- Swirl Blur (angular vortex twist on the outgoing) ---------------- */
+
+function buildSwirlBlur(): TransitionEffect[] {
+  const specs: Array<{ label: string; d: number; amp: number }> = [
+    { label: 'Swift', d: 0.35, amp: 0.7 },
+    { label: 'Fast', d: 0.5, amp: 0.8 },
+    { label: 'Smooth', d: 0.8, amp: 0.9 },
+    { label: 'Gentle', d: 1.0, amp: 0.8 },
+    { label: 'Cinematic', d: 1.2, amp: 1.0 },
+    { label: 'Slow', d: 1.5, amp: 1.0 },
+    { label: 'Vortex', d: 0.9, amp: 1.3 },
+    { label: 'Whirlpool', d: 1.1, amp: 1.4 },
+    { label: 'Hypno', d: 1.3, amp: 1.2 },
+    { label: 'Subtle Twist', d: 0.7, amp: 0.5 },
+  ]
+  return specs.map((s) =>
+    mk(
+      'swirl-blur', 'Swirl', `Swirl · ${s.label}`, s.d,
+      { fadeOut: s.d },
+      { fadeIn: s.d, bridgeFx: { kind: 'swirl', amp: s.amp } },
+      ['swirl', 'vortex', 'angular'],
+    ),
+  )
+}
